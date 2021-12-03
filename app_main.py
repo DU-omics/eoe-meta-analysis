@@ -22,6 +22,31 @@ credentials_dict = {config["credentials"]["username"]: config["credentials"]["pa
 VALID_USERNAME_PASSWORD_PAIRS = credentials_dict
 auth = dash_auth.BasicAuth(app, VALID_USERNAME_PASSWORD_PAIRS)
 
+#google analytics tag
+app.index_string = '''
+	<!DOCTYPE html>
+	<html>
+		<head>
+			<!-- Global site tag (gtag.js) - Google Analytics --><script async src="https://www.googletagmanager.com/gtag/js?id=G-RQFC90MDCS"></script><script> window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-HL81GG80X2'); </script>
+			<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2280852393527019" crossorigin="anonymous"></script>
+		{%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+		</head>
+		<body>
+			<div></div>
+			{%app_entry%}
+			<footer>
+				{%config%}
+				{%scripts%}
+				{%renderer%}
+			</footer>
+			<div></div>
+		</body>
+	</html>
+'''
+
 #callbacks
 from callbacks import define_callbacks
 define_callbacks(app)
