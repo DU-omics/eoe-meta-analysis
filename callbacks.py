@@ -617,6 +617,7 @@ def define_callbacks(app):
 			#get all dge analyisis performed
 			for folder in folders:
 				if folder not in ["counts", "dge", "mds", "mofa"]:
+
 					#stringency value
 					stringency_value = folder.split("_")[1]
 					
@@ -1062,6 +1063,7 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		mds_type = "umap"
+		height = 440
 
 		#transform switches to booleans switches
 		boolean_legend_switch = functions.boolean_switch(show_legend_switch)
@@ -1131,7 +1133,7 @@ def define_callbacks(app):
 				i += 1
 
 			#update layout
-			mds_discrete_fig.update_layout(xaxis_title_text = x, yaxis_title_text = y, height=380, title_xref="paper", title_xanchor="center", title_x=0.5, title_y=0.95,title_font_size=14, legend_title_text=selected_metadata.capitalize().replace("_", " "), legend_orientation="v", legend_xanchor="left", legend_x=-1, legend_yanchor="top", legend_y=1.25, legend_itemsizing="constant", legend_tracegroupgap = 0.05, legend_title_side="top", legend_itemclick=False, legend_itemdoubleclick=False, legend_font_size=12, xaxis_automargin=True, yaxis_automargin=True, font_family="Arial", margin=dict(t=70, b=0, l=10, r=10))
+			mds_discrete_fig.update_layout(height = height, xaxis_title_text = x, yaxis_title_text = y, title_xref="paper", title_xanchor="center", title_x=0.5, title_y=0.95,title_font_size=14, legend_title_text=selected_metadata.capitalize().replace("_", " "), legend_orientation="v", legend_xanchor="left", legend_x=-1, legend_yanchor="top", legend_y=1.2, legend_itemsizing="constant", legend_tracegroupgap = 0.05, legend_title_side="top", legend_itemclick=False, legend_itemdoubleclick=False, legend_font_size=12, xaxis_automargin=True, yaxis_automargin=True, font_family="Arial", margin=dict(t=70, b=0, l=10, r=10))
 			
 			#mds_discrete_fig["layout"]["paper_bgcolor"]="LightSteelBlue"
 
@@ -1208,7 +1210,7 @@ def define_callbacks(app):
 			mds_continuous_fig.add_trace(go.Scatter(x=mds_df[x], y=mds_df[y], marker_color=marker_color, marker_colorscale=colorscale, marker_showscale=True, marker_opacity=1, marker_size=marker_size, marker_colorbar_title=colorbar_title, marker_colorbar_title_side="right", marker_colorbar_title_font_size=14, marker_colorbar_thicknessmode="pixels", marker_colorbar_thickness=15, marker_colorbar_tickfont={"family": "Arial", "size": 14}, mode="markers", customdata=custom_data, hovertemplate=hover_template, showlegend=False, visible=True))
 			
 			#update layout
-			mds_continuous_fig.update_layout(title = {"x": 0.5, "y": 0.95, "font_size": 14, "xref": "paper", "xanchor": "center"}, font_family="Arial", hoverlabel_bgcolor = "lightgrey", xaxis_automargin=True, yaxis_automargin=True, height = 380, margin=dict(t=70, b=0, l=10, r=60), xaxis_title_text=x, yaxis_title_text=y)
+			mds_continuous_fig.update_layout(height = height, title = {"x": 0.5, "y": 0.95, "font_size": 14, "xref": "paper", "xanchor": "center"}, font_family="Arial", hoverlabel_bgcolor="lightgrey", xaxis_automargin=True, yaxis_automargin=True, margin=dict(t=70, b=0, l=10, r=60), xaxis_title_text=x, yaxis_title_text=y)
 			
 			#mds_continuous_fig["layout"]["paper_bgcolor"]="#E5F5F9"
 
@@ -1390,27 +1392,20 @@ def define_callbacks(app):
 			#if the legend is shown, add space on the left by reducing the spacer
 			if boolean_legend_switch:
 				legend_switch = [1]
-				left_spacer_div_style = {"width": "5%", "display": "inline-block"}
-				right_spacer_div_style = {"width": "17%", "display": "inline-block"}
-				mds_metadata_div_style = {"width": "43.5%", "display": "inline-block"}
-				mds_expression_div_style = {"width": "34.5%", "display": "inline-block"}
+				mds_metadata_div_style = {"width": "54.5%", "display": "inline-block"}
+				mds_expression_div_style = {"width": "38%", "display": "inline-block"}
 			#no legend, discrete umap
 			else:
 				legend_switch = []
-				left_spacer_div_style = {"width": "18%", "display": "inline-block"}
-				right_spacer_div_style = {"width": "18%", "display": "inline-block"}
-				mds_metadata_div_style = {"width": "27.5%", "display": "inline-block"}
-				mds_expression_div_style = {"width": "34.5%", "display": "inline-block"}
+				mds_metadata_div_style = {"width": "31.5%", "display": "inline-block"}
+				mds_expression_div_style = {"width": "37.5%", "display": "inline-block"}
 		#continuous metadata need space for the colorbar and will not have the legend
 		else:
 			legend_switch = []
 			legend_switch_disabled = [{"label": "", "value": 1, "disabled": True}]
-			left_spacer_div_style = {"width": "18%", "display": "inline-block"}
 			mds_metadata_div_style = {"width": "32%", "display": "inline-block"}
 			mds_expression_div_style = {"width": "34%", "display": "inline-block"}
-			right_spacer_div_style = {"width": "16%", "display": "inline-block"}
 
-		# return mds_metadata_fig, mds_expression_fig, config_mds_metadata, config_mds_expression, mds_metadata_div_style, mds_expression_div_style, left_spacer_div_style, right_spacer_div_style, legend_switch, legend_switch_disabled
 		return mds_metadata_fig, mds_expression_fig, config_mds_metadata, config_mds_expression, mds_metadata_div_style, mds_expression_div_style, legend_switch, legend_switch_disabled
 
 	#boxplots
@@ -1501,12 +1496,13 @@ def define_callbacks(app):
 			if expression_or_abundance == "expression":
 				title_text = gene_species.replace("_", " ").replace("[", "").replace("]", "") + " {}<br>profile per ".format(expression_or_abundance) + metadata_field.replace("_", " ").capitalize()
 				top_margin = 45
-				height = 325
+				height = 400
 			else:
 				title_text = gene_species.replace("_", " ").replace("[", "").replace("]", "") + "<br>{} profile<br>per ".format(expression_or_abundance) + metadata_field.replace("_", " ").capitalize()
 				top_margin = 60
-				height = 340
-			box_fig.update_layout(title = {"text": title_text, "x": 0.6, "font_size": 14, "y": 0.95}, legend_title_text = None, yaxis_title = "Log2 {}".format(expression_or_abundance), xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", height=height, margin=dict(t=top_margin, b=120, l=5, r=10))
+				#15
+				height = 415
+			box_fig.update_layout(title = {"text": title_text, "x": 0.55, "font_size": 14, "y": 0.97}, legend_title_text = None, yaxis_title = "Log2 {}".format(expression_or_abundance), xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", height=height, margin=dict(t=top_margin, b=120, l=5, r=10))
 
 			#define visible status
 			for trace in box_fig["data"]:
@@ -1655,7 +1651,7 @@ def define_callbacks(app):
 			i += 1
 
 		#update layout
-		ma_plot_fig.update_layout(title={"text": "Differential {expression_or_abundance} {pvalue_type} < ".format(expression_or_abundance=expression_or_abundance, pvalue_type=pvalue_type_for_labels) + "{}".format(float(pvalue_value)) + "<br>" + contrast.replace("_", " ").replace("-", " ").replace("Control", "Control"), "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_automargin=True, yaxis_title="Log2 fold change", font_family="Arial", height=320, margin=dict(t=50, b=0, l=5, r=130), showlegend = False)
+		ma_plot_fig.update_layout(title={"text": "Differential {expression_or_abundance} {pvalue_type} < ".format(expression_or_abundance=expression_or_abundance, pvalue_type=pvalue_type_for_labels) + "{}".format(float(pvalue_value)) + "<br>" + contrast.replace("_", " ").replace("-", " ").replace("Control", "Control"), "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_automargin=True, yaxis_title="Log2 fold change", font_family="Arial", height=350, margin=dict(t=50, b=0, l=5, r=130), showlegend = False)
 		#line at y=0
 		ma_plot_fig.add_shape(type="line", x0=0, y0=0, x1=1, y1=0, line=dict(color="black", width=3), xref="paper", layer="below")
 
@@ -2502,7 +2498,6 @@ def define_callbacks(app):
 		Output("multi_boxplots_graph", "config"),
 		Output("multi_boxplots_div", "hidden"),
 		Output("popover_plot_multiboxplots", "is_open"),
-		Output("multiboxplot_div", "style"),
 		Input("update_legend_button", "n_clicks"),
 		Input("update_multixoplot_plot_button", "n_clicks"),
 		Input("metadata_dropdown", "value"),
@@ -2520,7 +2515,7 @@ def define_callbacks(app):
 		trigger_id = ctx.triggered[0]["prop_id"]
 		
 		#default values used when the figure is hidden
-		height_fig = 450
+		height_fig = 900
 		title_text = ""
 
 		#open metadata
@@ -2675,6 +2670,4 @@ def define_callbacks(app):
 		config_multi_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}}
 		config_multi_boxplots["toImageButtonOptions"]["filename"] = "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + metadata_field)
 
-		multiboxplot_div_style = {"height": height_fig, "width": "100%", "display":"inline-block"}
-
-		return box_fig, config_multi_boxplots, hidden_status, popover_status, multiboxplot_div_style
+		return box_fig, config_multi_boxplots, hidden_status, popover_status
