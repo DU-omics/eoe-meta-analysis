@@ -603,14 +603,14 @@ def define_callbacks(app):
 
 	#stringecy dropdown
 	@app.callback(
-		Output("stringency_dropdown", "value"),
-		Output("stringency_dropdown", "options"),
+		Output("stringency_label", "children"),
 		Input("expression_dataset_dropdown", "value")
 	)
 	def get_stringecy_value(expression_dataset):
 		if expression_dataset not in ["human", "mouse"]:
-			options = [{"label": "P-value 0.05", "value": "pvalue_0.05"}]
+			options = [{"label": "0.05", "value": "pvalue_0.05"}]
 			value = "pvalue_0.05"
+			label = "P-value"
 		else:
 			folders = functions.get_content_from_github("data/{}".format(expression_dataset))
 			options = []
@@ -620,6 +620,11 @@ def define_callbacks(app):
 
 					#stringency value
 					stringency_value = folder.split("_")[1]
+					pvalue_type = folder.split("_")[0]
+					if pvalue_type == "padj":
+						label = "FDR"
+					else:
+						label = "P-value"
 					
 					#populate options
 					options.append({"label": stringency_value, "value": folder})
@@ -627,29 +632,18 @@ def define_callbacks(app):
 			#default value defined in config file
 			value = functions.config["stringecy"]
 
-		return value, options
+		#populate children
+		children = [
+			label, 	
+			dcc.Dropdown(
+				id="stringency_dropdown",
+				clearable=False,
+				value=value,
+				options=options
+			)
+		]
 
-	#show checkboxes boxplots
-	@app.callback(
-		Output("tissue_checkboxes_div", "hidden"),
-		Output("tissue_checkboxes", "value"),
-		Input("group_by_group_boxplots_switch", "value")
-	)
-	def show_checkboxes_boxplots(switch_value):
-		value = tissues
-		boolean_switch_value = functions.boolean_switch(switch_value)
-		return not boolean_switch_value, value
-
-	#show checkboxes multiboxplots
-	@app.callback(
-		Output("tissue_checkboxes_multiboxplots_div", "hidden"),
-		Output("tissue_checkboxes_multiboxplots", "value"),
-		Input("group_by_group_multiboxplots_switch", "value")
-	)
-	def show_checkboxes_multiboxplots(switch_value):
-		value = tissues
-		boolean_switch_value = functions.boolean_switch(switch_value)
-		return not boolean_switch_value, value
+		return children
 
 	### DOWNLOAD CALLBACKS ###
 
@@ -1037,8 +1031,6 @@ def define_callbacks(app):
 		#div
 		Output("mds_metadata_div", "style"),
 		Output("mds_expression_div", "style"),
-		#Output("left_spacer_mds_div", "style"),
-		#Output("right_spacer_mds_div", "style"),
 		#legend_switch
 		Output("show_legend_metadata_switch", "value"),
 		Output("show_legend_metadata_switch", "options"),
@@ -1156,9 +1148,6 @@ def define_callbacks(app):
 			if mds_category == "expression":
 				continuous_variable_to_plot = "Log2 expression"
 
-				#filter samples that are not visible
-				mds_df = mds_df[mds_df["Sample"].isin(samples_to_keep)]
-
 				#download counts
 				counts = functions.download_from_github("data/" + expression_dataset + "/counts/" + gene_species + ".tsv")
 				counts = pd.read_csv(counts, sep = "\t")
@@ -1167,6 +1156,8 @@ def define_callbacks(app):
 
 				#add counts to umap df
 				mds_df = mds_df.merge(counts, how="outer", on="Sample")
+				#filter samples that are not visible
+				mds_df = mds_df[mds_df["Sample"].isin(samples_to_keep)]
 
 				#add log2 counts column to df
 				mds_df["Log2 expression"] = np.log2(mds_df["counts"])
@@ -1414,12 +1405,14 @@ def define_callbacks(app):
 		Output("boxplots_graph", "config"),
 		Input("expression_dataset_dropdown", "value"),
 		Input("gene_species_dropdown", "value"),
-		Input("metadata_dropdown", "value"),
 		Input("update_legend_button", "n_clicks"),
+		Input("x_boxplot_dropdown", "value"),
+		Input("group_by_boxplot_dropdown", "value"),
+		Input("y_boxplot_dropdown", "value"),
 		State("legend", "figure"),
-		State("boxplots_graph", "figure"),
+		State("boxplots_graph", "figure")
 	)
-	def plot_boxplots(expression_dataset, gene_species, metadata_field, update_plots, legend_fig, box_fig):
+	def plot_boxplots(expression_dataset, gene_species, update_plots, x, group_by, y, legend_fig, box_fig):
 
 		#labels
 		if expression_dataset not in ["human", "mouse"]:
@@ -1433,88 +1426,88 @@ def define_callbacks(app):
 		#open metadata
 		metadata_df = functions.download_from_github("metadata.tsv")
 		metadata_df = pd.read_csv(metadata_df, sep = "\t")
-		#continuous metadata variable means empty plot
-		if str(metadata_df.dtypes[metadata_field]) != "object":
-			raise PreventUpdate
-		#discrete metadata variables means filled plot
-		else:
+		
+		#add counts
+		if y == "log2_expression":
 			counts = functions.download_from_github("data/" + expression_dataset + "/counts/" + gene_species + ".tsv")
 			counts = pd.read_csv(counts, sep = "\t")
 			#merge and compute log2 and replace inf with 0
 			metadata_df = metadata_df.merge(counts, how="left", on="sample")
 			metadata_df["Log2 counts"] = np.log2(metadata_df["counts"])
 			metadata_df["Log2 counts"].replace(to_replace = -np.inf, value = 0, inplace=True)
-			metadata_df[metadata_field] = metadata_df[metadata_field].fillna("NA")
-			metadata_df = metadata_df.replace("_", " ", regex=True)
+		
+		#clean df
+		metadata_df[x] = metadata_df[x].fillna("NA")
+		metadata_df = metadata_df.replace("_", " ", regex=True)
 
-			#create figure
-			box_fig = go.Figure()
-			i = 0
-			if metadata_field == "condition" and config["sorted_conditions"]:
-				metadata_fields_ordered = config["condition_list"]
-				metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
-			else:	
-				metadata_fields_ordered = metadata_df[metadata_field].unique().tolist()
-				metadata_fields_ordered.sort()
-			
-			for metadata in metadata_fields_ordered:
-				filtered_metadata = metadata_df[metadata_df[metadata_field] == metadata]
-				#do not plot values for NA
-				if metadata == "NA":
-					y_values = None
-					x_values = None
-				else:
-					y_values = filtered_metadata["Log2 counts"]
-					x_values = filtered_metadata[metadata_field]
-				
-				#label to value with counts in it
-				label_to_value_plus_counts = label_to_value.copy()
-				if expression_dataset in ["human", "mouse"]:
-					label_to_value_plus_counts["Log2 counts"] = "Log2 expression"
-				else:
-					label_to_value_plus_counts["Log2 counts"] = "Log2 abundance"
-				#get all additional metadata
-				additional_metadata = []
-				for label in label_to_value_plus_counts:
-					if label not in ["sample", "condition", "Log2 counts"]:
-						additional_metadata.append(label)
-				#reorder columns
-				filtered_metadata = filtered_metadata[["sample", "condition", "Log2 counts"] + additional_metadata]
-				#only 2 decimals
-				filtered_metadata = filtered_metadata.round(2)
-				#create hovertext
-				filtered_metadata["hovertext"] = ""
-				for column in filtered_metadata.columns:
-					if column in label_to_value_plus_counts:
-						filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + label_to_value_plus_counts[column] + ": " + filtered_metadata[column].astype(str) + "<br>"
-				hovertext = filtered_metadata["hovertext"].tolist()
-
-				marker_color = functions.get_color(metadata, i)
-				box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text"))
-				i += 1
-			box_fig.update_traces(showlegend=False)
-			if expression_or_abundance == "expression":
-				title_text = gene_species.replace("_", " ").replace("[", "").replace("]", "") + " {}<br>profile per ".format(expression_or_abundance) + metadata_field.replace("_", " ").capitalize()
-				top_margin = 45
-				height = 400
+		#create figure
+		box_fig = go.Figure()
+		i = 0
+		if x == "condition" and config["sorted_conditions"]:
+			metadata_fields_ordered = config["condition_list"]
+			metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
+		else:	
+			metadata_fields_ordered = metadata_df[x].unique().tolist()
+			metadata_fields_ordered.sort()
+		
+		for metadata in metadata_fields_ordered:
+			filtered_metadata = metadata_df[metadata_df[x] == metadata]
+			#do not plot values for NA
+			if metadata == "NA":
+				y_values = None
+				x_values = None
 			else:
-				title_text = gene_species.replace("_", " ").replace("[", "").replace("]", "") + "<br>{} profile<br>per ".format(expression_or_abundance) + metadata_field.replace("_", " ").capitalize()
-				top_margin = 60
-				#15
-				height = 415
-			box_fig.update_layout(title = {"text": title_text, "x": 0.55, "font_size": 14, "y": 0.97}, legend_title_text = None, yaxis_title = "Log2 {}".format(expression_or_abundance), xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", height=height, margin=dict(t=top_margin, b=120, l=5, r=10))
+				y_values = filtered_metadata["Log2 counts"]
+				x_values = filtered_metadata[x]
+			
+			#label to value with counts in it
+			label_to_value_plus_counts = label_to_value.copy()
+			if expression_dataset in ["human", "mouse"]:
+				label_to_value_plus_counts["Log2 counts"] = "Log2 expression"
+			else:
+				label_to_value_plus_counts["Log2 counts"] = "Log2 abundance"
+			#get all additional metadata
+			additional_metadata = []
+			for label in label_to_value_plus_counts:
+				if label not in ["sample", "condition", "Log2 counts"]:
+					additional_metadata.append(label)
+			#reorder columns
+			filtered_metadata = filtered_metadata[["sample", "condition", "Log2 counts"] + additional_metadata]
+			#only 2 decimals
+			filtered_metadata = filtered_metadata.round(2)
+			#create hovertext
+			filtered_metadata["hovertext"] = ""
+			for column in filtered_metadata.columns:
+				if column in label_to_value_plus_counts:
+					filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + label_to_value_plus_counts[column] + ": " + filtered_metadata[column].astype(str) + "<br>"
+			hovertext = filtered_metadata["hovertext"].tolist()
 
-			#define visible status
-			for trace in box_fig["data"]:
-				trace["visible"] = True
+			marker_color = functions.get_color(metadata, i)
+			box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=2, line_width=4))
+			i += 1
+		box_fig.update_traces(showlegend=False)
+		if expression_or_abundance == "expression":
+			title_text = gene_species.replace("_", " ").replace("[", "").replace("]", "") + " {}<br>profile per ".format(expression_or_abundance) + x.replace("_", " ").capitalize()
+			top_margin = 45
+			height = 400
+		else:
+			title_text = gene_species.replace("_", " ").replace("[", "").replace("]", "") + "<br>{} profile<br>per ".format(expression_or_abundance) + x.replace("_", " ").capitalize()
+			top_margin = 60
+			#15
+			height = 415
+		box_fig.update_layout(title = {"text": title_text, "x": 0.55, "font_size": 14, "y": 0.97}, legend_title_text = None, yaxis_title = "Log2 {}".format(expression_or_abundance), xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", height=height, margin=dict(t=top_margin, b=120, l=5, r=10))
 
-			#syncronyze legend status with umap metadata
-			if legend_fig is not None:
-				for i in range(0, len(legend_fig["data"])):
-					box_fig["data"][i]["visible"] = legend_fig["data"][i]["visible"]
+		#define visible status
+		for trace in box_fig["data"]:
+			trace["visible"] = True
 
-			#plot name when saving
-			config_boxplots["toImageButtonOptions"]["filename"] = "boxplots_with_{gene_species}_{expression_or_abundance}_colored_by_{metadata}".format(gene_species = gene_species, expression_or_abundance = expression_or_abundance, metadata = metadata_field)
+		#syncronyze legend status with umap metadata
+		if legend_fig is not None:
+			for i in range(0, len(legend_fig["data"])):
+				box_fig["data"][i]["visible"] = legend_fig["data"][i]["visible"]
+
+		#plot name when saving
+		config_boxplots["toImageButtonOptions"]["filename"] = "boxplots_with_{gene_species}_{expression_or_abundance}_colored_by_{metadata}".format(gene_species = gene_species, expression_or_abundance = expression_or_abundance, metadata = x)
 
 		#box_fig["layout"]["paper_bgcolor"] = "#BCBDDC"
 
@@ -1758,7 +1751,7 @@ def define_callbacks(app):
 			#filter out useless columns
 			go_df = go_df[["DGE", "Process~name", "P-value", "percentage%"]]
 			#remove duplicate GO categories for up and down
-			go_df.drop_duplicates(subset ="Process~name", keep = False, inplace = True)
+			#go_df.drop_duplicates(subset ="Process~name", keep = False, inplace = True)
 
 			#define search query if present
 			if search_value is not None and search_value != "":

@@ -16,6 +16,8 @@ tissues = metadata["tissue"].unique().tolist()
 tissues.sort()
 metadata_options = [{"label": "Condition", "value": "condition"}]
 annotation_options = []
+x_boxplots_options = [{"label": "Condition", "value": "condition"}]
+y_boxplots_options = [{"label": "Log2 expression", "value": "log2_expression"}]
 label_to_value = {"sample": "Sample", "condition": "Condition"}
 columns_to_keep = []
 for column in metadata.columns:
@@ -26,6 +28,10 @@ for column in metadata.columns:
 		if len(metadata[column].unique().tolist()) < 21:
 			metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
 			annotation_options.append({"label": column.capitalize().replace("_", " "), "value": column})
+			if str(metadata.dtypes[column]) == "object":
+				x_boxplots_options.append({"label": column.capitalize().replace("_", " "), "value": column})
+			else:
+				y_boxplots_options.append({"label": column.capitalize().replace("_", " "), "value": column})
 	#metadata teble columns
 	if column not in [ "fq1", "fq2", "control", "raw_counts", "kraken2", "immune_profiling_vdj"]:
 		columns_to_keep.append(column)
@@ -156,11 +162,14 @@ layout = html.Div([
 				)], style={"width": "25%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
 
 				#stringecy dropdown
-				html.Label(["FDR", 
-							dcc.Dropdown(
-								id="stringency_dropdown",
-								clearable=False
-				)], style={"width": "6%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
+				html.Div([
+					html.Label(id = "stringency_label", children = ["FDR", 
+						dcc.Dropdown(
+							id="stringency_dropdown",
+							clearable=False
+						)
+					], style={"width": "100%"}),
+				], style={"width": "6%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
 			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
 
 			#legend
@@ -302,49 +311,51 @@ layout = html.Div([
 						)
 					], style={"width": "100%", "display": "inline-block"}),
 
-					#info boxplots
+					html.Br(),
+
+					#info boxplots and dropdowns
 					html.Div([
-						html.Img(src="assets/info.png", alt="info", id="info_boxplots", style={"width": 20, "height": 20}),
-						dbc.Tooltip(
-							children=[dcc.Markdown(
-								"""
-								Box plots showing gene/species/family/order expression/abundance in the different groups.
-								
-								Click the ___UMAP legend___ to choose which group you want to display.  
-								Click the ___Comparison only___ button to display only the samples from the two conditions in comparison.
-								""")
-							],
-							target="info_boxplots",
-							style={"font-family": "arial", "font-size": 14}
-						),
-					], style={"width": "22%", "display": "inline-block", "vertical-align": "middle"}),
+						html.Div([
+							html.Img(src="assets/info.png", alt="info", id="info_boxplots", style={"width": 20, "height": 20}),
+							dbc.Tooltip(
+								children=[dcc.Markdown(
+									"""
+									Box plots showing gene/species/family/order expression/abundance in the different groups.
+									
+									Click the ___UMAP legend___ to choose which group you want to display.  
+									Click the ___Comparison only___ button to display only the samples from the two conditions in comparison.
+									""")
+								],
+								target="info_boxplots",
+								style={"font-family": "arial", "font-size": 14}
+							),
+						], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
 
-					#group by "tissue"
-					html.Label(["Group by tissue",
-						dbc.Checklist(
-							options=[
-								{"label": "", "value": 1, "disabled": True},
-							],
-							value=[],
-							id="group_by_group_boxplots_switch",
-							switch=True
-						)
-					], style={"width": "22%", "display": "inline-block", "vertical-align": "middle"}),
-
-					#tissue checkbox for when the switch is on
-					html.Div(id="tissue_checkboxes_div", hidden=False, children=[
-						html.Br(),
-						dbc.FormGroup(
-							[
-								dbc.Checklist(
-									options=[{"label": tissue.replace("_", " "), "value": tissue} for tissue in tissues],
-									value=tissues,
-									id="tissue_checkboxes",
-									inline=True
-								),
-							]
-						)
-					], style={"width": "56%", "display": "inline-block", "vertical-align": "middle", "font-size": 11}),
+						#x dropdown
+						html.Label(["x", 
+									dcc.Dropdown(
+										id="x_boxplot_dropdown",
+										clearable=False,
+										options=x_boxplots_options,
+										value="condition"
+						)], style={"width": "30%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
+						#group by dropdown
+						html.Label(["Group by", 
+									dcc.Dropdown(
+										id="group_by_boxplot_dropdown",
+										clearable=False,
+										value="tissue",
+										options=x_boxplots_options
+						)], style={"width": "30%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
+						#group by dropdown
+						html.Label(["y", 
+									dcc.Dropdown(
+										id="y_boxplot_dropdown",
+										clearable=False,
+										value="log2_expression",
+										options=y_boxplots_options
+						)], style={"width": "30%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
+					], style={"width": "100%", "display": "inline-block", "font-size": "12px"}),
 
 					#boxplots 
 					html.Div([
@@ -706,36 +717,7 @@ layout = html.Div([
 									html.Br(),
 
 									#genes not found area
-									html.Div(id="genes_not_found_multi_boxplots_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}), 
-
-									html.Br(),
-
-									#group by "tissue" switch
-									html.Label(["Group by tissue",
-										dbc.Checklist(
-											options=[
-												{"label": "", "value": 1, "disabled": True},
-											],
-											value=[],
-											id="group_by_group_multiboxplots_switch",
-											switch=True
-										)
-									], style={"width": "33%", "display": "inline-block", "vertical-align": "middle"}),
-
-									#tissue checkbox for when the switch is on
-									html.Div(id="tissue_checkboxes_multiboxplots_div", hidden=False, children=[
-										html.Br(),
-										dbc.FormGroup(
-											[
-												dbc.Checklist(
-													options=[{"label": tissue.replace("_", " "), "value": tissue} for tissue in tissues],
-													value=tissues,
-													id="tissue_checkboxes_multiboxplots",
-													inline=True
-												),
-											]
-										)
-									], style={"width": "67%", "display": "inline-block", "vertical-align": "middle", "font-size": 11})
+									html.Div(id="genes_not_found_multi_boxplots_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}),
 
 								], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
 
