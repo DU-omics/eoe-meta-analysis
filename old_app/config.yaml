@@ -1,0 +1,17 @@
+header:
+  logo: "NA"
+  text: "EoE TaMMA"
+stringecy: "padj_0.1"
+github:
+  username: "daneseomics"
+  token: "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"
+  repo_name: "Danese-Omics-Web-Apps/eoe_tamma_data"
+credentials:
+  username: "ungaro"
+  pass: "steam"
+sorted_conditions: False
+condition_list:
+  - UN_non_responder
+  - T50_non_responder
+  - UN_responder
+  - T50_responder

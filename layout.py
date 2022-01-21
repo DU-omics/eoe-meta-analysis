@@ -1,79 +1,9 @@
 #import packages
-import pandas as pd
 import dash_html_components as html
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import dash_table
-import urllib.parse
-import functions
-from functions import config
-
-#metadata dropdown and table
-metadata = functions.download_from_github("metadata.tsv")
-metadata = pd.read_csv(metadata, sep = "\t")
-metadata = metadata.replace("_", " ", regex=True)
-tissues = metadata["tissue"].unique().tolist()
-tissues.sort()
-metadata_options = [{"label": "Condition", "value": "condition"}]
-annotation_options = []
-x_boxplots_options = [{"label": "Condition", "value": "condition"}]
-y_boxplots_options = [{"label": "Log2 expression", "value": "log2_expression"}]
-label_to_value = {"sample": "Sample", "condition": "Condition"}
-columns_to_keep = []
-for column in metadata.columns:
-	#color by and heatmap annotation dropdowns
-	if column not in ["sample", "fq1", "fq2", "condition", "control", "raw_counts", "kraken2", "immune_profiling_vdj"]:
-		#dict used for translating colnames
-		label_to_value[column] = column.capitalize().replace("_", " ")
-		if len(metadata[column].unique().tolist()) < 21:
-			metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-			annotation_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-			if str(metadata.dtypes[column]) == "object":
-				x_boxplots_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-			else:
-				y_boxplots_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-	#metadata teble columns
-	if column not in [ "fq1", "fq2", "control", "raw_counts", "kraken2", "immune_profiling_vdj"]:
-		columns_to_keep.append(column)
-#shape metadata table
-metadata_table = metadata[columns_to_keep]
-metadata_table = metadata_table.rename(columns=label_to_value)
-metadata_table_columns = []
-for column in metadata_table.columns:
-	metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": column})
-metadata_table_data = metadata_table.to_dict("records")
-metadata_table_link = metadata_table.to_csv(index=False, encoding="utf-8", sep="\t")
-metadata_table_link = "data:text/tsv;charset=utf-8," + urllib.parse.quote(metadata_table_link)
-
-#get all subdir to populate expression dataset
-subdirs = functions.get_content_from_github("data")
-expression_datasets_options = []
-mds_dataset_options = []
-for dir in subdirs:
-	if dir in ["human", "mouse"]:
-		organism = dir
-		expression_datasets_options.append({"label": dir.capitalize(), "value": dir})
-		mds_dataset_options.append({"label": dir.capitalize(), "value": dir})	
-	else:
-		kingdom = dir.split("_")[0]
-		lineage = dir.split("_")[1]
-		expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
-		if "species" in dir:
-			metatranscriptomics_content = functions.get_content_from_github("data/" + dir)
-			#check if there is mds for each metatranscriptomics
-			if "mds" in metatranscriptomics_content:
-				mds_dataset_options.append({"label": kingdom.capitalize(), "value": dir})
-
-#evidences
-old_evidence_options = [
-	{"label": "TODO", "value": "TODO"},
-	{"label": "TODO_2", "value": "TODO_2"}
-]
-
-new_evidence_options = [
-	{"label": "TODO", "value": "TODO"},
-	{"label": "TODO_2", "value": "TODO_2"}
-]
+from functions import config, organism, expression_datasets_options, mds_dataset_options, metadata_options, discrete_metadata_options, continuous_metadata_options, metadata_link, metadata_table_data, metadata_table_columns, heatmap_annotation_options, deconvolution_fig
 
 #styles for tabs and selected tabs
 tab_style = {
@@ -87,131 +17,82 @@ tab_selected_style = {
 
 #header type
 if config["header"]["logo"] == "NA":
-	header_content = html.Div(config["header"]["text"], style={"font-size": 50})
+	header_content = html.Div(config["header"]["text"], style={"width": "100%", "font-size": 50, "text-align": "center"})
 else:
 	header_content = html.Img(src=config["header"]["logo"], alt="logo", style={"width": "70%", "height": "70%"}, title=config["header"]["text"])
 
 #app layout
-layout = html.Div([			
+layout = html.Div([
 	html.Div([
-		#logo
-		html.Div([
-			html.Img(src="assets/logo.png", alt="logo", style={"width": "70%", "height": "70%"}, title="Tamma means talking drum in West Africa, where it’s also known as _dundun_. It is a small drum, played with a curved stick and having a membrane stretched over one end or both ends of a narrow-waisted wooden frame by cords whose tension can be manually altered to vary the drum's tonality as it is played. This image has been designed using resources from Flaticon.com."
-			),
-		]),
+		html.Br(),
+		#title
+		html.Div(header_content),
 
-		#main content
+		#common options dropdown
 		html.Div([
-			#menù
-			html.Div([html.Img(src="assets/menu.png", alt="menu", style={"width": "100%", "height": "100%"})
-			], style = {"width": "100%", "display": "inline-block"}),
-
-			#general options dropdowns
+			
+			#expression dataset dropdown
 			html.Div([
-				#mds dataset dropdown
-				html.Label(["Cluster by", 
-					dcc.Dropdown(
-						id="mds_dataset",
-						clearable=False,
-						options=mds_dataset_options,
-						value=organism
-				)], style={"width": "7%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-				#metadata dropdown
-				html.Label(["Color by", 
-							dcc.Dropdown(
-								id="metadata_dropdown",
-								clearable=False,
-								options=metadata_options,
-								value="condition"
-				)], style={"width": "9%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-
-				#expression dataset dropdown
 				html.Label(["Expression", 
-							dcc.Dropdown(
-								id="expression_dataset_dropdown",
-								clearable=False,
-								options=expression_datasets_options,
-								value="human"
-				)], style={"width": "11%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
+					dcc.Dropdown(
+						id="feature_dataset_dropdown",
+						clearable=False,
+						options=expression_datasets_options,
+						value=organism
+				)], style={"width": "100%"}),
+			], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 
-				#gene/specie dropdown
-				html.Div([
-					html.Label(id = "gene_species_label", children = ["Loading...", 
-						dcc.Dropdown(
-							id="gene_species_dropdown",
-							clearable=False
-						)
-					], style={"width": "100%"}),
-				], style={"width": "28%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-
-				#tissue filter for contrast dropdown
-				html.Label(["Filter comparisons by",
-							dcc.Dropdown(
-								value="All",
-								id="comparison_filter_dropdown",
-								clearable=False,
-				)], style={"width": "14%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-
-				#contrast dropdown
-				html.Label(["Comparison", 
-							dcc.Dropdown(
-								value="Ileum_CD-vs-Ileum_Control",
-								id="contrast_dropdown",
-								clearable=False,
-				)], style={"width": "25%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-
-				#stringecy dropdown
-				html.Div([
-					html.Label(id = "stringency_label", children = ["FDR", 
-						dcc.Dropdown(
-							id="stringency_dropdown",
-							clearable=False
-						)
-					], style={"width": "100%"}),
-				], style={"width": "6%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
-
-			#legend
+			#feature dropdown
 			html.Div([
-				#update button + contrast only switch
-				html.Div([
-					#button
-					html.Br(),
-					html.Div([
-						dbc.Button("Update plots", id="update_legend_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})
-					], style={"width": "100%", "display": "inline-block"}),
-					
-					#contrast only switch
-					html.Br(),
-					html.Br(),
-					html.Label(["Comparison only",
-						dbc.Checklist(
-							options=[
-								{"label": "", "value": 1},
-							],
-							value=[],
-							id="contrast_only_switch",
-							switch=True
-						)
-					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"})
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "top"}),
+				html.Label(id = "feature_label", children = ["Loading...",
+					dcc.Dropdown(
+						id="feature_dropdown",
+						clearable=False
+				)], style={"width": "100%"}),
+			], style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 
-				#legend
-				html.Div([
-					dcc.Loading(
-						children = html.Div([
-							dcc.Graph(id="legend", config={"displayModeBar": False}),
-						], id="legend_div", hidden=True),
-						type = "dot",
-						color = "#33A02C"
-					)
-				], style={"width": "85%", "display": "inline-block", "margin-bottom": -180}),
-			], style={"width":"100%", "display": "inline-block", "position":"relative", "z-index": -1}),
+			#info comparison filter
+			html.Div([
+				html.Img(src="assets/info.png", alt="info", id="info_comparison_filter", style={"width": 20, "height": 20}),
+				dbc.Tooltip(
+					children=[dcc.Markdown(
+						"""
+						To filter ___Comparison___ drodown, write here any number of keywords. All comparsons which have ___all___ keywords in ___both___ conditions (e.g. before and after the "vs") will be kept. In case any comparison is left, all comparisons will be visualized.
+						""")
+					],
+					target="info_comparison_filter",
+					style={"font-family": "arial", "font-size": 14}
+				),
+			], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"}),
+			
+			#comparison filter
+			html.Label(["Filter comparison by",
+				dbc.Input(id="comparison_filter_input", type="search", placeholder="Type here to filter comparisons", debounce=True, style={"font-family": "Arial", "font-size": 12, "height": 36}),
+			], style={"width": "17%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
+			
+			#contrast dropdown
+			html.Label(["Comparison", 
+				dcc.Dropdown(
+					id="contrast_dropdown",
+					clearable=False,
+			)], style={"width": "19%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
 
-			#mds metadata
-			html.Div(id="mds_metadata_div", children=[
-				#info mds metadata
+			#stringecy dropdown
+			html.Label(["Stringency", 
+				dcc.Dropdown(
+					id="stringency_dropdown",
+					clearable=False
+			)], style={"width": "9%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"})
+
+		], style={"width": "100%", "font-size": "12px"}),
+		
+		html.Br(),
+
+		#mds
+		html.Div([
+			#mds options and info
+			html.Div([
+				#info mds
 				html.Div([
 					html.Img(src="assets/info.png", alt="info", id="info_mds_metadata", style={"width": 20, "height": 20}),
 					dbc.Tooltip(
@@ -230,198 +111,320 @@ layout = html.Div([
 						target="info_mds_metadata",
 						style={"font-family": "arial", "font-size": 14}
 					),
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "height": 40}),
-				#show legend switch
-				html.Label(["Show legend",
-					dbc.Checklist(
-						options=[
-							{"label": "", "value": 1},
-						],
-						value=[],
-						id="show_legend_metadata_switch",
-						switch=True
-					)
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "height": 40}),
-				#plot
+				], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"}),
+				
+				#mds dataset dropdown
+				html.Div([
+					html.Label(["MDS dataset", 
+						dcc.Dropdown(
+							id="mds_dataset",
+							clearable=False,
+							options=mds_dataset_options,
+							value=organism
+					)], style={"width": "100%", "textAlign": "left"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
+
+				#mds type dropdown
+				html.Div([
+					html.Label(["MDS type", 
+						dcc.Dropdown(
+							id="mds_type",
+							clearable=False,
+							value="umap"
+					)], style={"width": "100%", "textAlign": "left"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
+
+				#metadata dropdown
+				html.Div([
+					html.Label(["Color by", 
+						dcc.Dropdown(
+							id="metadata_dropdown",
+							clearable=False,
+							options=metadata_options,
+							value="condition"
+					)], style={"width": "100%", "textAlign": "left"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
+
+				#comparison_only switch
+				html.Div([
+					html.Label(["Comparison only",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[],
+							id="comparison_only_mds_metadata_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+
+				#hide unselected switch
+				html.Div([
+					html.Label(["Hide unselected",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[],
+							id="hide_unselected_mds_metadata_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"})
+			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
+
+			#mds metadata
+			html.Div(id="mds_metadata_div", children=[
 				dcc.Loading(
 					id = "loading_mds_metadata",
 					children = dcc.Graph(id="mds_metadata"),
 					type = "dot",
 					color = "#33A02C"
 				)
-			], style={"width": "46.5%", "display": "inline-block"}),
+			], style={"width": "48%", "display": "inline-block"}),
 
 			#mds expression
 			html.Div(id="mds_expression_div", children=[
-				#info mds expression
-				html.Div([
-					html.Img(src="assets/info.png", alt="info", id="info_mds_expression", style={"width": 20, "height": 20}),
-					dbc.Tooltip(
-						children=[dcc.Markdown(
-							"""
-							Low-dimensional embedding of high-dimensional data (e.g., 55k genes in the human transcriptome) by Uniform Manifold Approximation and Projection (UMAP).  
-							
-							Click the ___Host gene___ / ___Species___ / ___Family___ / ___Order___ dropdown to change the expression/abundance profile.
-							""")
-						],
-						target="info_mds_expression",
-						style={"font-family": "arial", "font-size": 14}
-					),
-				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "height": 40}),
-				#plot
 				dcc.Loading(
 					id = "loading_mds_expression",
 					children = dcc.Graph(id="mds_expression"),
 					type = "dot",
 					color = "#33A02C"
 				)
-			], style={"width": "53.5%", "display": "inline-block"}),
+			], style={"width": "35%", "display": "inline-block"}),
+		], style={"width": "100%", "display": "inline-block"}),
+		
+		html.Br(),
 
-			#MA-plot + boxplots + go plot
+		#boxplots
+		html.Br(),
+		html.Div([
+			#boxplots options
 			html.Div([
-				#MA-plot + boxplots
+				#info boxplots
 				html.Div([
-					#info MA-plot
+					html.Img(src="assets/info.png", alt="info", id="info_boxplots", style={"width": 20, "height": 20}),
+					dbc.Tooltip(
+						children=[dcc.Markdown(
+							"""
+							Box plots showing gene/species/family/order expression/abundance in the different groups.
+							
+							Click the ___Color by___ dropdown to choose in which way you want to color the samples.
+							Click the ___legend___ to choose which group(s) you want to display.
+							Click the ___Comparison only___ switch to display only the samples from the two conditions in comparison.
+							""")
+						],
+						target="info_boxplots",
+						style={"font-family": "arial", "font-size": 14}
+					),
+				], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"}),
+				#x dropdown
+				html.Label(["x",
+					dcc.Dropdown(
+					id="x_boxplot_dropdown",
+					clearable=False,
+					options=discrete_metadata_options,
+					value="condition"
+				)], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+				#group by dropdown
+				html.Label(["Group by", 
+							dcc.Dropdown(
+								id="group_by_boxplot_dropdown",
+								clearable=False,
+								value="condition",
+								options=discrete_metadata_options
+				)], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+				#y dropdown
+				html.Label(["y", 
+							dcc.Dropdown(
+								id="y_boxplot_dropdown",
+								clearable=False,
+								value="log2_expression",
+								options=continuous_metadata_options
+				)], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+				#comparison_only switch
+				html.Div([
+					html.Label(["Comparison only",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[],
+							id="comparison_only_boxplots_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+				#hide unselected switch
+				html.Div([
+					html.Label(["Hide unselected",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[],
+							id="hide_unselected_boxplot_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+				#height slider
+				html.Div([
+					html.Label(["Height",
+						dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1, className="dash-bootstrap")
+					], style={"width": "100%", "height": "30px", "display": "inline-block"})
+				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+				#width slider
+				html.Div([
+					html.Label(["Width",
+						dcc.Slider(id="boxplots_width_slider", min=200, max=1000, step=1, className="dash-bootstrap")
+					], style={"width": "100%", "height": "30px", "display": "inline-block"})
+				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
+			
+			#x filter dropdown
+			html.Div(id="x_filter_dropdown_div", hidden=True, children=[
+				html.Label(["x filter", 
+					dcc.Dropdown(
+						id="x_filter_boxplot_dropdown",
+						multi=True
+				)], style={"width": "100%", "textAlign": "left"}),
+			], style={"width": "80%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+			#plot
+			html.Div([
+				dcc.Loading(
+					id = "loading_boxplots",
+					children = dcc.Graph(id="boxplots_graph"),
+					type = "dot",
+					color = "#33A02C"
+				),
+			], style={"width": "80%", "display": "inline-block"})
+		], style={"width": "100%", "display": "inline-block"}),
+
+		html.Br(),
+		html.Br(),
+
+		#MA-plot + go plot
+		html.Div([
+			#MA-plot + deconvolution
+			html.Div([
+				#info MA-plot
+				html.Div([
+					html.Img(src="assets/info.png", alt="info", id="info_ma_plot", style={"width": 20, "height": 20}),
+					dbc.Tooltip(
+						children=[dcc.Markdown(
+							"""
+							Differential expression/abundance visualization by MA plot, with gene/species/family/order dispersion in accordance with the fold change between conditions and their average expression/abundance.
+							
+							Click on the ___Strincency___ dropdown to select the differential gene expression stringency.
+							Click on the ___Show gene stats___ button to display its statistics.
+							Click a dot inside the plot to change the gene/species/family/order of interest.
+							""")
+						],
+						target="info_ma_plot",
+						style={"font-family": "arial", "font-size": 14}
+					),
+				], style={"width": "100%", "display": "inline-block"}),
+				#MA-plot
+				html.Div([
+					dcc.Loading(
+						id = "loading_ma_plot",
+						children = dcc.Graph(id="ma_plot_graph"),
+						type = "dot",
+						color = "#33A02C"
+					)
+				], style={"width": "100%", "display": "inline-block"}),
+
+				#info deconvolution
+				html.Div([
+					html.Img(src="assets/info.png", alt="info", id="info_deconvolution", style={"width": 20, "height": 20}),
+					dbc.Tooltip(
+						children=[dcc.Markdown(
+							"""
+							TODO
+							""")
+						],
+						target="info_ma_plot",
+						style={"font-family": "arial", "font-size": 14}
+					),
+				], style={"width": "100%", "display": "inline-block"}),
+				#deconvolution plot
+				html.Div([
+					dcc.Loading(
+						id = "loading_deconvolution",
+						children = dcc.Graph(id="deconvolution_graph", figure = deconvolution_fig),
+						type = "dot",
+						color = "#33A02C"
+					)
+				], style={"width": "100%", "display": "inline-block"}),
+			], style={"width": "32%", "display": "inline-block"}),
+
+			#go plot
+			html.Div([
+				#info and search bar
+				html.Div([
+					#info
 					html.Div([
-						html.Img(src="assets/info.png", alt="info", id="info_ma_plot", style={"width": 20, "height": 20}),
+						html.Img(src="assets/info.png", alt="info", id="info_go_plot", style={"width": 20, "height": 20}),
 						dbc.Tooltip(
 							children=[dcc.Markdown(
 								"""
-								Differential expression/abundance visualization by MA plot, with gene/species/family/order dispersion in accordance with the fold change between conditions and their average expression/abundance.
-								
-								Click on the ___Comparison___ dropdown to change the results.
-								Click on the ___FDR___ dropdown to change visualization in accordance with the stringency.
+								Balloon plot showing top 15 up and top 15 down differentially enriched gene ontology (GO) biological processes between the two conditions in the selected comparison, unless filtered otherwise by keyword.
 
-								Click on the ___Show gene stats___ button to display its statistics.  
-								Click a dot inside the plot to change the gene/species/family/order of interest.
+								Click on the ___Comparison___ dropdown to change the results.
+								Click on the ___Strincency___ dropdown to select the differential gene expression stringency used to find the enriched GO processes.
 								""")
 							],
-							target="info_ma_plot",
+							target="info_go_plot",
 							style={"font-family": "arial", "font-size": 14}
 						),
-					], style={"width": "100%", "display": "inline-block", "text-align":"center"}),
-
-					#MA-plot
-					html.Div([
-						dcc.Loading(
-							id = "loading_ma_plot",
-							children = dcc.Graph(id="ma_plot_graph"),
-							type = "dot",
-							color = "#33A02C"
-						)
-					], style={"width": "100%", "display": "inline-block"}),
-
-					html.Br(),
-
-					#info boxplots and dropdowns
-					html.Div([
-						html.Div([
-							html.Img(src="assets/info.png", alt="info", id="info_boxplots", style={"width": 20, "height": 20}),
-							dbc.Tooltip(
-								children=[dcc.Markdown(
-									"""
-									Box plots showing gene/species/family/order expression/abundance in the different groups.
-									
-									Click the ___UMAP legend___ to choose which group you want to display.  
-									Click the ___Comparison only___ button to display only the samples from the two conditions in comparison.
-									""")
-								],
-								target="info_boxplots",
-								style={"font-family": "arial", "font-size": 14}
-							),
-						], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
-
-						#x dropdown
-						html.Label(["x", 
-									dcc.Dropdown(
-										id="x_boxplot_dropdown",
-										clearable=False,
-										options=x_boxplots_options,
-										value="condition"
-						)], style={"width": "30%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-						#group by dropdown
-						html.Label(["Group by", 
-									dcc.Dropdown(
-										id="group_by_boxplot_dropdown",
-										clearable=False,
-										value="tissue",
-										options=x_boxplots_options
-						)], style={"width": "30%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-						#group by dropdown
-						html.Label(["y", 
-									dcc.Dropdown(
-										id="y_boxplot_dropdown",
-										clearable=False,
-										value="log2_expression",
-										options=y_boxplots_options
-						)], style={"width": "30%", "display": "inline-block", 'margin-left': 'auto', 'margin-right': 'auto', "textAlign": "left"}),
-					], style={"width": "100%", "display": "inline-block", "font-size": "12px"}),
-
-					#boxplots 
-					html.Div([
-						html.Br(),
-						dcc.Loading(
-							id = "loading_boxplots",
-							children = dcc.Graph(id="boxplots_graph"),
-							type = "dot",
-							color = "#33A02C"
-						),
-						html.Br()
-					], style={"width": "100%", "display": "inline-block", "position":"relative", "z-index": 1}),
-				], style={"width": "40%", "display": "inline-block"}),
-
-				#go plot
-				html.Div([
+					], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "textAlign": "right"}),
 					
-					#info and search bar
-					html.Div([
-						#info
-						html.Div([
-							html.Img(src="assets/info.png", alt="info", id="info_go_plot", style={"width": 20, "height": 20}),
-							dbc.Tooltip(
-								children=[dcc.Markdown(
-									"""
-									Balloon plot showing top 15 up and top 15 down differentially enriched gene ontology biological processes between the two conditions in the selected comparison (differential gene expression FDR<1e-10), unless filtered otherwise.
+					#spacer
+					html.Div([], style={"width": "1%", "display": "inline-block"}),
 
-									Click on the ___Comparison___ dropdown to change the results.
-									""")
+					#add gsea switch
+					html.Div(id="add_gsea_switch_div", children=[
+						html.Label(["Add GSEA",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
 								],
-								target="info_go_plot",
-								style={"font-family": "arial", "font-size": 14}
-							),
-						], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "right"}),
+								value=[],
+								id="add_gsea_switch",
+								switch=True
+							)
+						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "text-align": "center"})
+					], style={"width": "15%", "display": "inline-block", "font-size": "12px"}),
 
-						#spacer
-						html.Div([], style={"width": "15%", "display": "inline-block"}),
+					#spacer
+					html.Div([], style={"width": "1%", "display": "inline-block"}),
 
-						#search bar
-						html.Div([
-							dbc.Input(id="go_plot_filter_input", type="search", placeholder="Type here to filter GO gene sets", size="30", debounce=True, style={"font-size": "12px"}),
-						], style={"width": "35%", "display": "inline-block", "vertical-align": "middle"})
-					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "text-align": "right"}),
-
-					#plot
+					#search bar
+					html.Div([
+						dbc.Input(id="go_plot_filter_input", type="search", placeholder="Type here to filter GO gene sets", size="30", debounce=True, style={"font-family": "Arial", "font-size": 12}),
+					], style={"width": "35%", "display": "inline-block", "vertical-align": "middle"})
+				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "text-align": "right"}),
+				#plot
+				html.Div([
 					dcc.Loading(
 						id = "loading_go_plot",
-						children = dcc.Graph(id="go_plot_graph"),
+						children = [html.Br(), dcc.Graph(id="go_plot_graph")],
 						type = "dot",
 						color = "#33A02C", 
 					),
-				], style={"width": "60%", "display": "inline-block", "vertical-align": "top"})
-			], style = {"width": "100%", "height": 1000, "display": "inline-block"}),
-		], style={"width": "100%", "display": "inline-block"}),
+				], style={"width": "100%", "display": "inline-block"})
+			], style={"width": "68%", "display": "inline-block", "vertical-align": "top"})
+		], style = {"width": "80%", "height": 800, "display": "inline-block"}),
 
 		#tabs
-		html.Div([
-			dcc.Tabs(id="site_tabs", value="summary_tab", children=[
-				#summary and metadata tab
-				dcc.Tab(label="Summary and metadata", value="summary_tab", children =[
-					html.Br(),
-					#graphical abstract
-					html.Div([html.Img(src="assets/workflow.png", alt="graphical_abstract", style={"width": "60%", "height": "60%"}, title="FASTQ reads from 3,853 RNA-Seq data from different tissues, namely ileum, colon, rectum, mesenteric adipose tissue, peripheral blood, and stools, were mined from NCBI GEO/SRA and passed the initial quality filter. All files were mapped to the human reference genome and initial gene quantification was performed. Since these data came from 26 different studies made in different laboratories, we counteract the presumptive bias through a batch correction in accordance with source and tissue of origin. Once the gene counts were adjusted, samples were divided into groups in accordance with the tissue of origin and patient condition prior to differential expression analysis and gene ontology functional enrichment. Finally, the reads failing to map to the human genome were subjected to metatranscriptomics profiling by taxonomic classification using exact k-mer matching either archaeal, bacterial, eukaryotic, or viral genes. This image has been designed using resources from https://streamlineicons.com")
-					], style={"width": "100%", "display": "inline-block"}),
-					
-					html.Br(),
+		html.Div(children=[
+			dcc.Tabs(id="site_tabs", value="metadata_tab", children=[
+				#metadata tab
+				dcc.Tab(label="Metadata", value="metadata_tab", children=[
+
 					html.Br(),
 
 					#info metadata table
@@ -430,12 +433,9 @@ layout = html.Div([
 						dbc.Tooltip(
 							children=[dcc.Markdown(
 								"""
-								Sample metadata table showing all variables used in TaMMA.
-								Batch correction was performed using the study as possible source of variation (batch effect), and the Tissue of origin as source of covariation.
-
+								Sample metadata table showing all variables used in web app.
+								
 								Click on headers/subheaders to reorder/filter the table, respectively.
-
-								Click on a study ID to see its specifications within its native hosting repository.
 								""")
 							],
 							target="info_metadata_table",
@@ -450,8 +450,8 @@ layout = html.Div([
 							color = "#33A02C",
 							children=[html.A(
 								id="download_metadata",
-								href=metadata_table_link,
-								download="TaMMa_metadata.xls",
+								href=metadata_link,
+								download="metadata.xls",
 								target="_blank",
 								children = [dbc.Button("Download full table", id="download_metadata_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})],
 								)
@@ -498,7 +498,6 @@ layout = html.Div([
 				#expression/abundance profiling
 				dcc.Tab(id="expression_abundance_profiling", value="expression_abundance", children=[
 					dcc.Tabs(id="expression_abundance_profiling_tabs", value="heatmap", children=[
-						
 						#heatmap
 						dcc.Tab(disabled = False, label="Heatmap", value="heatmap", children=[
 							html.Div([
@@ -530,7 +529,7 @@ layout = html.Div([
 
 										#update plot button
 										html.Div([
-											dbc.Button("Update plot", id="update_heatmap_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black", "color": "black"}),
+											dbc.Button("Update plot", id="update_heatmap_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
 											#warning popup
 											dbc.Popover(
 												children=[
@@ -559,7 +558,7 @@ layout = html.Div([
 												switch=True
 											)
 										], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-									], style={"width": "33%", "display": "inline-block", "vertical-align": "middle"}),
+									], style={"width": "34%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
 
 									#comparison only heatmap switch
 									html.Div([
@@ -573,7 +572,7 @@ layout = html.Div([
 												switch=True
 											)
 										], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-									], style={"width": "33%", "display": "inline-block", "vertical-align": "middle"}),
+									], style={"width": "33%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
 
 									#hide unselected legend heatmap switch
 									html.Div([
@@ -587,18 +586,18 @@ layout = html.Div([
 												switch=True
 											)
 										], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-									], style={"width": "33%", "display": "inline-block", "vertical-align": "middle"}),
+									], style={"width": "33%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
 
 									#dropdowns
 									html.Label(["Annotations", 
-										dcc.Dropdown(id="annotation_dropdown", multi=True, options=annotation_options, value=[], style={"textAlign": "left", "font-size": "12px"})
-									], style={"width": "100%", "display": "inline-block", "textAlign": "left"}),
+										dcc.Dropdown(id="annotation_dropdown", multi=True, options=heatmap_annotation_options, value=[], style={"textAlign": "left", "font-size": "12px"})
+									], style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
 
 									html.Br(),
 
 									html.Label(["Features",
-										dcc.Dropdown(id="gene_species_heatmap_dropdown", multi=True, placeholder="Select features", style={"textAlign": "left", "font-size": "12px"})
-									], style={"width": "100%", "display": "inline-block", "textAlign": "left"}),
+										dcc.Dropdown(id="feature_heatmap_dropdown", multi=True, placeholder="Select features", style={"textAlign": "left", "font-size": "12px"})
+									], style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
 
 									html.Br(),
 
@@ -608,7 +607,7 @@ layout = html.Div([
 									html.Br(),
 
 									#search button
-									dbc.Button("Search", id="heatmap_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black", "color": "black"}),
+									dbc.Button("Search", id="heatmap_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
 
 									html.Br(),
 
@@ -626,19 +625,18 @@ layout = html.Div([
 									
 									#custom hetmap dimension
 									html.Div([
+										#height slider
 										html.Label(["Height",
-											dbc.Input(id="hetamap_height_input", type="number", min=200, step=1, style={"font-family": "Arial", "font-size": 12, "height": 32})
+											dcc.Slider(id="hetamap_height_slider", min=200, step=1, className="dash-bootstrap")
 										], style={"width": "30%", "display": "inline-block"}),
 										#spacer
 										html.Div([], style={"width": "3%", "display": "inline-block"}),
+										#width slider
 										html.Label(["Width",
-											dbc.Input(id="hetamap_width_input", type="number", min=200, max=885, step=1, style={"font-family": "Arial", "font-size": 12, "height": 32})
-										], style={"width": "30%", "display": "inline-block"}),
-										#spacer
-										html.Div([], style={"width": "3%", "display": "inline-block"}),
-										dbc.Button("Resize heatmap", id="heatmap_resize_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black", "color": "black"}),
-										], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
-									
+											dcc.Slider(id="hetamap_width_slider", min=200, max=885, step=1, className="dash-bootstrap")
+										], style={"width": "30%", "display": "inline-block"})
+									], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+
 									#graph
 									dcc.Loading(
 										children = [dcc.Graph(id="heatmap_graph")],
@@ -648,12 +646,10 @@ layout = html.Div([
 									#legend
 									html.Div(id="heatmap_legend_div", hidden=True)
 								], style = {"width": "74%", "display": "inline-block"})
-							], style = {"width": "100%", "height": 1200, "display": "inline-block"})
+							], style = {"width": "100%", "height": 800, "display": "inline-block"})
 						], style=tab_style, selected_style=tab_selected_style, disabled_style={"padding": 6, "color": "#d6d6d6"}),
-						
 						#multiboxplots
 						dcc.Tab(label="Boxplots", value="boxplots", children=[
-							
 							html.Div(id="multiboxplot_div", children=[
 								
 								html.Br(),
@@ -680,11 +676,11 @@ layout = html.Div([
 												target="info_multiboxplots",
 												style={"font-family": "arial", "font-size": 14}
 											),
-										], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"}),
-										
+										], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+
 										#update plot button
 										html.Div([
-											dbc.Button("Update plot", id="update_multixoplot_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black", "color": "black"}),
+											dbc.Button("Update plot", id="update_multiboxplot_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
 											#warning popup
 											dbc.Popover(
 												children=[
@@ -692,17 +688,17 @@ layout = html.Div([
 													dbc.PopoverBody(children=["Plotting more than 20 features is not allowed."], style={"font-family": "arial", "font-size": 12})
 												],
 												id="popover_plot_multiboxplots",
-												target="update_multixoplot_plot_button",
+												target="update_multiboxplot_plot_button",
 												is_open=False,
 												style={"font-family": "arial"}
 											),
-										], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"}),
+										], style={"width": "30%", "display": "inline-block", "vertical-align": "middle"}),
 									]),
 									
 									html.Br(),
 
 									#dropdown
-									dcc.Dropdown(id="gene_species_multi_boxplots_dropdown", multi=True, placeholder="", style={"textAlign": "left", "font-size": "12px"}),
+									dcc.Dropdown(id="feature_multi_boxplots_dropdown", multi=True, placeholder="", style={"textAlign": "left", "font-size": "12px"}),
 
 									html.Br(),
 
@@ -712,37 +708,121 @@ layout = html.Div([
 									html.Br(),
 
 									#search button
-									dbc.Button("Search", id="multi_boxplots_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black", "color": "black"}),
+									dbc.Button("Search", id="multi_boxplots_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
 
 									html.Br(),
 
 									#genes not found area
-									html.Div(id="genes_not_found_multi_boxplots_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}),
+									html.Div(id="genes_not_found_multi_boxplots_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}), 
 
+									html.Br()
 								], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
 
-								#graph
-								html.Div(id="multiboxplot_graph_div", children=[
-									dcc.Loading(type = "dot", color = "#33A02C", children=[
-										html.Div(
-											id="multi_boxplots_div",
-											children=[dcc.Loading(
-												children = [dcc.Graph(id="multi_boxplots_graph", figure={})],
-												type = "dot",
-												color = "#33A02C")
-										], hidden=True)
-									])
-								], style={"width": "75%", "display": "inline-block", "vertical-align": "top"})
-							], style={"height": 1150, "width": "100%", "display":"inline-block"})
+								#multiboxplots options and graph
+								html.Div([
+									#x dropdown
+									html.Label(["x",
+										dcc.Dropdown(
+										id="x_multiboxplots_dropdown",
+										clearable=False,
+										options=discrete_metadata_options,
+										value="condition"
+									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									#group by dropdown
+									html.Label(["Group by", 
+										dcc.Dropdown(
+											id="group_by_multiboxplots_dropdown",
+											clearable=False,
+											value="condition",
+											options=discrete_metadata_options
+									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									#y dropdown
+									html.Label(["y", 
+										dcc.Dropdown(
+											id="y_multiboxplots_dropdown",
+											clearable=False,
+											value="log2_expression",
+											options=continuous_metadata_options
+									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									#plot per row
+									#y dropdown
+									html.Label(["Plot per row", 
+										dcc.Dropdown(
+											id="plot_per_row_multiboxplots_dropdown",
+											clearable=False,
+											value=3,
+											options=[{"label": n, "value": n} for n in [1, 2, 3]]
+									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									#comparison_only switch
+									html.Div([
+										html.Label(["Comparison only",
+											dbc.Checklist(
+												options=[
+													{"label": "", "value": 1},
+												],
+												value=[],
+												id="comparison_only_multiboxplots_switch",
+												switch=True
+											)
+										], style={"textAlign": "center"}),
+									], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+									#hide unselected switch
+									html.Div([
+										html.Label(["Hide unselected",
+											dbc.Checklist(
+												options=[
+													{"label": "", "value": 1},
+												],
+												value=[],
+												id="hide_unselected_multiboxplots_switch",
+												switch=True
+											)
+										], style={"textAlign": "center"}),
+									], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+									#custom hetmap dimension
+									html.Div([
+										#height slider
+										html.Label(["Height",
+											dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max = 2000, className="dash-bootstrap")
+										], style={"width": "30%", "display": "inline-block"}),
+										#spacer
+										html.Div([], style={"width": "3%", "display": "inline-block"}),
+										#width slider
+										html.Label(["Width",
+											dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1, className="dash-bootstrap")
+										], style={"width": "30%", "display": "inline-block"})
+									], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+									#x filter dropdown
+									html.Div(id="x_filter_dropdown_multiboxplots_div", hidden=True, children=[
+										html.Label(["x filter", 
+											dcc.Dropdown(
+												id="x_filter_multiboxplots_dropdown",
+												multi=True
+										)], style={"width": "100%", "textAlign": "left"}),
+									], style={"width": "90%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+
+									#graph
+									html.Div(id="multiboxplot_graph_div", children=[
+										dcc.Loading(type = "dot", color = "#33A02C", children=[
+											html.Div(
+												id="multi_boxplots_div",
+												children=[dcc.Loading(
+													children = [dcc.Graph(id="multi_boxplots_graph", figure={})],
+													type = "dot",
+													color = "#33A02C")
+											], hidden=True)
+										])
+									], style={"height": 800, "width": "100%", "display": "inline-block", "vertical-align": "top"})
+								], style={"width": "75%", "font-size": "12px", "display": "inline-block"}),
+							], style={"width": "100%", "height": 800, "display": "inline-block"})
 						], style=tab_style, selected_style=tab_selected_style),
 					], style= {"height": 40})
 				], style=tab_style, selected_style=tab_selected_style),
 				#differential analysis tab
 				dcc.Tab(label="Differential analysis", value="differential_analysis", children=[
 					dcc.Tabs(id="differential_analysis_tabs", value="dge_tab", children=[
-						
 						#dge table tab
-						dcc.Tab(label="DGE table", value="dge_tab", children=[
+						dcc.Tab(id="dge_table_tab", label="DGE table", value="dge_tab", children=[
 							
 							html.Br(),
 							#title dge table
@@ -754,8 +834,16 @@ layout = html.Div([
 							html.Div([
 								html.Img(src="assets/info.png", alt="info", id="info_dge_table", style={"width": 20, "height": 20}),
 								dbc.Tooltip(
-									id="dge_table_tooltip",
-									children=[],
+									children=[dcc.Markdown(
+										"""
+										Table showing the differential gene/species/family/order expression/abundance between the two conditions, unless filtered otherwise.
+
+										Click on headers to reorder the table.
+
+										Click on a cell with the gene/species/family/order will highlight the feature in the MA plot.
+										Click on an icon in the last column to open external resources.
+										""")
+									],
 									target="info_dge_table",
 									style={"font-family": "arial", "font-size": 14}
 								),
@@ -771,7 +859,7 @@ layout = html.Div([
 										id="download_diffexp",
 										href="",
 										target="_blank",
-										children = [dbc.Button("Download full table", id="download_diffexp_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})],
+										children = [dbc.Button("Download full table", id="download_diffexp_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'})],
 										)
 									]
 								)
@@ -786,7 +874,7 @@ layout = html.Div([
 										id="download_diffexp_partial",
 										href="",
 										target="_blank",
-										children = [dbc.Button("Download filtered table", id="download_diffexp_button_partial", disabled=True, style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})],
+										children = [dbc.Button("Download filtered table", id="download_diffexp_button_partial", disabled=True, style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'})],
 										)
 									]
 								)
@@ -796,18 +884,6 @@ layout = html.Div([
 							html.Div([
 								dcc.Dropdown(id="multi_gene_dge_table_selection_dropdown", multi=True, placeholder="", style={"textAlign": "left", "font-size": "12px"})
 							], style={"width": "25%", "display": "inline-block", "font-size": "12px", "vertical-align": "middle"}),
-
-							#target priorization switch
-							html.Label(["Target prioritization",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1, "disabled": True},
-									],
-									value=[],
-									id="target_prioritization_switch",
-									switch=True
-								)
-							], style={"width": "16%", "display": "inline-block", "vertical-align": "middle"}),
 
 							#filtered dge table
 							html.Div(id="filtered_dge_table_div", children=[
@@ -834,41 +910,10 @@ layout = html.Div([
 											{
 												"if": {"column_id": "External resources"},
 												"width": "12%"
-											},
-											{
-												"if": {"column_id": "expression_in_tissue_cell_types"},
-												"textAlign": "left",
-												"width": "45%",
-											},
-											{
-												"if": {"column_id": "FDR"},
-												"textAlign": "left",
-												"width": "4.5%",
-											},
-											{
-												"if": {"column_id": "total_drug_count"},
-												"textAlign": "left",
-												"width": "2.5%",
-											},
-											{
-												"if": {"column_id": "IBD_drugs"},
-												"textAlign": "left",
-												"width": "3.5%",
-											},
-											{
-												"if": {"column_id": "GWAS"},
-												"textAlign": "left",
-												"width": "3.5%",
-											},
-											{
-												"if": {"column_id": "protein_expression_in_cell_compartment"},
-												"textAlign": "left",
-												"width": "8%",
-											},
+											}
 										],
 										style_data_conditional=[],
-										style_as_list_view=True,
-										merge_duplicate_headers=True
+										style_as_list_view=True
 									)
 								)
 							], style={"width": "100%", "font-family": "arial"}, hidden=True),
@@ -883,13 +928,14 @@ layout = html.Div([
 									children=dash_table.DataTable(
 										id="dge_table",
 										style_cell={
-											"whiteSpace": "pre-line",
+											"whiteSpace": "normal",
 											"height": "auto",
 											"fontSize": 12, 
 											"font-family": "arial",
 											"textAlign": "center"
 										},
 										page_size=25,
+										sort_action="native",
 										style_header={
 											"textAlign": "center"
 										},
@@ -897,49 +943,17 @@ layout = html.Div([
 											{
 												"if": {"column_id": "External resources"},
 												"width": "12%"
-											},
-											{
-												"if": {"column_id": "expression_in_tissue_cell_types"},
-												"textAlign": "left",
-												"width": "45%",
-											},
-											{
-												"if": {"column_id": "FDR"},
-												"textAlign": "left",
-												"width": "4.5%",
-											},
-											{
-												"if": {"column_id": "total_drug_count"},
-												"textAlign": "left",
-												"width": "2.5%",
-											},
-											{
-												"if": {"column_id": "IBD_drugs"},
-												"textAlign": "left",
-												"width": "3.5%",
-											},
-											{
-												"if": {"column_id": "GWAS"},
-												"textAlign": "left",
-												"width": "3.5%",
-											},
-											{
-												"if": {"column_id": "protein_expression_in_cell_compartment"},
-												"textAlign": "left",
-												"width": "8%",
-											},
+											}
 										],
 										style_data_conditional=[],
-										style_as_list_view=True,
-										merge_duplicate_headers=True
+										style_as_list_view=True
 									)
 								)
 							], style={"width": "100%", "font-family": "arial"}),
 							html.Br()
 						], style=tab_style, selected_style=tab_selected_style),
-						
 						#go table tab
-						dcc.Tab(label="GO table", value="go_table_tab", children=[
+						dcc.Tab(id="go_table_tab", label="GO table", value="go_table_tab", children=[
 							
 							html.Br(),
 							#title go table
@@ -976,7 +990,7 @@ layout = html.Div([
 										id="download_go",
 										href="",
 										target="_blank",
-										children = [dbc.Button("Download full table", id="download_go_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})],
+										children = [dbc.Button("Download full table", id="download_go_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'})],
 										)
 									]
 								)
@@ -991,7 +1005,7 @@ layout = html.Div([
 										id="download_go_partial",
 										href="",
 										target="_blank",
-										children = [dbc.Button("Download shown table", id="download_go_button_partial", disabled=True, style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})],
+										children = [dbc.Button("Download shown table", id="download_go_button_partial", disabled=True, style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'})],
 										)
 									]
 								)
@@ -1025,7 +1039,17 @@ layout = html.Div([
 												"width": "50%"
 											},
 											{
+												"if": {"column_id": "Lipids"},
+												"textAlign": "left",
+												"width": "50%"
+											},
+											{
 												"if": {"column_id": "GO biological process"},
+												"textAlign": "left",
+												"width": "15%"
+											},
+											{
+												"if": {"column_id": "Functional category"},
 												"textAlign": "left",
 												"width": "15%"
 											}
@@ -1042,6 +1066,18 @@ layout = html.Div([
 													"filter_query": "{{DGE}} = {}".format("down")
 												},
 												"backgroundColor": "#E6F0FF"
+											},
+											{
+												"if": {
+													"filter_query": "{{DLE}} = {}".format("up")
+												},
+												"backgroundColor": "#FFE6E6"
+											},
+											{
+												"if": {
+													"filter_query": "{{DLE}} = {}".format("down")
+												},
+												"backgroundColor": "#E6F0FF"
 											}
 										],
 										style_as_list_view=True
@@ -1051,90 +1087,8 @@ layout = html.Div([
 							html.Br()
 						], style=tab_style, selected_style=tab_selected_style)
 					], style= {"height": 40})
-				], style=tab_style, selected_style=tab_selected_style),
-				#evidence tab 
-				dcc.Tab(label="Insights", value="evidence_tab", children=[
-					dcc.Tabs(id="evidence_tabs", value="old_evidence_tab", children=[
-						#old
-						dcc.Tab(label="Old evidence from the literature confirmed by TaMMA", value="old_evidence_tab", children=[
-							html.Br(),
-							html.Div([
-								#input section
-								html.Div([
-									html.Br(),
-									#dropdown
-									dcc.Dropdown(id="validation_dropdown", placeholder="Search evidence", options=old_evidence_options, style={"textAlign": "left", "font-size": "12px"}),
-								], style={"height": 350, "width": "25%", "display": "inline-block", "vertical-align": "top"}),
-
-								#spacer
-								html.Div([], style={"width": "1.5%", "display": "inline-block"}),
-
-								#graphs
-								html.Div(id="evidence_div", children=[
-									dcc.Loading(
-										id="evidence_div_loading",
-										type="dot",
-										color="#33A02C",
-										children=[]
-									)
-								], style={"height": 600, "width": "70%", "display": "inline-block"}),
-
-								#spacer
-								html.Div([], style={"width": "1.5%", "display": "inline-block"}),
-							]),
-							html.Br()
-						], style=tab_style, selected_style=tab_selected_style),
-						#new
-						dcc.Tab(label="New evidence by TaMMA", value="new_evidence_tab", children=[
-							html.Br(),
-							html.Div([
-								#input section
-								html.Div([
-									html.Br(),
-									#dropdown
-									dcc.Dropdown(id="new_evidence_dropdown", placeholder="Search evidence", options=new_evidence_options, style={"textAlign": "left", "font-size": "12px"}),
-								], style={"height": 350, "width": "25%", "display": "inline-block", "vertical-align": "top"}),
-
-								#spacer
-								html.Div([], style={"width": "1.5%", "display": "inline-block"}),
-
-								#graphs
-								html.Div(id="new_evidence_div", children=[
-									dcc.Loading(
-										id="new_evidence_div_loading",
-										type="dot",
-										color="#33A02C",
-										children=[]
-									)
-								], style={"height": 600, "width": "70%", "display": "inline-block"}),
-
-								#spacer
-								html.Div([], style={"width": "1.5%", "display": "inline-block"}),
-							]),
-							html.Br()
-						], style=tab_style, selected_style=tab_selected_style),
-					], style= {"height": 40})
-				], style=tab_style, selected_style=tab_selected_style),
+				], style=tab_style, selected_style=tab_selected_style)
 			], style= {"height": 40}),
-		], style={"width": "100%", "display": "inline-block"}),
-		
-		#footer
-		html.Footer([
-			html.Hr(),
-			html.Div([
-				"© Copyright 2021 ", 
-				html.A("Luca Massimino", href="https://scholar.google.com/citations?user=zkPRE9oAAAAJ&hl=en", target="_blank"), ", ",
-				html.A("Luigi Antonio Lamparelli", href="https://scholar.google.com/citations?hl=en&user=D4JB6sQAAAAJ", target="_blank"), ", ",
-				html.A("Federica Ungaro", href="https://scholar.google.com/citations?user=CYfM7wsAAAAJ&hl=en", target="_blank"), ", ",
-				html.A("Silvio Danese", href="https://scholar.google.com/citations?hl=en&user=2ia1nGUAAAAJ", target="_blank"), "  -  ",
-				html.A("Manual", href="https://ibd-tamma.readthedocs.io/", target="_blank"), "  -  ",
-				html.A("Report a bug", href="https://github.com/Danese-Omics-Web-Apps/eoe_tamma/issues", target="_blank"), "  -  ",
-				html.A("Suggestions", href="https://github.com/Danese-Omics-Web-Apps/eoe_tamma/issues", target="_blank"), "  -  ",
-				html.A("Data", href="https://github.com/Danese-Omics-Web-Apps/eoe_tamma_data", target="_blank"),  "  -  ",
-				html.A("NGS dark matter", href="https://dataverse.harvard.edu/dataverse/tamma-dark-matter", target="_blank"),  "  -  ",
-				html.A("How to cite us", href="https://www.nature.com/articles/s43588-021-00114-y", target="_blank")
-			]),
-			html.Br()
-		], style={"width": "100%", "display": "inline-block"})
-	], style={"width": 1200, "font-family": "Arial"}),
+		], style = {"width": "100%", "display": "inline-block"})
+	], style={"width": 1200, "font-family": "Arial"})
 ], style={"width": "100%", "justify-content":"center", "display":"flex", "textAlign": "center"})

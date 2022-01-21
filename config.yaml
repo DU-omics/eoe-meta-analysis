@@ -1,5 +1,5 @@
 header:
-  logo: "NA"
+  logo: "assets/logo.png"
   text: "EoE TaMMA"
 stringecy: "padj_0.1"
 github:
@@ -11,7 +11,17 @@ credentials:
   pass: "steam"
 sorted_conditions: False
 condition_list:
-  - UN_non_responder
-  - T50_non_responder
-  - UN_responder
-  - T50_responder
+  - Healthy_GFP
+  - Healthy_MFSD2A_GFP
+  - Healthy_shCTRL
+  - Healthy_shMFSD2A
+  - CRC_GFP
+  - CRC_MFSD2A_GFP
+  - CRC_shCTRL
+  - CRC_shMFSD2A
+add_external_resources_to_dge_table: False
+external_resources:
+  IBD exome browser:
+    icon: "assets/icon_ibd_exome.png"
+    link_root: https://ibd.broadinstitute.org/gene/
+    column_to_use: "Gene ID"
