@@ -369,10 +369,14 @@ def define_callbacks(app):
 		Input("x_boxplot_dropdown", "value"),
 		Input("y_boxplot_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("feature_dropdown", "value")
+		State("feature_dropdown", "value"),
 	)
 	def get_x_values_boxplots(selected_x, selected_y, feature_dataset, feature):
 		
+		#on start the feature is None
+		if feature is None:
+			raise PreventUpdate
+
 		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, feature)
 
 		return options, x_values
@@ -384,10 +388,14 @@ def define_callbacks(app):
 		Input("x_multiboxplots_dropdown", "value"),
 		Input("y_multiboxplots_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("feature_dropdown", "value")
+		State("feature_dropdown", "value")
 	)
 	def get_x_values_multiboxplots(selected_x, selected_y, feature_dataset, feature):
 		
+		#on start the feature is None
+		if feature is None:
+			raise PreventUpdate
+
 		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, feature)
 
 		return options, x_values
@@ -1140,7 +1148,7 @@ def define_callbacks(app):
 			else:
 				box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
 				for trace in box_fig["data"]:
-					if trace["visible"] is False :
+					if trace["visible"] is False:
 						trace["visible"] = "legendonly"
 
 		#general config for boxplots
