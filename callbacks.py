@@ -801,6 +801,10 @@ def define_callbacks(app):
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		
+		#do not update the plot for change in contrast if the switch is off
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+			raise PreventUpdate
+
 		#open metadata
 		metadata_df = functions.download_from_github("metadata.tsv")
 		metadata_df = pd.read_csv(metadata_df, sep = "\t")
@@ -914,7 +918,7 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		height = 400
-		
+
 		#change umap dataset, expression dataset or gene/species: create a new figure from tsv
 		if trigger_id in ["mds_type.value", "mds_dataset.value", "feature_dataset_dropdown.value", "feature_dropdown.value", "mds_metadata.figure", "mds_metadata.restyleData"] or mds_expression_fig is None:
 
@@ -1007,6 +1011,14 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
+		#boolean switch
+		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
+
+		#do not update the plot for change in contrast if the switch is off
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+			raise PreventUpdate
+
 		#labels
 		if expression_dataset in ["human", "mouse"]:
 			expression_or_abundance = "expression"
@@ -1021,10 +1033,6 @@ def define_callbacks(app):
 			box_fig["layout"]["width"] = width
 		#new plot
 		else:
-			#boolean switch
-			boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
-			boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
-
 			if trigger_id != "hide_unselected_boxplot_switch.value":
 				
 				#if there is a change in the plot, hide unselected must be false
@@ -1637,6 +1645,15 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
+		#transform switch to boolean switch
+		boolean_clustering_switch = functions.boolean_switch(clustered_switch)
+		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
+
+		#do not update the plot for change in contrast if the switch is off
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+			raise PreventUpdate
+
 		#resize
 		if trigger_id in ["hetamap_height_slider.value", "hetamap_width_slider.value"]:
 			if height <= max_height and height >= 200 and width <= width_max and width >= 200:
@@ -1662,10 +1679,6 @@ def define_callbacks(app):
 		else:
 			if trigger_id == "update_heatmap_plot_button.n_clicks":
 				comparison_only_switch = []
-			#transform switch to boolean switch
-			boolean_clustering_switch = functions.boolean_switch(clustered_switch)
-			boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
-			boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 
 			#coerce features to list
 			if features is None:
@@ -2066,7 +2079,7 @@ def define_callbacks(app):
 				if row == rows:
 					number_of_missing_elements = legends_to_plot - specs_done
 					last_row = []
-					for i in range(1, 7):
+					for i in range(1, 6):
 						if i <= number_of_missing_elements:
 							last_row.append({})
 						else:
@@ -2074,8 +2087,8 @@ def define_callbacks(app):
 					specs.append(last_row)
 				#any non-last row will be filled by plots
 				else:
-					specs.append([{}, {}, {}, {}, {}, {}])
-					specs_done += 6
+					specs.append([{}, {}, {}, {}, {}])
+					specs_done += 5
 			
 			#find out how many categories will have each annotation and use the one with the most categories as a reference
 			max_categories = 0
@@ -2100,7 +2113,7 @@ def define_callbacks(app):
 					max_categories = number_of_categories
 
 			#make subplot
-			fig = make_subplots(rows=rows, cols=6, specs=specs, subplot_titles=discrete_annotations + continuous_annotations, shared_yaxes=True, horizontal_spacing=0)
+			fig = make_subplots(rows=rows, cols=5, specs=specs, subplot_titles=discrete_annotations + continuous_annotations, shared_yaxes=True, horizontal_spacing=0)
 
 			#setup loop
 			discrete_legends = []
@@ -2161,7 +2174,7 @@ def define_callbacks(app):
 						fig.add_trace(trace, row=working_row, col=working_col)
 					#update position on the subplot
 					working_col += 1
-					if working_col == 7:
+					if working_col == 6:
 						working_col = 1
 						working_row += 1
 
@@ -2172,17 +2185,16 @@ def define_callbacks(app):
 			#move legend titles to the left so that they line up with markers
 			for annotation in fig["layout"]["annotations"]:
 				current_x = annotation["x"]
-				annotation["x"] = current_x - 0.087
+				annotation["x"] = current_x - 0.102
 				current_y = annotation["y"]
 				annotation["y"] = current_y
 			#compute height
-			margin_height = 200
 			category_height = 20
 			subplot_title_height = 30
 			row_height = (category_height*max_categories) + subplot_title_height
-			height = (row_height*rows) #+ margin_height
+			height = (row_height*rows)
 			#update layout
-			fig.update_layout(width=885, height=height, showlegend=False, margin=dict(t=30, b=10, l=0, r=0, autoexpand=False))
+			fig.update_layout(width=900, height=height, showlegend=False, margin=dict(t=30, b=10, l=0, r=0, autoexpand=False))
 
 			#add figure to children
 			children.append(dcc.Graph(figure=fig, config={"modeBarButtonsToRemove": ["zoom2d", "pan2d", "select2d", "lasso2d", "zoomIn2d", "zoomOut2d", "autoScale2d", "hoverClosestGl2d", "hoverClosestPie", "toggleHover", "sendDataToCloud", "toggleSpikelines", "resetViewMapbox", "hoverClosestCartesian", "hoverCompareCartesian"], "toImageButtonOptions": {"format": "png", "width": 885, "height": height, "scale": 5, "filename": "heatmap_legend_for_" + "_".join(annotations)}}))
@@ -2226,14 +2238,19 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
+		#boolean swithces
+		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
+
+		#do not update the plot for change in contrast if the switch is off
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+			raise PreventUpdate
+
 		#title text
 		if expression_dataset in ["human", "mouse"]:
 			title_text = "{host} gene expression profiles per ".format(host=expression_dataset.capitalize()) + x_metadata.replace("_", " ").capitalize()
 		else:
 			title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").replace("viruses", "viral").replace("archaea", "archaeal").replace("bacteria", "bacterial").capitalize()) + x_metadata.replace("_", " ").capitalize()
-
-		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
-		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 
 		#open metadata
 		metadata_df_full = functions.download_from_github("metadata.tsv")
