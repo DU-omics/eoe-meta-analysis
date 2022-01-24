@@ -1042,11 +1042,6 @@ def define_callbacks(app):
 		#new plot
 		else:
 			if trigger_id != "hide_unselected_boxplot_switch.value":
-				
-				#if there is a change in the plot, hide unselected must be false
-				hide_unselected_switch = []
-				boolean_hide_unselected_switch = False
-				
 				#open metadata
 				metadata_df = functions.download_from_github("metadata.tsv")
 				metadata_df = pd.read_csv(metadata_df, sep = "\t")
@@ -1084,6 +1079,20 @@ def define_callbacks(app):
 					column_for_filtering = group_by_metadata
 					metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
 					metadata_fields_ordered.sort()
+
+				#if there is a change in the plot beside the gene, reset the figure
+				if trigger_id != "feature_dropdown.value":
+					hide_unselected_switch = []
+					boolean_hide_unselected_switch = False
+					width = 900
+					height = 375
+					visible = {}
+					for metadata in metadata_fields_ordered:
+						visible[metadata] = True
+				else:
+					visible = {}
+					for trace in box_fig["data"]:
+						visible[trace["name"]] = trace["visible"]
 
 				#grouped or not boxplot setup
 				boxmode = "overlay"
@@ -1130,11 +1139,9 @@ def define_callbacks(app):
 
 					#create traces
 					marker_color = functions.get_color(column_for_filtering, metadata)
-					box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=True))
+					box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
 
 				#figure layout
-				width = 900
-				height = 375
 				box_fig.update_layout(title = {"text": title_text, "x": 0.4, "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
 			else:
 				box_fig = go.Figure(box_fig)
