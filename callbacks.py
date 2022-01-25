@@ -368,16 +368,11 @@ def define_callbacks(app):
 		Output("x_filter_boxplot_dropdown", "value"),
 		Input("x_boxplot_dropdown", "value"),
 		Input("y_boxplot_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		State("feature_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value")
 	)
-	def get_x_values_boxplots(selected_x, selected_y, feature_dataset, feature):
+	def get_x_values_boxplots(selected_x, selected_y, feature_dataset):
 		
-		#on start the feature is None
-		if feature is None:
-			raise PreventUpdate
-
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, feature)
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset)
 
 		return options, x_values
 
@@ -387,16 +382,11 @@ def define_callbacks(app):
 		Output("x_filter_multiboxplots_dropdown", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
 		Input("y_multiboxplots_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		State("feature_dropdown", "value")
+		Input("feature_dataset_dropdown", "value")
 	)
-	def get_x_values_multiboxplots(selected_x, selected_y, feature_dataset, feature):
-		
-		#on start the feature is None
-		if feature is None:
-			raise PreventUpdate
+	def get_x_values_multiboxplots(selected_x, selected_y, feature_dataset):
 
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, feature)
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset)
 
 		return options, x_values
 
@@ -1024,7 +1014,7 @@ def define_callbacks(app):
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 
 		#do not update the plot for change in contrast if the switch is off
-		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None:
 			raise PreventUpdate
 
 		#labels
@@ -1039,6 +1029,11 @@ def define_callbacks(app):
 		if trigger_id in ["boxplots_height_slider.value", "boxplots_width_slider.value"]:
 			box_fig["layout"]["height"] = height
 			box_fig["layout"]["width"] = width
+			if width < 600:
+				if "abundance" in box_fig["layout"]["title"]["text"]:
+					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
+				else:
+					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace("profile ", "profile<br>")
 		#new plot
 		else:
 			if trigger_id != "hide_unselected_boxplot_switch.value":
@@ -1080,19 +1075,21 @@ def define_callbacks(app):
 					metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
 					metadata_fields_ordered.sort()
 
-				#if there is a change in the plot beside the gene, reset the figure
-				if trigger_id != "feature_dropdown.value":
-					hide_unselected_switch = []
-					boolean_hide_unselected_switch = False
-					width = 900
-					height = 375
-					visible = {}
-					for metadata in metadata_fields_ordered:
-						visible[metadata] = True
-				else:
+				#changing the gene does not reset the figure
+				if trigger_id == "feature_dropdown.value":
 					visible = {}
 					for trace in box_fig["data"]:
 						visible[trace["name"]] = trace["visible"]
+				#if there is a change in the plot beside the gene, reset the figure 
+				else:
+					hide_unselected_switch = []
+					boolean_hide_unselected_switch = False
+					if trigger_id != "comparison_only_boxplots_switch.value":
+						width = 900
+						height = 375
+					visible = {}
+					for metadata in metadata_fields_ordered:
+						visible[metadata] = True
 
 				#grouped or not boxplot setup
 				boxmode = "overlay"
@@ -1142,7 +1139,12 @@ def define_callbacks(app):
 					box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
 
 				#figure layout
-				box_fig.update_layout(title = {"text": title_text, "x": 0.4, "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
+				if width < 600:
+					if "abundance" in box_fig["layout"]["title"]["text"]:
+						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
+					else:
+						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace("profile ", "profile<br>")
+				box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
 			else:
 				box_fig = go.Figure(box_fig)
 

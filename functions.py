@@ -372,13 +372,25 @@ def get_displayed_samples(figure_data):
 	return n_samples
 
 #elements in the x axis in boxplots
-def get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, feature):
+def get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset):
 	#open metadata
 	metadata_df = download_from_github("metadata.tsv")
 	metadata_df = pd.read_csv(metadata_df, sep = "\t")
 
 	#counts as y need external file with count values
 	if selected_y in ["log2_expression", "log2_abundance"]:
+		#get a feature to filter metadata by selecting only samples which have counts
+		if feature_dataset in ["human", "mouse"]:
+			list = "data/" + feature_dataset + "/counts/genes_list.tsv"
+		else:
+			if "lipid" in feature_dataset:
+				list = "data/" + feature_dataset + "/counts/lipid_list.tsv"
+			else:
+				list = "data/" + feature_dataset + "/counts/feature_list.tsv"
+		list = download_from_github(list)
+		list = pd.read_csv(list, sep = "\t", header=None, names=["gene_species"])
+		list = list["gene_species"].tolist()
+		feature = list[0]
 		counts = download_from_github("data/" + feature_dataset + "/counts/" + feature + ".tsv")
 		counts = pd.read_csv(counts, sep = "\t")
 		metadata_df = metadata_df.merge(counts, how="inner", on="sample")
