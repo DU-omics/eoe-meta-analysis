@@ -1,9 +1,9 @@
 #import packages
 import dash
 from dash.exceptions import PreventUpdate
-import dash_core_components as dcc
+from dash import dcc
 from dash.dependencies import Input, Output, State
-from dash_table.Format import Format, Scheme
+from dash.dash_table.Format import Format, Scheme
 import pandas as pd
 import numpy as np
 import urllib.parse
@@ -128,6 +128,18 @@ def define_callbacks(app):
 		already_selected_genes_species, log_div, log_hidden_status, text = functions.serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, already_selected_genes_species, add_gsea_switch, 10)
 		
 		return already_selected_genes_species, log_div, log_hidden_status, text, update_multiboxplot_plot_button
+
+	@app.callback(
+		Output("target_prioritization_switch_div", "hidden"),
+		Input("feature_dataset_dropdown", "value")
+	)
+	def show_target_prioritization_switch(feature_dataset):
+		if feature_dataset == "human" and config["opentargets"] is True:
+			hidden = False
+		else:
+			hidden = True
+		
+		return hidden
 
 	##### dropdowns #####
 
@@ -652,11 +664,14 @@ def define_callbacks(app):
 		Input("multi_gene_dge_table_selection_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("stringency_dropdown", "value")
+		Input("stringency_dropdown", "value"),
+		Input("target_prioritization_switch", "value")
 	)
-	def display_filtered_dge_table(dropdown_values, contrast, dataset, fdr):
+	def display_filtered_dge_table(dropdown_values, contrast, dataset, fdr, target_prioritization):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
+
+		boolean_target_prioritization = functions.boolean_switch(target_prioritization)
 		
 		if dropdown_values is None or dropdown_values == [] or trigger_id == "feature_dataset_dropdown.value":
 			hidden_div = True
@@ -677,7 +692,7 @@ def define_callbacks(app):
 				dropdown_values = [value.replace("€", "/")for value in dropdown_values]
 			table = table[table["Gene"].isin(dropdown_values)]
 
-			columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, fdr)
+			columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, fdr, boolean_target_prioritization)
 
 		return columns, data, style_data_conditional, hidden_div
 
@@ -688,14 +703,17 @@ def define_callbacks(app):
 		Output("dge_table", "style_data_conditional"),
 		Input("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("stringency_dropdown", "value")
+		Input("stringency_dropdown", "value"),
+		Input("target_prioritization_switch", "value")
 	)
-	def display_dge_table(contrast, dataset, strincency):
+	def display_dge_table(contrast, dataset, strincency, target_prioritization):
 		#open tsv
 		table = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
 		table = pd.read_csv(table, sep = "\t")
 		
-		columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, strincency)
+		boolean_target_prioritization = functions.boolean_switch(target_prioritization)
+		
+		columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, strincency, boolean_target_prioritization)
 
 		return columns, data, style_data_conditional
 
@@ -1392,7 +1410,7 @@ def define_callbacks(app):
 			])
 		])
 
-		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "plotGlPixelRatio": 5000}
+		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}}
 		config_ma_plot["toImageButtonOptions"]["filename"] = "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)
 
 		#ma_plot_fig["layout"]["paper_bgcolor"] = "#E0F3DB"
@@ -1533,7 +1551,7 @@ def define_callbacks(app):
 				go_df_down = pd.concat([go_df_down, filtered_go_df[filtered_go_df["DGE"] == "down"].sort_values(by=["Enrichment", "GO p-value"])])
 
 			#find out max enrichment for this dataset
-			all_enrichments = go_df_down["Enrichment"].append(go_df_up["Enrichment"], ignore_index=True)
+			all_enrichments = go_df_down["Enrichment"].tolist() + go_df_up["Enrichment"].tolist()
 			if len(all_enrichments) > 0:
 				sizeref = 2. * max(all_enrichments)/(5.5 ** 2)
 			else:

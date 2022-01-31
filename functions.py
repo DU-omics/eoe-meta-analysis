@@ -7,9 +7,9 @@ import yaml
 import urllib.parse
 from io import StringIO
 from github import Github
-from dash_table.Format import Format, Scheme
+from dash.dash_table.Format import Format, Scheme
 from dash.exceptions import PreventUpdate
-import dash_html_components as html
+from dash import html
 
 #tmp deconvolution fig
 deconvolution_fig = go.Figure()
@@ -440,84 +440,136 @@ def serach_go(search_value, df, expression_dataset, add_gsea_switch):
 	return processes_to_keep
 
 #dge table rendering
-def dge_table_operations(table, dataset, stringency):
+def dge_table_operations(table, dataset, stringency, target_prioritization):
 	pvalue_type = stringency.split("_")[0]
 	pvalue_threshold = stringency.split("_")[1]
 
-	#define dataset specific variables and link
-	if dataset in ["human", "mouse"]:
-		base_mean_label = "Average expression"
-		gene_column_name = "Gene"
-		table = table.rename(columns={"Geneid": "Gene ID"})
-		#store genes and geneID without link formatting
-		table["Gene"] = table["Gene"].fillna("")
+	if target_prioritization:
+		#keep degs and remove useless columns
+		table = table.rename(columns={"log2FoldChange": "log2 FC", "padj": "FDR", "Geneid": "Gene ID"})
+		table["id"] = table["Gene"]
+		table = table[table["FDR"] < float(pvalue_threshold)]
+		table = table[["Gene", "Gene ID", "log2 FC", "FDR", "id"]]
 
-		#create links which use gene ID
-		external_resources_geneid = "[![NCBI](assets/icon_ncbi.png 'NCBI')](https://www.ncbi.nlm.nih.gov/gene/?term=" + table["Gene ID"] + ") " + "[![Ensembl](assets/icon_ensembl.png 'Ensembl')](https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=" + table["Gene ID"] + ") " + "[![GeneCards](assets/icon_genecards.png 'GeneCards')](https://www.genecards.org/cgi-bin/carddisp.pl?gene=" + table["Gene ID"] + ")"
+		#build df from data
+		opentarget_df = download_from_github("opentargets.tsv")
+		opentarget_df = pd.read_csv(opentarget_df, sep="\t")
+		table = pd.merge(table, opentarget_df, on="Gene ID")
 
-		#create links which use gene ID
-		external_resources_gene = " [![GWAS catalog](assets/icon_gwas_catalog.png 'GWAS catalog')](https://www.ebi.ac.uk/gwas/genes/" + table["Gene"] + ") " + "[![GTEx](assets/icon_gtex.png 'GTEx')](https://www.gtexportal.org/home/gene/" + table["Gene"] + ")"
-
-		#additional external resources
-		if config["add_external_resources_to_dge_table"]:
-			for external_resource in config["external_resources"]:
-				column_to_use = config["external_resources"][external_resource]["column_to_use"]
-				if column_to_use == "Gene ID":
-					external_resources_to_update = external_resources_geneid
-				else:
-					external_resources_to_update = external_resources_gene
-				external_resources_to_update += " [![{name}]({icon} '{name}')]({link_root}".format(name=external_resource, icon=config["external_resources"][external_resource]["icon"], link_root=config["external_resources"][external_resource]["link_root"]) + table[column_to_use] + ")"
-		
-		#paste all external resources and apply
-		external_resources = external_resources_geneid + external_resources_gene
-		table["External resources"] = external_resources
-		
-		#remove external resources where gene is not defined
-		table.loc[table["Gene"] == "", "External resources"] = external_resources_geneid
-	else:
-		base_mean_label = "Average abundance"
-		if "lipid" in dataset:
-			gene_column_name = dataset.replace("_", " ").capitalize()
-			table = table.rename(columns={"Gene": gene_column_name, "Geneid": "Gene ID"})
-			table["Gene ID"] = table["Gene ID"].fillna("")
-			table["External resources"] = "[![LIPID MAPS](assets/icon_lipid_maps.png 'LIPID MAPS')](https://www.lipidmaps.org/databases/lmsd/" + table["Gene ID"] + ")"
-			table.loc[table["Gene ID"] == "", "External resources"] = ""
+		#priority for overexpression
+		if not table.empty:
+			table.loc[table["log2 FC"] >= 1, "DGE"] = 4
+			table.loc[(table["log2 FC"] > 0) & (table["log2 FC"] <1), "DGE"] = 3
+			table.loc[(table["log2 FC"] < 0) & (table["log2 FC"] >-1), "DGE"] = 2
+			table.loc[table["log2 FC"] <= -1, "DGE"] = 1
+			#sort values according to these columns
+			table = table.sort_values(["DGE", "index"], ascending = (False, False))
+			table = table.reset_index(drop=True)
+			table = table.drop("DGE", axis=1)
+			table = table.drop("index", axis=1)
+			all_columns = list(table.columns)
+			table["Rank"] = [x + 1 for x in list(table.index)]
+			table = table[["Rank"] + all_columns]
 		else:
-			gene_column_name = dataset.split("_")[1].capitalize()
-			table = table.rename(columns={"Gene": gene_column_name})
-			table["External resources"] = ["[![NCBI](assets/icon_ncbi.png 'NCBI')](https://www.ncbi.nlm.nih.gov/genome/?term=" + x.replace(" ", "+") + ")" for x in table[gene_column_name]]
-		table[gene_column_name] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table[gene_column_name]]
+			table["Rank"] = []
+		
+		#define columns
+		columns = [
+			{"name": "Rank", "id": "Rank"},
+			{"name": "Gene", "id": "Gene"},
+			{"name": "Gene ID", "id":"Gene ID"},
+			{"name": "log2 FC", "id":"log2 FC", "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
+			{"name": "FDR", "id": "FDR", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
+			{"name": "Drugs", "id": "drug_count", "type": "numeric"},
+			{"name": "Drugs", "id": "total_drug_count"},
+			{"name": "Drugs", "id": "drugs", "type": "text", "presentation": "markdown"},
+			{"name": "IBD drugs", "id": "IBD_drug_count", "type": "numeric"},
+			{"name": "IBD drugs", "id": "IBD_drugs", "type": "text", "presentation": "markdown"},
+			{"name": "IBD GWAS", "id": "GWAS_count", "type": "numeric"},
+			{"name": "IBD GWAS", "id": "GWAS", "type": "text", "presentation": "markdown"},
+			{"name": "Tissue eQTL", "id": "QTL_in_tissues_count", "type": "numeric"},
+			{"name": "Tissue eQTL", "id": "QTL_in_tissues", "type": "text", "presentation": "markdown"},
+			{"name": "Protein expression in cell types", "id": "expression_in_tissue_cell_types_count", "type": "numeric"},
+			{"name": "Protein expression in cell types", "id": "expression_in_tissue_cell_types", "type": "text", "presentation": "markdown"},
+			{"name": "Protein expression in cell compartments", "id": "protein_expression_in_cell_compartment_count", "type": "numeric"},
+			{"name": "Protein expression in cell compartments", "id": "protein_expression_in_cell_compartment", "type": "text", "presentation": "markdown"}
+		]
+	else:
+		#define dataset specific variables and link
+		if dataset in ["human", "mouse"]:
+			base_mean_label = "Average expression"
+			gene_column_name = "Gene"
+			table = table.rename(columns={"Geneid": "Gene ID"})
+			#store genes and geneID without link formatting
+			table["Gene"] = table["Gene"].fillna("")
 
-	#data carpentry
-	table["id"] = table[gene_column_name]
-	table = table.sort_values(by=[pvalue_type])
-	table = table.rename(columns={"log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
-	table["P-value"] = table["P-value"].fillna("NA")
-	table["FDR"] = table["FDR"].fillna("NA")
+			#create links which use gene ID
+			external_resources_geneid = "[![NCBI](assets/icon_ncbi.png 'NCBI')](https://www.ncbi.nlm.nih.gov/gene/?term=" + table["Gene ID"] + ") " + "[![Ensembl](assets/icon_ensembl.png 'Ensembl')](https://www.ensembl.org/Homo_sapiens/Gene/Summary?g=" + table["Gene ID"] + ") " + "[![GeneCards](assets/icon_genecards.png 'GeneCards')](https://www.genecards.org/cgi-bin/carddisp.pl?gene=" + table["Gene ID"] + ")"
+
+			#create links which use gene ID
+			external_resources_gene = " [![GWAS catalog](assets/icon_gwas_catalog.png 'GWAS catalog')](https://www.ebi.ac.uk/gwas/genes/" + table["Gene"] + ") " + "[![GTEx](assets/icon_gtex.png 'GTEx')](https://www.gtexportal.org/home/gene/" + table["Gene"] + ")"
+
+			#additional external resources
+			if config["add_external_resources_to_dge_table"]:
+				for external_resource in config["external_resources"]:
+					column_to_use = config["external_resources"][external_resource]["column_to_use"]
+					if column_to_use == "Gene ID":
+						external_resources_to_update = external_resources_geneid
+					else:
+						external_resources_to_update = external_resources_gene
+					external_resources_to_update += " [![{name}]({icon} '{name}')]({link_root}".format(name=external_resource, icon=config["external_resources"][external_resource]["icon"], link_root=config["external_resources"][external_resource]["link_root"]) + table[column_to_use] + ")"
+			
+			#paste all external resources and apply
+			external_resources = external_resources_geneid + external_resources_gene
+			table["External resources"] = external_resources
+			
+			#remove external resources where gene is not defined
+			table.loc[table["Gene"] == "", "External resources"] = external_resources_geneid
+		else:
+			base_mean_label = "Average abundance"
+			if "lipid" in dataset:
+				gene_column_name = dataset.replace("_", " ").capitalize()
+				table = table.rename(columns={"Gene": gene_column_name, "Geneid": "Gene ID"})
+				table["Gene ID"] = table["Gene ID"].fillna("")
+				table["External resources"] = "[![LIPID MAPS](assets/icon_lipid_maps.png 'LIPID MAPS')](https://www.lipidmaps.org/databases/lmsd/" + table["Gene ID"] + ")"
+				table.loc[table["Gene ID"] == "", "External resources"] = ""
+			else:
+				gene_column_name = dataset.split("_")[1].capitalize()
+				table = table.rename(columns={"Gene": gene_column_name})
+				table["External resources"] = ["[![NCBI](assets/icon_ncbi.png 'NCBI')](https://www.ncbi.nlm.nih.gov/genome/?term=" + x.replace(" ", "+") + ")" for x in table[gene_column_name]]
+			table[gene_column_name] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table[gene_column_name]]
+
+		#data carpentry
+		table["id"] = table[gene_column_name]
+		table = table.sort_values(by=[pvalue_type])
+		table = table.rename(columns={"log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
+		table["P-value"] = table["P-value"].fillna("NA")
+		table["FDR"] = table["FDR"].fillna("NA")
+
+		#define columns
+		if dataset == "lipid":
+			geneid_label = "Lipid ID"
+		else:
+			geneid_label = "Gene ID"
+		columns = [
+			{"name": gene_column_name, "id": gene_column_name}, 
+			{"name": geneid_label, "id":"Gene ID"},
+			{"name": base_mean_label, "id": base_mean_label, "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
+			{"name": "log2 FC", "id":"log2 FC", "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
+			{"name": "log2 FC SE", "id":"log2 FC SE", "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
+			{"name": "P-value", "id":"P-value", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
+			{"name": "FDR", "id":"FDR", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
+			{"name": "External resources", "id":"External resources", "type": "text", "presentation": "markdown"}
+			]
+		#Gene ID column not useful for metatransciptomics data and lipid category
+		if dataset not in ["human", "mouse", "lipid"]:
+			del columns[1]
+			#lipid categories doesn't have any external resource
+			if dataset == "lipid_category":
+				del columns[-1]
 
 	#define data
 	data = table.to_dict("records")
-
-	#define columns
-	if dataset == "lipid":
-		geneid_label = "Lipid ID"
-	else:
-		geneid_label = "Gene ID"
-	columns = [
-		{"name": gene_column_name, "id": gene_column_name}, 
-		{"name": geneid_label, "id":"Gene ID"},
-		{"name": base_mean_label, "id": base_mean_label, "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
-		{"name": "log2 FC", "id":"log2 FC", "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
-		{"name": "log2 FC SE", "id":"log2 FC SE", "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
-		{"name": "P-value", "id":"P-value", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
-		{"name": "FDR", "id":"FDR", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
-		{"name": "External resources", "id":"External resources", "type": "text", "presentation": "markdown"}
-		]
-	#Gene ID column not useful for metatransciptomics data and lipit category
-	if dataset not in ["human", "mouse", "lipid"]:
-		del columns[1]
-		if dataset == "lipid_category":
-			del columns[-1]
 
 	if pvalue_type == "padj":
 		pvalue_column = "{FDR}"
@@ -543,6 +595,11 @@ def dge_table_operations(table, dataset, stringency):
 				"filter_query": "{pvalue_column} < {threshold}".format(pvalue_column=pvalue_column, threshold=pvalue_threshold) + " && {log2 FC} > 0"
 			},
 			"backgroundColor": "#FFE6E6"
+		},
+		{
+			"if": {"state": "selected"},
+			"backgroundColor": "rgba(44, 62, 80, 0.2)",
+			"border": "1px solid #597ea2",
 		}
 	]
 

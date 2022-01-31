@@ -25,3 +25,4 @@ external_resources:
     icon: "assets/icon_ibd_exome.png"
     link_root: https://ibd.broadinstitute.org/gene/
     column_to_use: "Gene ID"
+opentargets: False

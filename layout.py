@@ -1,8 +1,8 @@
 #import packages
-import dash_html_components as html
-import dash_core_components as dcc
+from dash import html
+from dash import dcc
 import dash_bootstrap_components as dbc
-import dash_table
+from dash import dash_table
 from functions import config, organism, expression_datasets_options, mds_dataset_options, metadata_options, discrete_metadata_options, continuous_metadata_options, metadata_link, metadata_table_data, metadata_table_columns, heatmap_annotation_options, deconvolution_fig
 
 #styles for tabs and selected tabs
@@ -12,7 +12,8 @@ tab_style = {
 }
 
 tab_selected_style = {
-    "padding": 6
+    "padding": 6,
+	"border-top": "3px solid #597ea2"
 }
 
 #header type
@@ -39,7 +40,7 @@ layout = html.Div([
 						clearable=False,
 						options=expression_datasets_options,
 						value=organism
-				)], style={"width": "100%"}),
+				)], style={"width": "100%"}, className="dropdown-luigi"),
 			], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 
 			#feature dropdown
@@ -48,7 +49,7 @@ layout = html.Div([
 					dcc.Dropdown(
 						id="feature_dropdown",
 						clearable=False
-				)], style={"width": "100%"}),
+				)], style={"width": "100%"}, className="dropdown-luigi"),
 			], style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 
 			#info comparison filter
@@ -74,15 +75,15 @@ layout = html.Div([
 			html.Label(["Comparison", 
 				dcc.Dropdown(
 					id="contrast_dropdown",
-					clearable=False,
-			)], style={"width": "19%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
+					clearable=False
+			)], className="dropdown-luigi", style={"width": "19%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
 
 			#stringecy dropdown
 			html.Label(["Stringency", 
 				dcc.Dropdown(
 					id="stringency_dropdown",
 					clearable=False
-			)], style={"width": "9%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"})
+			)], className="dropdown-luigi", style={"width": "9%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"})
 
 		], style={"width": "100%", "font-size": "12px"}),
 		
@@ -122,7 +123,7 @@ layout = html.Div([
 							options=mds_dataset_options,
 							value=organism
 					)], style={"width": "100%", "textAlign": "left"}),
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
+				], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
 
 				#mds type dropdown
 				html.Div([
@@ -132,7 +133,7 @@ layout = html.Div([
 							clearable=False,
 							value="umap"
 					)], style={"width": "100%", "textAlign": "left"}),
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
+				], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
 
 				#metadata dropdown
 				html.Div([
@@ -143,7 +144,7 @@ layout = html.Div([
 							options=metadata_options,
 							value="condition"
 					)], style={"width": "100%", "textAlign": "left"}),
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
+				], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
 
 				#comparison_only switch
 				html.Div([
@@ -226,7 +227,7 @@ layout = html.Div([
 					clearable=False,
 					options=discrete_metadata_options,
 					value="condition"
-				)], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 				#group by dropdown
 				html.Label(["Group by", 
 							dcc.Dropdown(
@@ -234,7 +235,7 @@ layout = html.Div([
 								clearable=False,
 								value="condition",
 								options=discrete_metadata_options
-				)], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 				#y dropdown
 				html.Label(["y", 
 							dcc.Dropdown(
@@ -242,7 +243,7 @@ layout = html.Div([
 								clearable=False,
 								value="log2_expression",
 								options=continuous_metadata_options
-				)], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 				#comparison_only switch
 				html.Div([
 					html.Label(["Comparison only",
@@ -272,13 +273,13 @@ layout = html.Div([
 				#height slider
 				html.Div([
 					html.Label(["Height",
-						dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1, className="dash-bootstrap")
+						dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1)
 					], style={"width": "100%", "height": "30px", "display": "inline-block"})
 				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
 				#width slider
 				html.Div([
 					html.Label(["Width",
-						dcc.Slider(id="boxplots_width_slider", min=200, max=1000, step=1, className="dash-bootstrap")
+						dcc.Slider(id="boxplots_width_slider", min=200, max=1000, step=1)
 					], style={"width": "100%", "height": "30px", "display": "inline-block"})
 				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
 			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
@@ -289,7 +290,7 @@ layout = html.Div([
 					dcc.Dropdown(
 						id="x_filter_boxplot_dropdown",
 						multi=True
-				)], style={"width": "100%", "textAlign": "left"}),
+				)], className="dropdown-luigi", style={"width": "100%", "textAlign": "left"}),
 			], style={"width": "80%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
 
 			#plot
@@ -481,6 +482,13 @@ layout = html.Div([
 									"font-family": "arial",
 									"text-align": "left"
 								},
+								style_data_conditional=[                
+									{
+										"if": {"state": "selected"},
+										"backgroundColor": "rgba(44, 62, 80, 0.2)",
+										"border": "1px solid #597ea2",
+									},
+								],
 								page_size=25,
 								sort_action="native",
 								style_header={
@@ -491,7 +499,7 @@ layout = html.Div([
 								columns = metadata_table_columns
 							)
 						)
-					], style={"width": "100%", "font-family": "arial"}),
+					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
 					html.Br(),
 					html.Br()
 				], style=tab_style, selected_style=tab_selected_style),
@@ -590,14 +598,21 @@ layout = html.Div([
 
 									#dropdowns
 									html.Label(["Annotations", 
-										dcc.Dropdown(id="annotation_dropdown", multi=True, options=heatmap_annotation_options, value=[], style={"textAlign": "left", "font-size": "12px"})
-									], style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+										dcc.Dropdown(id="annotation_dropdown", 
+											multi=True, 
+											options=heatmap_annotation_options, 
+											value=[], 
+											style={"textAlign": "left", "font-size": "12px"})
+									], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
 
 									html.Br(),
 
 									html.Label(["Features",
-										dcc.Dropdown(id="feature_heatmap_dropdown", multi=True, placeholder="Select features", style={"textAlign": "left", "font-size": "12px"})
-									], style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+										dcc.Dropdown(id="feature_heatmap_dropdown", 
+											multi=True, 
+											placeholder="Select features", 
+											style={"textAlign": "left", "font-size": "12px"})
+									], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
 
 									html.Br(),
 
@@ -627,13 +642,13 @@ layout = html.Div([
 									html.Div([
 										#height slider
 										html.Label(["Height",
-											dcc.Slider(id="hetamap_height_slider", min=200, step=1, className="dash-bootstrap")
+											dcc.Slider(id="hetamap_height_slider", min=200, step=1)
 										], style={"width": "30%", "display": "inline-block"}),
 										#spacer
 										html.Div([], style={"width": "3%", "display": "inline-block"}),
 										#width slider
 										html.Label(["Width",
-											dcc.Slider(id="hetamap_width_slider", min=200, max=885, step=1, className="dash-bootstrap")
+											dcc.Slider(id="hetamap_width_slider", min=200, max=885, step=1)
 										], style={"width": "30%", "display": "inline-block"})
 									], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
 
@@ -698,7 +713,13 @@ layout = html.Div([
 									html.Br(),
 
 									#dropdown
-									dcc.Dropdown(id="feature_multi_boxplots_dropdown", multi=True, placeholder="", style={"textAlign": "left", "font-size": "12px"}),
+									html.Div([
+										dcc.Dropdown(id="feature_multi_boxplots_dropdown", 
+											multi=True, 
+											placeholder="", 
+											style={"textAlign": "left", "font-size": "12px"}
+										),
+									], className="dropdown-luigi"),
 
 									html.Br(),
 
@@ -727,7 +748,7 @@ layout = html.Div([
 										clearable=False,
 										options=discrete_metadata_options,
 										value="condition"
-									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 									#group by dropdown
 									html.Label(["Group by", 
 										dcc.Dropdown(
@@ -735,15 +756,16 @@ layout = html.Div([
 											clearable=False,
 											value="condition",
 											options=discrete_metadata_options
-									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 									#y dropdown
 									html.Label(["y", 
 										dcc.Dropdown(
 											id="y_multiboxplots_dropdown",
 											clearable=False,
 											value="log2_expression",
-											options=continuous_metadata_options
-									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+											options=continuous_metadata_options, 
+											className="dropdown-luigi"
+									)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 									#plot per row
 									#y dropdown
 									html.Label(["Plot per row", 
@@ -752,7 +774,7 @@ layout = html.Div([
 											clearable=False,
 											value=3,
 											options=[{"label": n, "value": n} for n in [1, 2, 3]]
-									)], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+									)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 									#comparison_only switch
 									html.Div([
 										html.Label(["Comparison only",
@@ -783,13 +805,13 @@ layout = html.Div([
 									html.Div([
 										#height slider
 										html.Label(["Height",
-											dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max = 2000, className="dash-bootstrap")
+											dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max = 2000)
 										], style={"width": "30%", "display": "inline-block"}),
 										#spacer
 										html.Div([], style={"width": "3%", "display": "inline-block"}),
 										#width slider
 										html.Label(["Width",
-											dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1, className="dash-bootstrap")
+											dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1)
 										], style={"width": "30%", "display": "inline-block"})
 									], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
 									#x filter dropdown
@@ -797,7 +819,8 @@ layout = html.Div([
 										html.Label(["x filter", 
 											dcc.Dropdown(
 												id="x_filter_multiboxplots_dropdown",
-												multi=True
+												multi=True, 
+												className="dropdown-luigi"
 										)], style={"width": "100%", "textAlign": "left"}),
 									], style={"width": "90%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
 
@@ -882,8 +905,25 @@ layout = html.Div([
 
 							#dropdown
 							html.Div([
-								dcc.Dropdown(id="multi_gene_dge_table_selection_dropdown", multi=True, placeholder="", style={"textAlign": "left", "font-size": "12px"})
-							], style={"width": "25%", "display": "inline-block", "font-size": "12px", "vertical-align": "middle"}),
+								dcc.Dropdown(id="multi_gene_dge_table_selection_dropdown", 
+									multi=True, 
+									placeholder="", 
+									style={"textAlign": "left", "font-size": "12px"})
+							], className="dropdown-luigi", style={"width": "25%", "display": "inline-block", "font-size": "12px", "vertical-align": "middle"}),
+
+							#target priorization switch
+							html.Div(id = "target_prioritization_switch_div", hidden = True, children = [
+								html.Label(["Target prioritization",
+									dbc.Checklist(
+										options=[
+											{"label": "", "value": 1},
+										],
+										value=[],
+										id="target_prioritization_switch",
+										switch=True
+									)
+								], style={"textAlign": "center"})
+							], style={"width": "16%", "display": "inline-block", "vertical-align": "middle"}),
 
 							#filtered dge table
 							html.Div(id="filtered_dge_table_div", children=[
@@ -916,7 +956,7 @@ layout = html.Div([
 										style_as_list_view=True
 									)
 								)
-							], style={"width": "100%", "font-family": "arial"}, hidden=True),
+							], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}, hidden=True),
 
 							#full dge table
 							html.Div([
@@ -949,7 +989,7 @@ layout = html.Div([
 										style_as_list_view=True
 									)
 								)
-							], style={"width": "100%", "font-family": "arial"}),
+							], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
 							html.Br()
 						], style=tab_style, selected_style=tab_selected_style),
 						#go table tab
@@ -1056,34 +1096,31 @@ layout = html.Div([
 										],
 										style_data_conditional=[
 											{
-												"if": {
-													"filter_query": "{{DGE}} = {}".format("up")
-												},
+												"if": {"filter_query": "{{DGE}} = {}".format("up")},
 												"backgroundColor": "#FFE6E6"
 											},
 											{
-												"if": {
-													"filter_query": "{{DGE}} = {}".format("down")
-												},
+												"if": {"filter_query": "{{DGE}} = {}".format("down")},
 												"backgroundColor": "#E6F0FF"
 											},
 											{
-												"if": {
-													"filter_query": "{{DLE}} = {}".format("up")
-												},
+												"if": {	"filter_query": "{{DLE}} = {}".format("up")},
 												"backgroundColor": "#FFE6E6"
 											},
 											{
-												"if": {
-													"filter_query": "{{DLE}} = {}".format("down")
-												},
+												"if": {"filter_query": "{{DLE}} = {}".format("down")},
 												"backgroundColor": "#E6F0FF"
+											},
+											{
+												"if": {"state": "selected"},
+												"backgroundColor": "rgba(44, 62, 80, 0.2)",
+												"border": "1px solid #597ea2",
 											}
 										],
 										style_as_list_view=True
 									)
 								)
-							], style={"width": "100%", "font-family": "arial"}),
+							], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
 							html.Br()
 						], style=tab_style, selected_style=tab_selected_style)
 					], style= {"height": 40})
