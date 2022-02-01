@@ -275,7 +275,7 @@ layout = html.Div([
 					html.Label(["Height",
 						dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1)
 					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}, className="slider-luigi"),
+				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
 				#width slider
 				html.Div([
 					html.Label(["Width",
