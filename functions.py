@@ -158,10 +158,16 @@ for dir in subdirs:
 		else:
 			kingdom = dir.split("_")[0]
 			lineage = dir.split("_")[1]
-			expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+			if lineage == "genes":
+				expression_datasets_options.append({"label": kingdom.capitalize() + " " + lineage, "value": dir})
+			else:
+				expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
 			#check if there is mds for each metatranscriptomics
 			if "mds" in non_host_content:
-				mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+				if lineage == "genes":
+					mds_dataset_options.append({"label": kingdom.capitalize() + " " + lineage, "value": dir})
+				else:
+					mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
 
 #dbc switch as boolean switch
 def boolean_switch(switch_value):
@@ -298,7 +304,7 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 		mds_df["Log2 expression"] = np.log2(mds_df["counts"])
 		mds_df["Log2 expression"].replace(to_replace = -np.inf, value = 0, inplace=True)
 		#labels for graph title
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			expression_or_abundance = " expression"
 		else:
 			expression_or_abundance = " abundance"
@@ -380,7 +386,7 @@ def get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset):
 	#counts as y need external file with count values
 	if selected_y in ["log2_expression", "log2_abundance"]:
 		#get a feature to filter metadata by selecting only samples which have counts
-		if feature_dataset in ["human", "mouse"]:
+		if feature_dataset in ["human", "mouse"] or "genes" in feature_dataset:
 			list = "data/" + feature_dataset + "/counts/genes_list.tsv"
 		else:
 			if "lipid" in feature_dataset:
@@ -702,7 +708,7 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 		down_genes = down_genes["Gene"].tolist()
 
 		#add genes in text area
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			sep = "; "
 		else:
 			sep = "\n"
@@ -725,8 +731,8 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 	else:
 		#text is none, do almost anything
 		if text is None or text == "":
-			if expression_dataset in ["human", "mouse"]:
-				log_div = [html.Br(), "No host genes in the search area!"]
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+				log_div = [html.Br(), "No genes in the search area!"]
 			else:
 				if expression_dataset == "lipid":
 					element = "lipids"
@@ -736,7 +742,7 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			log_hidden_status = False
 		else:
 			#list of features
-			if expression_dataset in ["human", "mouse"]:
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 				list = "data/" + expression_dataset + "/counts/genes_list.tsv"
 			else:
 				if "lipid" in expression_dataset:
@@ -748,7 +754,7 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			all_genes = all_genes["genes"].replace("€", "/").dropna().tolist()
 
 			#upper for case insensitive search
-			if expression_dataset not in ["human", "mouse"]:
+			if expression_dataset not in ["human", "mouse"] or "genes" not in expression_dataset:
 				original_names = {}
 				for gene in all_genes:
 					original_names[gene.upper()] = gene
@@ -756,7 +762,7 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 				already_selected_genes_species = [x.upper() for x in already_selected_genes_species]
 			
 			#search genes in text
-			if expression_dataset in ["human", "mouse"]: 
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset: 
 				genes_species_in_text_area = re.split(r"[\s,;]+", text)
 			else:
 				genes_species_in_text_area = re.split(r"[\n]+", text)
@@ -783,7 +789,7 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 					if gene not in genes_species_not_found:
 						genes_species_not_found.append(gene)
 
-			if expression_dataset not in ["human", "mouse"]:
+			if expression_dataset not in ["human", "mouse"]  or "genes" not in expression_dataset:
 				already_selected_genes_species = [original_names[gene.upper()] for gene in already_selected_genes_species]
 				genes_species_not_found = [gene.lower().capitalize() for gene in genes_species_not_found]
 

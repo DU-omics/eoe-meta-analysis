@@ -49,6 +49,8 @@ def define_callbacks(app):
 	def get_tabs_titles(expression_dataset):
 		if expression_dataset in ["human", "mouse"]:
 			expression_abundance_profiling_label = "Gene expression profiling"
+		elif "genes" in expression_dataset:
+			expression_abundance_profiling_label = "{} expression profiling".format(expression_dataset.replace("_genes", " gene").capitalize())
 		else:
 			expression_abundance_profiling_label = expression_dataset.replace("_", " ").capitalize() + " abundance profiling"
 
@@ -67,7 +69,7 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value")
 	)
 	def get_placeholder_heatmap_text_area(expression_dataset):
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			placeholder = "Paste list (plot allowed for max 10 features)"
 		else:
 			placeholder = "Paste list (plot allowed for max 10 features, one per line)"
@@ -129,6 +131,7 @@ def define_callbacks(app):
 		
 		return already_selected_genes_species, log_div, log_hidden_status, text, update_multiboxplot_plot_button
 
+	#target prioritization switch
 	@app.callback(
 		Output("target_prioritization_switch_div", "hidden"),
 		Input("feature_dataset_dropdown", "value")
@@ -163,7 +166,7 @@ def define_callbacks(app):
 
 		return options
 
-	#get_features dropdown
+	#get features dropdown
 	@app.callback(
 		Output("feature_dropdown", "value"),
 		Output("feature_dropdown", "options"),
@@ -185,10 +188,14 @@ def define_callbacks(app):
 		trigger_id = ctx.triggered[0]["prop_id"]
 
 		#dataset specific variables
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			list = "data/" + expression_dataset + "/counts/genes_list.tsv"
-			placeholder = "Type here to search host genes"
-			label = "Host gene"
+			if expression_dataset in ["human", "mouse"]:
+				placeholder = "Type here to search host genes"
+				label = "Host gene"
+			else:
+				placeholder = "Type here to search {}".format(expression_dataset.replace("_", " "))
+				label = "{}".format(expression_dataset.replace("genes", "gene"))
 		else:
 			label = expression_dataset.replace("_", " ")
 			if "lipid" in expression_dataset:
@@ -236,7 +243,7 @@ def define_callbacks(app):
 			#parse file and get options and value
 			options = []
 			for feature in list:
-				if expression_dataset in ["human", "mouse"]:
+				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 					options.append({"label": feature.replace("€", "/"), "value": feature})
 				else:
 					options.append({"label": feature.replace("_", " ").replace("[", "").replace("]", ""), "value": feature})
@@ -248,7 +255,10 @@ def define_callbacks(app):
 					else:
 						value = "DHA"
 				else:
-					label = expression_dataset.capitalize().replace("_", " by ")
+					if "genes" in expression_dataset:
+						label = expression_dataset.capitalize().replace("_", " ")
+					else:
+						label = expression_dataset.capitalize().replace("_", " by ")
 					value = options[0]["value"]
 			else:
 				if expression_dataset == "human":
@@ -365,7 +375,7 @@ def define_callbacks(app):
 		State("y_boxplot_dropdown", "options")
 	)
 	def get_expression_or_abundance_dropdowns(feature_dataset_dropdown, y_boxplots_dropdown):
-		if feature_dataset_dropdown in ["human", "mouse"]:
+		if feature_dataset_dropdown in ["human", "mouse"] or "genes" in feature_dataset_dropdown:
 			y_boxplots_dropdown[0] = {"label": "Log2 expression", "value": "log2_expression"}
 			value = "log2_expression"
 		else:
@@ -962,7 +972,7 @@ def define_callbacks(app):
 		n_samples_mds_expression = functions.get_displayed_samples(mds_metadata_fig)
 
 		#labels for graph title
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			expression_or_abundance = " expression"
 		else:
 			expression_or_abundance = " abundance"
@@ -993,9 +1003,6 @@ def define_callbacks(app):
 
 		##### CONFIG OPTIONS ####
 		config_mds_expression = {"doubleClick": "autosize", "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{gene_species}_{expression_abundance}".format(mds_metadata = mds_dataset, gene_species = feature, expression_abundance = expression_or_abundance)}}
-
-		#discrete metadata can have the legend
-		#if str(metadata_df.dtypes[metadata]) == "object":
 		mds_expression_div_style = {"width": "34.5%", "display": "inline-block"}
 
 		return mds_expression_fig, config_mds_expression, mds_expression_div_style
@@ -1017,12 +1024,13 @@ def define_callbacks(app):
 		Input("comparison_only_boxplots_switch", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("hide_unselected_boxplot_switch", "value"),
+		Input("show_as_boxplot_switch", "value"),
 		Input("boxplots_width_slider", "value"),
 		Input("boxplots_height_slider", "value"),
 		State("boxplots_graph", "figure"),
 		State("x_filter_dropdown_div", "hidden"),
 	)
-	def plot_boxplots(expression_dataset, feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, width, height, box_fig, hidden):
+	def plot_boxplots(expression_dataset, feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, box_fig, hidden):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1030,13 +1038,14 @@ def define_callbacks(app):
 		#boolean switch
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
+		boolean_show_as_boxplot = functions.boolean_switch(show_as_boxplot)
 
 		#do not update the plot for change in contrast if the switch is off
 		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None:
 			raise PreventUpdate
 
 		#labels
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			expression_or_abundance = "expression"
 			log2_expression_or_abundance = "Log2 expression"
 		else:
@@ -1154,7 +1163,11 @@ def define_callbacks(app):
 
 					#create traces
 					marker_color = functions.get_color(column_for_filtering, metadata)
-					box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
+					
+					if boolean_show_as_boxplot: 
+						box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
+					else:
+						box_fig.add_trace(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata], points="all"))
 
 				#figure layout
 				if width < 600:
@@ -1162,7 +1175,10 @@ def define_callbacks(app):
 						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
 					else:
 						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace("profile ", "profile<br>")
-				box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
+				if boolean_show_as_boxplot:
+					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
+				else:
+					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), violinmode=boxmode, showlegend=True)
 			else:
 				box_fig = go.Figure(box_fig)
 
@@ -1205,7 +1221,7 @@ def define_callbacks(app):
 		pvalue_value = stringecy_info.split("_")[1]
 
 		#labels
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			gene = gene.replace("€", "/")
 			gene_or_species = "Gene"
 			expression_or_abundance = "gene expression"
@@ -1228,7 +1244,7 @@ def define_callbacks(app):
 			#log2 base mean
 			table["log2_baseMean"] = np.log2(table["baseMean"])
 			#clean gene/species name
-			if expression_dataset in ["human", "mouse"]:
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 				table["Gene"] = [i for i in table["Gene"]]
 			else:
 				table["Gene"] = [i.replace("_", " ").replace("[", "").replace("]", "") for i in table["Gene"]]
@@ -1696,7 +1712,7 @@ def define_callbacks(app):
 				old_figure["layout"]["width"] = width
 				height_fig = height
 				width_fig = width
-				if expression_dataset in ["human", "mouse"]:
+				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 					colorbar_title = "gene expression"
 				else:
 					colorbar_title = expression_dataset.replace("_", " ") + " abundance"
@@ -1931,7 +1947,7 @@ def define_callbacks(app):
 				heat_data = heat_data.reindex(index=clustered_features)
 
 				#dataset specific variables
-				if expression_dataset in ["human", "mouse"]:
+				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 					feature = "Gene"
 					colorbar_title = "gene expression"
 					space_for_legend = 80
@@ -2255,6 +2271,7 @@ def define_callbacks(app):
 		Input("y_multiboxplots_dropdown", "value"),
 		Input("comparison_only_multiboxplots_switch", "value"),
 		Input("hide_unselected_multiboxplots_switch", "value"),
+		Input("show_as_multiboxplot_switch", "value"),
 		Input("x_filter_multiboxplots_dropdown", "value"),
 		Input("plot_per_row_multiboxplots_dropdown", "value"),
 		Input("multiboxplots_height_slider", "value"),
@@ -2266,7 +2283,7 @@ def define_callbacks(app):
 		State("multi_boxplots_div", "hidden"),
 		State("x_filter_dropdown_multiboxplots_div", "hidden")
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, hide_unselected_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden):
+	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
 		#define contexts
@@ -2276,6 +2293,7 @@ def define_callbacks(app):
 		#boolean swithces
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
+		boolean_show_as_boxplot_switch = functions.boolean_switch(show_as_boxplot_switch)
 
 		#do not update the plot for change in contrast if the switch is off
 		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
@@ -2284,6 +2302,8 @@ def define_callbacks(app):
 		#title text
 		if expression_dataset in ["human", "mouse"]:
 			title_text = "{host} gene expression profiles per ".format(host=expression_dataset.capitalize()) + x_metadata.replace("_", " ").capitalize()
+		elif "genes" in expression_dataset:
+			title_text = "{} expression profiles per".format(expression_dataset.replace("_genes", " gene").capitalize())
 		else:
 			title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").replace("viruses", "viral").replace("archaea", "archaeal").replace("bacteria", "bacterial").capitalize()) + x_metadata.replace("_", " ").capitalize()
 
@@ -2349,7 +2369,7 @@ def define_callbacks(app):
 						row_heights.append(row_height)
 
 					#labels
-					if expression_dataset in ["human", "mouse"]:
+					if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 						expression_or_abundance = "expression"
 						log2_expression_or_abundance = "Log2 expression"
 					else:
@@ -2436,7 +2456,10 @@ def define_callbacks(app):
 
 							#create traces
 							marker_color = functions.get_color(column_for_filtering, metadata)
-							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
+							if boolean_show_as_boxplot_switch:
+								box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
+							else:
+								box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
 
 						#just one legend for trece showed is enough
 						if showlegend is True:
@@ -2451,7 +2474,10 @@ def define_callbacks(app):
 					
 					#update layout
 					box_fig.update_xaxes(tickangle=-90)
-					box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_y=1, legend_tracegroupgap=5, showlegend=True)
+					if boolean_show_as_boxplot_switch:
+						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_y=1, legend_tracegroupgap=5, showlegend=True)
+					else:
+						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", violinmode=boxmode, legend_y=1, legend_tracegroupgap=5, showlegend=True)
 				else:
 					box_fig = go.Figure(box_fig)
 					if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:

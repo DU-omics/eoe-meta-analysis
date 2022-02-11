@@ -244,7 +244,7 @@ layout = html.Div([
 								value="log2_expression",
 								options=continuous_metadata_options
 				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-				#comparison_only switch
+				#comparison only switch
 				html.Div([
 					html.Label(["Comparison only",
 						dbc.Checklist(
@@ -266,6 +266,19 @@ layout = html.Div([
 							],
 							value=[],
 							id="hide_unselected_boxplot_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"}),
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+				#show as boxplot switch
+				html.Div([
+					html.Label(["Show as boxplots",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[],
+							id="show_as_boxplot_switch",
 							switch=True
 						)
 					], style={"textAlign": "center"}),
@@ -787,7 +800,7 @@ layout = html.Div([
 												switch=True
 											)
 										], style={"textAlign": "center"}),
-									], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+									], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
 									#hide unselected switch
 									html.Div([
 										html.Label(["Hide unselected",
@@ -800,7 +813,20 @@ layout = html.Div([
 												switch=True
 											)
 										], style={"textAlign": "center"}),
-									], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+									], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+									#show as boxplot switch
+									html.Div([
+										html.Label(["Show as boxplots",
+											dbc.Checklist(
+												options=[
+													{"label": "", "value": 1},
+												],
+												value=[],
+												id="show_as_multiboxplot_switch",
+												switch=True
+											)
+										], style={"textAlign": "center"}),
+									], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
 									#custom hetmap dimension
 									html.Div([
 										#height slider
