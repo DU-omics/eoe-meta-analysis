@@ -3,12 +3,14 @@ header:
   text: "EoE TaMMA"
 stringecy: "padj_0.1"
 github:
+  private_repo: True
   username: "daneseomics"
-  token: "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"
+  token: "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"
   repo_name: "Danese-Omics-Web-Apps/eoe_tamma_data"
 credentials:
+  use_credentials: True
   username: "ungaro"
-  pass: "steam"
+  pass: "steams"
 sorted_conditions: False
 condition_list:
   - Healthy_GFP

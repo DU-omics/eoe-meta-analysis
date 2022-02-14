@@ -130,8 +130,7 @@ layout = html.Div([
 					html.Label(["MDS type", 
 						dcc.Dropdown(
 							id="mds_type",
-							clearable=False,
-							value="umap"
+							clearable=False
 					)], style={"width": "100%", "textAlign": "left"}),
 				], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto"}),
 

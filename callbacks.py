@@ -149,6 +149,7 @@ def define_callbacks(app):
 	#get mds datasets types
 	@app.callback(
 		Output("mds_type", "options"),
+		Output("mds_type", "value"),
 		Input("mds_dataset", "value")
 	)
 	def get_mds_type_for_dataset(mds_dataset):
@@ -164,7 +165,12 @@ def define_callbacks(app):
 				label = "UMAP"
 			options.append({"label": label, "value": mds_type})
 
-		return options
+		if "umap.tsv" in mds_files:
+			value = "umap"
+		else:
+			value = "tsne"
+
+		return options, value
 
 	#get features dropdown
 	@app.callback(
