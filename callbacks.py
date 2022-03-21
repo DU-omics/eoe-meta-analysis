@@ -6,19 +6,19 @@ from dash.dependencies import Input, Output, State
 from dash.dash_table.Format import Format, Scheme
 import pandas as pd
 import numpy as np
-import urllib.parse
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from plotly.subplots import make_subplots
 from functools import reduce
 from sklearn.preprocessing import scale
+import tempfile
 #import modules
 import functions
-from functions import config, label_to_value
+from functions import config, label_to_value, metadata_table
 
 def define_callbacks(app):
 
-	##### elements ######
+	##### VARIOUS ELEMENTS ######
 
 	#add gsea switch
 	@app.callback(
@@ -144,7 +144,7 @@ def define_callbacks(app):
 		
 		return hidden
 
-	##### dropdowns #####
+	##### DROPDOWNS #####
 
 	#get mds datasets types
 	@app.callback(
@@ -420,15 +420,44 @@ def define_callbacks(app):
 
 	### DOWNLOAD CALLBACKS ###
 
+	#download metadata
+	@app.callback(
+		Output("download_metadata", "data"),
+		Input("download_metadata_button", "n_clicks"),
+		prevent_initial_call=True
+	)
+	def download_metadata(button_click):
+		with tempfile.TemporaryDirectory() as tmpdir:
+			writer = pd.ExcelWriter(f"{tmpdir}/metadata.xlsx")
+
+			#general format
+			(max_row, max_col) = metadata_table.shape
+			format_white = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top"})
+			metadata_table.to_excel(writer, sheet_name="Metadata", index=False, freeze_panes=(1, 1))
+			sheet = writer.sheets["Metadata"]
+		
+			#write header with white formatting
+			for col_num, value in enumerate(metadata_table.columns.values):
+				sheet.write(0, col_num, value, format_white)
+			
+			#apply formatting to all the current sheet
+			sheet.set_column(0, max_col, 17, format_white)
+			
+			#save tmp file
+			writer.save()
+
+			return dcc.send_file(f"{tmpdir}/metadata.xlsx")
+
 	#download diffexp
 	@app.callback(
-		Output("download_diffexp", "href"),
-		Output("download_diffexp", "download"),
+		Output("download_diffexp", "data"),
 		Input("download_diffexp_button", "n_clicks"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("contrast_dropdown", "value")
+		State("feature_dataset_dropdown", "value"),
+		State("contrast_dropdown", "value"),
+		State("stringency_dropdown", "value"),
+		prevent_initial_call=True
 	)
-	def downlaod_diffexp_table(button_click, dataset, contrast):
+	def downlaod_diffexp_table(button_click, dataset, contrast, stringency):
 
 		#download from GitHub
 		df = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
@@ -439,112 +468,79 @@ def define_callbacks(app):
 		if dataset not in ["human", "mouse"]:
 			df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
 
-		#define dataset specific variables
-		if dataset in ["human", "mouse"]:
-			base_mean_label = "Average expression"
-			gene_id = "Gene ID"
-			file_name = "DGE_{}_{}.xls".format(dataset, contrast)
-		else:
-			base_mean_label = "Average abundance"
-			if "lipid" in dataset:
-				gene_column_name = dataset.replace("_", " ").capitalize()
-				gene_id = "Lipid ID"
-				file_name = "DLE_{}_{}.xls".format(dataset, contrast)
-			else:
-				gene_column_name = dataset.split("_")[1].capitalize()
-				gene_id = "Meta ID"
-				file_name = "DGE_{}_{}.xls".format(dataset, contrast)
-			df = df.rename(columns={"Gene": gene_column_name})
+		return functions.dge_table_download_operations(df, dataset, contrast, stringency, False)
 
-		#rename and sort
-		df = df.rename(columns={"Geneid": gene_id, "log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
-		df = df.sort_values(by=["FDR"])
-
-		#remove a geneid in non human dge
-		if dataset not in ["human", "mouse", "lipid", "lipid_id"]:
-			df = df[[gene_column_name, "log2 FC", "log2 FC SE", "P-value", "FDR", base_mean_label]]
-
-		#create a downloadable tsv file forced to excel by extension
-		link = df.to_csv(index=False, encoding="utf-8", sep="\t")
-		link = "data:text/tsv;charset=utf-8," + urllib.parse.quote(link)
-
-		return link, file_name
-
-	#download partial diffexp
+	#disabled status for download filtered diffexp
 	@app.callback(
-		Output("download_diffexp_partial", "href"),
-		Output("download_diffexp_partial", "download"),
-		Output("download_diffexp_button_partial", "disabled"),
-		Input("download_diffexp_button_partial", "n_clicks"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("contrast_dropdown", "value"),
-		Input("multi_gene_dge_table_selection_dropdown", "value"),
+		Output("download_diffexp_partial_button", "disabled"),
+		Input("multi_gene_dge_table_selection_dropdown", "value")
 	)
-	def downlaod_diffexp_table_partial(button_click, dataset, contrast, dropdown_values):
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-		
-		if dropdown_values is None or dropdown_values == [] or trigger_id == "feature_dataset_dropdown.value":
-			link = ""
-			file_name = ""
+	def disable_status_download_filtered_diffexp_table(dropdown_values):
+		if dropdown_values is None or dropdown_values == []:
 			disabled_status = True
 		else:
 			disabled_status = False
-			#download from GitHub
-			url = "data/" + dataset + "/dge/" + contrast + ".diffexp.tsv"
-			#read the downloaded content and make a pandas dataframe
-			df = functions.download_from_github(url)
-			df = pd.read_csv(df, sep="\t")
-			df = df[["Gene", "Geneid", "log2FoldChange", "lfcSE", "pvalue", "padj", "baseMean"]]
+		
+		return disabled_status
 
-			#filter selected genes
-			if dataset not in ["human", "mouse"]:
-				df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
-				dropdown_values = [value.replace("_", " ").replace("[", "").replace("]", "") for value in dropdown_values]
+	#download partial diffexp
+	@app.callback(
+		Output("download_diffexp_partial", "data"),
+		Input("download_diffexp_partial_button", "n_clicks"),
+		State("feature_dataset_dropdown", "value"),
+		State("contrast_dropdown", "value"),
+		State("stringency_dropdown", "value"),
+		State("multi_gene_dge_table_selection_dropdown", "value"),
+		prevent_initial_call=True
+	)
+	def downlaod_diffexp_table_partial(button_click, dataset, contrast, stringency, dropdown_values):
+		
+		#download from GitHub
+		df = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
+		df = pd.read_csv(df, sep="\t")
+		df = df[["Gene", "Geneid", "log2FoldChange", "lfcSE", "pvalue", "padj", "baseMean"]]
+
+		#filter selected genes
+		if dataset not in ["human", "mouse"]:
+			df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
+			dropdown_values = [value.replace("_", " ").replace("[", "").replace("]", "") for value in dropdown_values]
+		else:
+			dropdown_values = [value.replace("€", "/") for value in dropdown_values]
+		df = df[df["Gene"].isin(dropdown_values)]
+
+		return functions.dge_table_download_operations(df, dataset, contrast, stringency, True)
+
+	#disabled status for download go buttons
+	@app.callback(
+		Output("download_go_button", "disabled"),
+		Output("download_go_button_partial", "disabled"),
+		Input("go_plot_filter_input", "value"),
+		Input("feature_dataset_dropdown", "value")
+	)
+	def disable_status_download_filtered_diffexp_table(search_value, expression_dataset):
+		#metatranscriptomics does not have any go
+		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
+			disabled = True
+			disabled_partial = True
+		else:
+			disabled = False
+			#find out if there is a filtered df
+			if search_value is not None and search_value != "":
+				disabled_partial = False
 			else:
-				dropdown_values = [value.replace("€", "/") for value in dropdown_values]
-			df = df[df["Gene"].isin(dropdown_values)]
-
-			#define dataset specific variables
-			if dataset in ["human", "mouse"]:
-				base_mean_label = "Average expression"
-				id_column = "Gene ID"
-				file_name = "DGE_{}_{}_filtered.xls".format(dataset, contrast)
-			else:
-				base_mean_label = "Average abundance"
-				if "lipid" in dataset:
-					gene_column_name = dataset.replace("_", " ").capitalize()
-					id_column = "Lipid ID"
-					file_name = "DLE_{}_{}_filtered.xls".format(dataset, contrast)
-				else:
-					gene_column_name = dataset.split("_")[1].capitalize()
-					id_column = "Gene ID"
-					file_name = "DGE_{}_{}_filtered.xls".format(dataset, contrast)
-				df = df.rename(columns={"Gene": gene_column_name})
-
-			#rename and sort
-			df = df.rename(columns={"Geneid": id_column, "log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
-			df = df.sort_values(by=["FDR"])
-
-			#remove a geneid in non human dge
-			if dataset not in ["human", "mouse", "lipid", "lipid_id"]:
-				df = df[[gene_column_name, "log2 FC", "log2 FC SE", "P-value", "FDR", base_mean_label]]
-
-			#create a downloadable tsv file forced to excel by extension
-			link = df.to_csv(index=False, encoding="utf-8", sep="\t")
-			link = "data:text/tsv;charset=utf-8," + urllib.parse.quote(link)
-
-		return link, file_name, disabled_status
+				disabled_partial = True
+		
+		return disabled, disabled_partial
 
 	#download go
 	@app.callback(
-		Output("download_go", "href"),
-		Output("download_go", "download"),
-		Input("download_go", "n_clicks"),
-		Input("stringency_dropdown", "value"),
-		Input("contrast_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("add_gsea_switch", "value")
+		Output("download_go", "data"),
+		Input("download_go_button", "n_clicks"),
+		State("stringency_dropdown", "value"),
+		State("contrast_dropdown", "value"),
+		State("feature_dataset_dropdown", "value"),
+		State("add_gsea_switch", "value"),
+		prevent_initial_call=True
 	)
 	def download_go_table(button_click, stringency, contrast, expression_dataset, add_gsea_switch):
 		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
@@ -572,43 +568,20 @@ def define_callbacks(app):
 			gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 			go_df = pd.concat([go_df, gsea_df])
 		
-		if expression_dataset in ["human", "mouse"]:
-			process_column = "GO biological process"
-			feature_columm = "Genes"
-			diff_column = "DEGs"
-			go_df = go_df.rename(columns={"Process~name": process_column, "num_of_Genes": diff_column, "gene_group": "Dataset genes", "percentage%": "Enrichment"})
-			file_name = "GO_{}.xls".format(contrast)
-		else:
-			go_df["Genes"] = go_df["Genes"].str.replace(";", "; ")
-			go_df["Process~name"] = go_df["Process~name"].str.replace("_", " ")
-			process_column = "Functional category"
-			feature_columm = "Lipids"
-			up_or_down_column = "DLE"
-			diff_column = "LSEA DELs"
-			go_df = go_df.rename(columns={"DGE": up_or_down_column, "Process~name": process_column, "num_of_Genes": diff_column, "gene_group": "Dataset genes", "percentage%": "Enrichment", "Genes": feature_columm})
-			file_name = "LO_{}.xls".format(contrast)
-
-		link = go_df.to_csv(index=False, encoding="utf-8", sep="\t")
-		link = "data:text/tsv;charset=utf-8," + urllib.parse.quote(link)
-		
-
-		return link, file_name
+		return functions.go_table_download_operations(go_df, expression_dataset, contrast, False)
 
 	#download partial go
 	@app.callback(
-		Output("download_go_partial", "href"),
-		Output("download_go_partial", "download"),
-		Output("download_go_button_partial", "disabled"),
-		Input("download_go_partial", "n_clicks"),
-		Input("contrast_dropdown", "value"),
-		Input("go_plot_filter_input", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("stringency_dropdown", "value"),
-		Input("add_gsea_switch", "value")
+		Output("download_go_partial", "data"),
+		Input("download_go_button_partial", "n_clicks"),
+		State("contrast_dropdown", "value"),
+		State("go_plot_filter_input", "value"),
+		State("feature_dataset_dropdown", "value"),
+		State("stringency_dropdown", "value"),
+		State("add_gsea_switch", "value"),
+		prevent_initial_call=True
 	)
 	def download_partial_go_table(n_clicks, contrast, search_value, expression_dataset, stringency, add_gsea_switch):
-		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
-			raise PreventUpdate
 		
 		#boolean switch
 		boolean_add_gsea_switch = functions.boolean_switch(add_gsea_switch)
@@ -618,57 +591,27 @@ def define_callbacks(app):
 			expression_dataset = "lipid"
 
 		#define search query if present
-		if search_value is not None and search_value != "":
-			if expression_dataset in ["human", "mouse"]:
-				go_df = functions.download_from_github("data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
-			else:
-				go_df = functions.download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
-			go_df = pd.read_csv(go_df, sep="\t")
-			go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
-			
-			#concatenate gsea results if the switch is true
-			if boolean_add_gsea_switch:
-				gsea_df = functions.download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
-				gsea_df = pd.read_csv(gsea_df, sep = "\t")
-				gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
-				go_df = pd.concat([go_df, gsea_df])
-
-			processes_to_keep = functions.serach_go(search_value, go_df, expression_dataset, boolean_add_gsea_switch)
-
-			#filtering
-			go_df = go_df[go_df["Process~name"].isin(processes_to_keep)]
-			#if there are no categories, disable button
-			if go_df.empty:
-				disabled_status = True
-			else:	
-				disabled_status = False
-
-			#add links to amigo for main organism or add spaces for lipids
-			if expression_dataset in ["human", "mouse"]:
-				process_column = "GO biological process"
-				feature_columm = "Genes"
-				diff_column = "DEGs"
-				go_df = go_df.rename(columns={"Process~name": process_column, "num_of_Genes": diff_column, "gene_group": "Dataset genes", "percentage%": "Enrichment"})
-				file_name = "GO_{}_filtered.xls".format(contrast)
-			else:	
-				go_df["Genes"] = go_df["Genes"].str.replace(";", "; ")
-				go_df["Process~name"] = go_df["Process~name"].str.replace("_", " ")
-				process_column = "Functional category"
-				feature_columm = "Lipids"
-				up_or_down_column = "DLE"
-				diff_column = "LSEA DELs"
-				go_df = go_df.rename(columns={"DGE": up_or_down_column, "Process~name": process_column, "num_of_Genes": diff_column, "gene_group": "Dataset genes", "percentage%": "Enrichment", "Genes": feature_columm})
-				file_name = "LO_{}_filtered.xls".format(contrast)
-
-			link = go_df.to_csv(index=False, encoding="utf-8", sep="\t")
-			link = "data:text/tsv;charset=utf-8," + urllib.parse.quote(link)
+		if expression_dataset in ["human", "mouse"]:
+			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
 		else:
-			link = ""
-			file_name = ""
-			disabled_status = True
+			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
+		#open df
+		go_df = pd.read_csv(go_df, sep="\t")
+		go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
+		
+		#concatenate gsea results if the switch is true
+		if boolean_add_gsea_switch:
+			gsea_df = functions.download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
+			gsea_df = pd.read_csv(gsea_df, sep = "\t")
+			gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
+			go_df = pd.concat([go_df, gsea_df])
 
-		return link, file_name, disabled_status
+		#filtering
+		processes_to_keep = functions.serach_go(search_value, go_df, expression_dataset, boolean_add_gsea_switch)
+		go_df = go_df[go_df["Process~name"].isin(processes_to_keep)]
 
+		return functions.go_table_download_operations(go_df, expression_dataset, contrast, True)
+	
 	### TABLES ###
 
 	#dge table filtered by multidropdown
@@ -926,7 +869,11 @@ def define_callbacks(app):
 			mds_metadata_div_style = {"width": "33.5%", "display": "inline-block"}
 
 		##### CONFIG OPTIONS ####
-		config_mds_metadata = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{metadata}".format(mds_metadata = mds_dataset, metadata = metadata_to_plot)}}
+		config_mds_metadata = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{metadata}".format(mds_metadata = mds_dataset, metadata = metadata_to_plot)}, "edits": {"legendPosition": True, "titleText": True}}
+
+		mds_metadata_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		mds_metadata_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		mds_metadata_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		return mds_metadata_fig, config_mds_metadata, mds_metadata_div_style
 
@@ -1007,8 +954,11 @@ def define_callbacks(app):
 		#apply title
 		mds_expression_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n=" + str(n_samples_mds_expression)
 
+		mds_expression_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		mds_expression_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+
 		##### CONFIG OPTIONS ####
-		config_mds_expression = {"doubleClick": "autosize", "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{gene_species}_{expression_abundance}".format(mds_metadata = mds_dataset, gene_species = feature, expression_abundance = expression_or_abundance)}}
+		config_mds_expression = {"doubleClick": "autosize", "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{gene_species}_{expression_abundance}".format(mds_metadata = mds_dataset, gene_species = feature, expression_abundance = expression_or_abundance)}, "edits": {"colorbarPosition": True, "titleText": True}}
 		mds_expression_div_style = {"width": "34.5%", "display": "inline-block"}
 
 		return mds_expression_fig, config_mds_expression, mds_expression_div_style
@@ -1163,7 +1113,7 @@ def define_callbacks(app):
 					#create hovertext
 					filtered_metadata["hovertext"] = ""
 					for column in filtered_metadata.columns:
-						if column not in ["control", "counts", "hovertext", "fq1", "fq2", "raw_counts", "kraken2", "immune_profiling_vdj"]:
+						if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
 							filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_metadata[column].astype(str) + "<br>"
 					hovertext = filtered_metadata["hovertext"].tolist()
 
@@ -1201,9 +1151,11 @@ def define_callbacks(app):
 						trace["visible"] = "legendonly"
 
 		#general config for boxplots
-		config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}}
+		config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
-		#box_fig["layout"]["paper_bgcolor"] = "#BCBDDC"
+		box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		return box_fig, config_boxplots, hidden, hide_unselected_switch, width, height
 
@@ -1230,15 +1182,12 @@ def define_callbacks(app):
 		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			gene = gene.replace("€", "/")
 			gene_or_species = "Gene"
-			expression_or_abundance = "gene expression"
+			expression_or_abundance = expression_dataset.split("_")[0] + " gene expression"
 			xaxis_title = "Log2 average expression"
 		else:
 			gene = gene.replace("_", " ").replace("[", "").replace("]", "")
 			xaxis_title = "Log2 average abundance"
-			if "lipid" in expression_dataset:
-				gene_or_species = expression_dataset.replace("_", " ")
-			else:
-				gene_or_species = expression_dataset.split("_")[1]
+			gene_or_species = expression_dataset.replace("_", " ")
 			expression_or_abundance = gene_or_species + " abundance"
 			gene_or_species = gene_or_species
 
@@ -1346,11 +1295,12 @@ def define_callbacks(app):
 			ma_plot_fig.add_trace(go.Scattergl(x=filtered_table["log2_baseMean"], y=filtered_table["log2FoldChange"], marker_opacity=1, marker_color=color, marker_symbol=2, marker_size=marker_size, marker_line=marker_line, customdata=custom_data, mode="markers", hovertemplate = hover_template))
 
 		#update layout
-		title_text = "Differential {expression_or_abundance} {pvalue_type} < ".format(expression_or_abundance=expression_or_abundance, pvalue_type=pvalue_type_for_labels) + str(float(pvalue_value)) + "<br>" + contrast.replace("_", " ").replace("-", " ").replace("Control", "Control")
+		title_text = "Differential {expression_or_abundance}<br>".format(expression_or_abundance=expression_or_abundance) + contrast.replace("_", " ").replace("-", " ").replace("Control", "Control")
 		
-		ma_plot_fig.update_layout(title={"text": title_text, "xref": "paper", "x": 0.5, "font_size": 13}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_zeroline=True, yaxis_automargin=True, yaxis_title="Log2 fold change", yaxis_domain=[0.25, 1], font_family="Arial", height=415, margin=dict(t=50, b=5, l=5, r=5), showlegend=False)
+		ma_plot_fig.update_layout(title={"text": title_text, "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_zeroline=True, yaxis_automargin=True, yaxis_title="Log2 fold change", yaxis_domain=[0.25, 1], font_family="Arial", height=415, margin=dict(t=50, b=5, l=5, r=5), showlegend=False)
 
 		#annotations
+		stringecy_annotation = [dict(text = "{pvalue_type} < {stringency}".format(pvalue_type=pvalue_type_for_labels, stringency = str(float(pvalue_value))), align="right", xref="paper", yref="paper", x=0.02, y=0.25, showarrow=False, font=dict(size=14, family="Arial"))]
 		up_genes_annotation = [dict(text = str(up) + " higher in<br>" + contrast.split("-vs-")[0].replace("_", " "), align="right", xref="paper", yref="paper", x=0.98, y=0.98, showarrow=False, font=dict(size=14, color="#DE2D26", family="Arial"))]
 		down_genes_annotation = [dict(text = str(down) + " higher in<br>" + contrast.split("-vs-")[1].replace("_", " "), align="right", xref="paper", yref="paper", x=0.98, y=0.25, showarrow=False, font=dict(size=14, color="#045A8D", family="Arial"))]
 		annotaton_title = [dict(text = "Show annotations", align="center", xref="paper", yref="paper", x=0, y=0, showarrow=False, font_size=12)]
@@ -1370,7 +1320,7 @@ def define_callbacks(app):
 			selected_gene_annotation = [dict(x=mid_x, y=mid_y, text="Multiple transcripts with the same gene name.", showarrow=False, font=dict(family="Arial", size=12, color="#252525"), align="center", bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)]
 
 		#add default annotations
-		ma_plot_fig["layout"]["annotations"] = annotaton_title + up_genes_annotation + down_genes_annotation + selected_gene_annotation
+		ma_plot_fig["layout"]["annotations"] = annotaton_title + stringecy_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation
 
 		#buttons
 		ma_plot_fig.update_layout(updatemenus=[dict(
@@ -1391,7 +1341,7 @@ def define_callbacks(app):
 									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}},
 									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}}]
 						},
-						{"annotations": annotaton_title + up_genes_annotation + down_genes_annotation + selected_gene_annotation}]
+						{"annotations": annotaton_title + stringecy_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation}]
 				),
 				dict(label="Differential analysis",
 					method="update",
@@ -1403,7 +1353,7 @@ def define_callbacks(app):
 									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}},
 									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}]
 						},
-						{"annotations": annotaton_title + up_genes_annotation + down_genes_annotation}]
+						{"annotations": annotaton_title + stringecy_annotation + up_genes_annotation + down_genes_annotation}]
 				),
 				dict(label="Selected {gene_or_species}".format(gene_or_species = gene_or_species.lower()),
 					method="update",
@@ -1432,10 +1382,10 @@ def define_callbacks(app):
 			])
 		])
 
-		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}}
-		config_ma_plot["toImageButtonOptions"]["filename"] = "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)
+		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)}, "edits": {"annotationPosition": True, "annotationTail": True, "titleText": True}}
 
-		#ma_plot_fig["layout"]["paper_bgcolor"] = "#E0F3DB"
+		ma_plot_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		ma_plot_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 		
 		return ma_plot_fig, config_ma_plot
 	
@@ -1492,12 +1442,12 @@ def define_callbacks(app):
 		#empty gene ontology file
 		if go_df.empty:
 			go_df = go_df.rename(columns={"Process~name": "Process", "percentage%": "Enrichment", "P-value": "GO p-value"})
-			go_df["Enrichment"] = 1
+			go_df["enrichment_interpolated"] = []
 			go_df_up = go_df
 			go_df_down = go_df
 			all_enrichments = [33, 66, 99]
-			sizeref = 2. * max(all_enrichments)/(5.5 ** 2)
-			computed_height = 460
+			all_enrichments_interpolated = [6, 10.5, 15]
+			computed_height = 500
 			hide_go_axis = True
 		#gene ontology is not empty
 		else:
@@ -1557,8 +1507,33 @@ def define_callbacks(app):
 				else:
 					unique_go_categories.append(go_category)
 
+			#interpolation for enrichment dimension
+			if not go_df.empty:
+				go_df.loc[go_df["Enrichment"] == go_df["Enrichment"].min(), "enrichment_interpolated"] = 6
+				go_df.loc[go_df["Enrichment"] == go_df["Enrichment"].max(), "enrichment_interpolated"] = 15
+				go_df = go_df.sort_values(by=["Enrichment"])
+				go_df = go_df.set_index("Enrichment")
+				go_df["enrichment_interpolated"] = go_df["enrichment_interpolated"].interpolate(method="index")
+				go_df = go_df.reset_index()
+			else:
+				go_df["enrichment_interpolated"] = []
+
 			#filter df by important unique categories
 			filtered_go_df = go_df[go_df["Process"].isin(unique_go_categories)]
+
+			#get enrichments as lists
+			all_enrichments = filtered_go_df["Enrichment"]
+			all_enrichments_interpolated = filtered_go_df["enrichment_interpolated"].tolist()
+
+			#compute figure height
+			pixels_per_go_category = 21
+			computed_height = len(all_enrichments) * pixels_per_go_category
+
+			#min and max height
+			if computed_height < 500:
+				computed_height = 500
+			elif computed_height > 600:
+				computed_height = 600
 			
 			#divide up and down GO categories and sort by enrichment
 			go_df_up = filtered_go_df[filtered_go_df["DGE"] == "up"]
@@ -1571,23 +1546,6 @@ def define_callbacks(app):
 				filtered_go_df = go_df[go_df["Process"].isin(double_go_categories)]
 				go_df_up = pd.concat([go_df_up, filtered_go_df[filtered_go_df["DGE"] == "up"].sort_values(by=["Enrichment", "GO p-value"])])
 				go_df_down = pd.concat([go_df_down, filtered_go_df[filtered_go_df["DGE"] == "down"].sort_values(by=["Enrichment", "GO p-value"])])
-
-			#find out max enrichment for this dataset
-			all_enrichments = go_df_down["Enrichment"].tolist() + go_df_up["Enrichment"].tolist()
-			if len(all_enrichments) > 0:
-				sizeref = 2. * max(all_enrichments)/(5.5 ** 2)
-			else:
-				sizeref = None
-
-			#compute figure height
-			pixels_per_go_category = 20
-			computed_height = len(all_enrichments) * pixels_per_go_category
-
-			#min and max height
-			if computed_height < 480:
-				computed_height = 480
-			elif computed_height > 600:
-				computed_height = 600
 
 		#create figure
 		go_plot_fig = go.Figure()
@@ -1604,24 +1562,22 @@ def define_callbacks(app):
 
 		#up trace
 		hover_text = create_hover_text(go_df_up)
-		go_plot_fig.add_trace(go.Scatter(x=go_df_up["DGE"], y=go_df_up["Process"], marker_size=go_df_up["Enrichment"], marker_opacity=1, marker_color=go_df_up["GO p-value"], marker_colorscale=["#D7301F", "#FCBBA1"], marker_showscale=False, marker_sizeref=sizeref, marker_cmax=0.05, marker_cmin=0, mode="markers", hovertext=hover_text, hoverinfo="text"), row=1, col=1)
+		go_plot_fig.add_trace(go.Scatter(x=go_df_up["DGE"], y=go_df_up["Process"], marker_size=go_df_up["enrichment_interpolated"], marker_opacity=1, marker_color=go_df_up["GO p-value"], marker_colorscale=["#D7301F", "#FCBBA1"], marker_showscale=False, marker_cmax=0.05, marker_cmin=0, mode="markers", hovertext=hover_text, hoverinfo="text"), row=1, col=1)
 		#down trace
 		hover_text = create_hover_text(go_df_down)
-		go_plot_fig.add_trace(go.Scatter(x=go_df_down["DGE"], y=go_df_down["Process"], marker_size=go_df_down["Enrichment"], marker_opacity=1, marker_color=go_df_down["GO p-value"], marker_colorscale=["#045A8D", "#C6DBEF"], marker_showscale=False, marker_sizeref=sizeref, marker_cmax=0.05, marker_cmin=0, mode="markers", hovertext=hover_text, hoverinfo="text"), row=1, col=1)
+		go_plot_fig.add_trace(go.Scatter(x=go_df_down["DGE"], y=go_df_down["Process"], marker_size=go_df_down["enrichment_interpolated"], marker_opacity=1, marker_color=go_df_down["GO p-value"], marker_colorscale=["#045A8D", "#C6DBEF"], marker_showscale=False, marker_cmax=0.05, marker_cmin=0, mode="markers", hovertext=hover_text, hoverinfo="text"), row=1, col=1)
 
 		#legend colorbar trace
-		go_plot_fig.add_trace(go.Scatter(x=[None], y=[None], marker_showscale=True, marker_color = [0], marker_colorscale=["#737373", "#D9D9D9"], marker_cmax=0.05, marker_cmin=0, marker_colorbar = dict(thicknessmode="pixels", thickness=20, lenmode="pixels", len=(computed_height/5), y=0.68, x=0.8, xpad=0, ypad=0, xanchor="center", yanchor="middle")), row=2, col=3)
+		go_plot_fig.add_trace(go.Scatter(x=[None], y=[None], marker_showscale=True, marker_color = [0], marker_colorscale=["#737373", "#D9D9D9"], marker_cmax=0.05, marker_cmin=0, marker_sizemode="area", marker_colorbar=dict(thicknessmode="pixels", thickness=20, lenmode="pixels", len=(computed_height/5), y=0.68, x=0.8, xpad=0, ypad=0, xanchor="center", yanchor="middle")), row=2, col=3)
 
 		#size legend trace
 		if len(all_enrichments) > 0:
-			legend_sizes = [min(all_enrichments), np.average([max(all_enrichments), min(all_enrichments)]), max(all_enrichments)]
+			legend_sizes = [min(all_enrichments_interpolated), np.average([max(all_enrichments_interpolated), min(all_enrichments_interpolated)]), max(all_enrichments_interpolated)]
 			legend_sizes_text = [round(min(all_enrichments)), round(np.average([max(all_enrichments), min(all_enrichments)])), round(max(all_enrichments))]
 		else:
-			legend_sizes = [33, 66, 99]
+			legend_sizes = [6, 10.5, 15]
 			legend_sizes_text = [33, 66, 99]
-			all_enrichments = [33, 66, 99]
-			sizeref = 2. * max(all_enrichments)/(5.5 ** 2)
-		go_plot_fig.add_trace(go.Scatter(x = [1, 1, 1], y = [8, 43, 78], marker_size = legend_sizes, marker_sizeref = sizeref, marker_color = "#737373", mode="markers+text", text=["min", "mid", "max"], hoverinfo="text", hovertext=legend_sizes_text, textposition="top center"), row = 5, col = 3)
+		go_plot_fig.add_trace(go.Scatter(x=[1, 1, 1], y=[8, 43, 78], marker_size=legend_sizes, marker_color="#737373", mode="markers+text", text=legend_sizes_text, hoverinfo="text", hovertext=legend_sizes_text, textposition="top center"), row = 5, col = 3)
 
 		#figure layout
 		if expression_dataset in ["human", "mouse"]:
@@ -1663,10 +1619,11 @@ def define_callbacks(app):
 		if hide_go_axis:
 			go_plot_fig.update_layout(xaxis_visible=False, yaxis_visible=False)
 
-		#go_plot_fig["layout"]["paper_bgcolor"] = "#FDE0DD"
+		go_plot_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		go_plot_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		go_plot_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
-		config_go_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "responsive": True}
-		config_go_plot["toImageButtonOptions"]["filename"] = "GO-plot_with_{contrast}".format(contrast = contrast)
+		config_go_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "responsive": True, "toImageButtonOptions": {"filename": "GO-plot_with_{contrast}".format(contrast = contrast)}, "edits": {"titleText": True}}
 
 		return go_plot_fig, config_go_plot
 
@@ -2077,7 +2034,10 @@ def define_callbacks(app):
 				config_filename_title = colorbar_title + " heatmap" + clustered_or_sorted
 				disabled = False
 				max_height = height_fig + 200
-				#fig["layout"]["paper_bgcolor"] = "#FDE0DD"
+				
+				fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+				fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+				fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 			else:
 				fig = go.Figure()
 				fig.add_annotation(text="Please select at least two features to plot the heatmap.", showarrow=False)
@@ -2088,7 +2048,7 @@ def define_callbacks(app):
 				fig.update_layout(xaxis_linecolor="rgb(255,255,255)", yaxis_linecolor="rgb(255,255,255)", xaxis_showticklabels=False, yaxis_showticklabels=False, xaxis_fixedrange=True, yaxis_fixedrange=True, xaxis_ticks="", yaxis_ticks="")
 				disabled = True
 
-		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "width": width_fig, "height": height_fig, "scale": 5, "filename": config_filename_title}}
+		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "width": width_fig, "height": height_fig, "scale": 5, "filename": config_filename_title}, "edits": {"colorbarPosition": True, "legendPosition": True, "titleText": True}}
 
 		return fig, config_fig, height_fig, max_height, width_fig, disabled, disabled, comparison_only_switch
 
@@ -2256,7 +2216,9 @@ def define_callbacks(app):
 			#add figure to children
 			children.append(dcc.Graph(figure=fig, config={"modeBarButtonsToRemove": ["zoom2d", "pan2d", "select2d", "lasso2d", "zoomIn2d", "zoomOut2d", "autoScale2d", "hoverClosestGl2d", "hoverClosestPie", "toggleHover", "sendDataToCloud", "toggleSpikelines", "resetViewMapbox", "hoverClosestCartesian", "hoverCompareCartesian"], "toImageButtonOptions": {"format": "png", "width": 885, "height": height, "scale": 5, "filename": "heatmap_legend_for_" + "_".join(annotations)}}))
 
-			#fig["layout"]["paper_bgcolor"] = "#FDE0DD"
+			fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 			
 		return children, hidden
 
@@ -2311,7 +2273,7 @@ def define_callbacks(app):
 		elif "genes" in expression_dataset:
 			title_text = "{} expression profiles per".format(expression_dataset.replace("_genes", " gene").capitalize())
 		else:
-			title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").replace("viruses", "viral").replace("archaea", "archaeal").replace("bacteria", "bacterial").capitalize()) + x_metadata.replace("_", " ").capitalize()
+			title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").replace("archaea", "archaeal").replace("bacteria", "bacterial").capitalize()) + x_metadata.replace("_", " ").capitalize()
 
 		#open metadata
 		metadata_df_full = functions.download_from_github("metadata.tsv")
@@ -2456,7 +2418,7 @@ def define_callbacks(app):
 							#create hovertext
 							filtered_metadata["hovertext"] = ""
 							for column in filtered_metadata.columns:
-								if column not in ["control", "counts", "hovertext", "fq1", "fq2"]:
+								if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
 									filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_metadata[column].astype(str) + "<br>"
 							hovertext = filtered_metadata["hovertext"].tolist()
 
@@ -2481,9 +2443,9 @@ def define_callbacks(app):
 					#update layout
 					box_fig.update_xaxes(tickangle=-90)
 					if boolean_show_as_boxplot_switch:
-						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_y=1, legend_tracegroupgap=5, showlegend=True)
+						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
 					else:
-						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", violinmode=boxmode, legend_y=1, legend_tracegroupgap=5, showlegend=True)
+						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", violinmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
 				else:
 					box_fig = go.Figure(box_fig)
 					if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
@@ -2513,8 +2475,12 @@ def define_callbacks(app):
 				popover_status = True
 				x_filter_div_hidden = True
 
-		config_multi_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}}
+		config_multi_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
+
+		box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		return box_fig, config_multi_boxplots, hidden_status, popover_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width

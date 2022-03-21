@@ -4,12 +4,12 @@ import plotly.graph_objects as go
 import requests
 import re
 import yaml
-import urllib.parse
 from io import StringIO
 from github import Github
 from dash.dash_table.Format import Format, Scheme
 from dash.exceptions import PreventUpdate
-from dash import html
+from dash import html, dcc
+import tempfile
 
 #tmp deconvolution fig
 deconvolution_fig = go.Figure()
@@ -20,7 +20,7 @@ deconvolution_fig.update_yaxes(range=[0, 4])
 deconvolution_fig.add_shape(type="rect", x0=0, y0=0, x1=4, y1=4, line=dict(color="black"))
 
 #color palette
-colors = ["#E31A1C", "#FF7F00", "#D9F0A3", "#33A02C", "#3B5DFF", "#6A3D9A", "#F46D43", "#FDAE61", "#E3DF00", "#B2DF8A", "#A6CEE3", "#CAB2D6", "#9E0142", "#FDB462", "#FFED6F", "#008941", "#1F78B4", "#5E4FA2", "#D53E4F", "#CCAA35", "#F4D749", "#B3DE69", "#3288BD", "#BC80BD", "#FB9A99", "#FED976", "#B15928", "#ABDDA4", "#8FB0FF", "#BB8BFF", "#CC002B", "#FB8072", "#CDA727", "#009131", "#0A09AE", "#5D00B9", "#772600", "#F7924C", "#FAD09F", "#006C31", "#5B93FF", "#5C006A", "#FF3944", "#BEAC3B", "#C48700", "#008531", "#4C43ED", "#BC29E1", "#AB2E00", "#DFFB71", "#E69A49", "#00B433", "#0000A6", "#6300A3", "#6B002C", "#CA834E", "#CCEBC5", "#9FA064", "#002DB5", "#9F94F0"]
+colors = ["#E31A1C", "#FF7F00", "#DFFB71", "#33A02C", "#3B5DFF", "#6A3D9A", "#F46D43", "#FDAE61", "#E3DF00", "#B2DF8A", "#A6CEE3", "#CAB2D6", "#9E0142", "#FDB462", "#FFED6F", "#008941", "#1F78B4", "#5E4FA2", "#D53E4F", "#CCAA35", "#F4D749", "#B3DE69", "#3288BD", "#BC80BD", "#FB9A99", "#FED976", "#B15928", "#ABDDA4", "#8FB0FF", "#BB8BFF", "#CC002B", "#FB8072", "#CDA727", "#009131", "#0A09AE", "#5D00B9", "#772600", "#F7924C", "#FAD09F", "#006C31", "#5B93FF", "#5C006A", "#FF3944", "#BEAC3B", "#C48700", "#008531", "#4C43ED", "#BC29E1", "#AB2E00", "#E69A49", "#00B433", "#0000A6", "#6300A3", "#6B002C", "#CA834E", "#CCEBC5", "#9FA064", "#002DB5", "#9F94F0"]
 #NA color
 na_color = "#E6E6E6"
 #gender colors
@@ -81,7 +81,7 @@ label_to_value = {"sample": "Sample"}
 columns_to_keep = []
 for column in metadata.columns:
 	#color by and heatmap annotation dropdowns
-	if column not in ["sample", "fq1", "fq2", "control", "raw_counts", "kraken2", "immune_profiling_vdj"]:
+	if column not in ["sample", "fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
 		#dict used for translating colnames
 		label_to_value[column] = column.capitalize().replace("_", " ")
 		metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
@@ -98,7 +98,7 @@ for column in metadata.columns:
 			continuous_metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
 
 	#metadata teble columns
-	if column not in [ "fq1", "fq2", "control", "raw_counts", "kraken2", "immune_profiling_vdj"]:
+	if column not in [ "fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
 		columns_to_keep.append(column)
 
 #color dictionary
@@ -142,8 +142,6 @@ metadata_table_columns = []
 for column in metadata_table.columns:
 	metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": column})
 metadata_table_data = metadata_table.to_dict("records")
-metadata_link = metadata_table.to_csv(index=False, encoding="utf-8", sep="\t")
-metadata_link = "data:text/tsv;charset=utf-8," + urllib.parse.quote(metadata_link)
 
 #get all subdir to populate expression dataset
 subdirs = get_content_from_github("data")
@@ -616,6 +614,147 @@ def dge_table_operations(table, dataset, stringency, target_prioritization):
 
 	return columns, data, style_data_conditional
 
+#dge table download
+def dge_table_download_operations(df, dataset, contrast, stringency, filtered):
+	
+	#define dataset specific variables
+	if dataset in ["human", "mouse"]:
+		base_mean_label = "Average expression"
+		gene_id = "Gene ID"
+		file_name = "DGE_{}_{}.xlsx".format(dataset, contrast)
+	else:
+		base_mean_label = "Average abundance"
+		if "lipid" in dataset:
+			gene_column_name = dataset.replace("_", " ").capitalize()
+			gene_id = "Lipid ID"
+			file_name = "DLE_{}_{}.xlsx".format(dataset, contrast)
+		else:
+			gene_column_name = dataset.split("_")[1].capitalize()
+			gene_id = "Meta ID"
+			file_name = "DGE_{}_{}.xlsx".format(dataset, contrast)
+		df = df.rename(columns={"Gene": gene_column_name})
+
+	#filtered file name
+	if filtered:
+		file_name = file_name.replace(".xlsx", "_filtered.xlsx")
+
+	#rename and sort
+	df = df.rename(columns={"Geneid": gene_id, "log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
+	df = df.sort_values(by=["FDR"])
+
+	#remove a geneid in non human dge
+	if dataset not in ["human", "mouse", "lipid", "lipid_id"]:
+		df = df[[gene_column_name, "log2 FC", "log2 FC SE", "P-value", "FDR", base_mean_label]]
+
+	stringecy_stype = stringency.split("_")[0]
+	stringency_threshold = float(stringency.split("_")[1])
+	if stringecy_stype == "padj":
+		stringency_column = "FDR"
+	else:
+		stringency_column = "P-value"
+	
+	(max_row, max_col) = df.shape
+
+	with tempfile.TemporaryDirectory() as tmpdir:
+		writer = pd.ExcelWriter(f"{tmpdir}/{file_name}")
+
+		#general format
+		format_white = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top"})
+		format_up = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top", "bg_color": "#FFE6E6"})
+		format_down = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top", "bg_color": "#E6F0FF"})
+		df.to_excel(writer, sheet_name="Sheet 1", index=False, freeze_panes=(1, 1))
+		sheet = writer.sheets["Sheet 1"]
+		
+		#write header with white formatting
+		for col_num, value in enumerate(df.columns.values):
+			sheet.write(0, col_num, value, format_white)
+		
+		#apply formatting to all the current sheet
+		sheet.set_column(0, max_col, 17, format_white)
+		i = 1
+		for index, row in df.iterrows():
+			#significant
+			if row[stringency_column] < stringency_threshold:
+				#up
+				if row["log2 FC"] > 0:
+					dge_format = format_up
+				#down
+				else:
+					dge_format = format_down
+			#not significant
+			else:
+				dge_format = format_white
+			sheet.set_row(i, None, dge_format)
+			i += 1
+			
+		writer.save()
+
+		return dcc.send_file(f"{tmpdir}/{file_name}")
+
+#go table download
+def go_table_download_operations(go_df, expression_dataset, contrast, filtered):
+
+	#dataset variables
+	if expression_dataset in ["human", "mouse"]:
+		process_column = "GO biological process"
+		feature_columm = "Genes"
+		diff_column = "DEGs"
+		up_or_down_column = "DGE"
+		go_df = go_df.rename(columns={"Process~name": process_column, "num_of_Genes": diff_column, "gene_group": "Dataset genes", "percentage%": "Enrichment"})
+		file_name = "GO_{}.xlsx".format(contrast)
+	else:
+		go_df["Genes"] = go_df["Genes"].str.replace(";", "; ")
+		go_df["Process~name"] = go_df["Process~name"].str.replace("_", " ")
+		process_column = "Functional category"
+		feature_columm = "Lipids"
+		up_or_down_column = "DLE"
+		diff_column = "LSEA DELs"
+		go_df = go_df.rename(columns={"DGE": up_or_down_column, "Process~name": process_column, "num_of_Genes": diff_column, "gene_group": "Dataset genes", "percentage%": "Enrichment", "Genes": feature_columm})
+		file_name = "LO_{}.xlsx".format(contrast)
+
+	#filtered file name
+	if filtered:
+		file_name = file_name.replace(".xlsx", "_filtered.xlsx")
+
+	#create excel
+	with tempfile.TemporaryDirectory() as tmpdir:
+		writer = pd.ExcelWriter(f"{tmpdir}/{file_name}")
+
+		#general format
+		(max_row, max_col) = go_df.shape
+		format_white = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top"})
+		format_up = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top", "bg_color": "#FFE6E6"})
+		format_down = writer.book.add_format({"font_name": "Arial", "font_size": 10, "text_wrap": True, "align": "top", "bg_color": "#E6F0FF"})
+		go_df.to_excel(writer, sheet_name="Metadata", index=False, freeze_panes=(1, 1))
+		sheet = writer.sheets["Metadata"]
+	
+		#write header with white formatting
+		for col_num, value in enumerate(go_df.columns.values):
+			sheet.write(0, col_num, value, format_white)
+		
+		#apply formatting to the columns
+		sheet.set_column(0, 0, 5, format_white)
+		sheet.set_column(1, 1, 60, format_white)
+		sheet.set_column(2, 2, 30, format_white)
+		sheet.set_column(3, max_col, 14, format_white)
+		
+		#color rows
+		i = 1
+		for index, row in go_df.iterrows():
+			#up
+			if row[up_or_down_column] == "up":
+				dge_format = format_up
+			#down
+			else:
+				dge_format = format_down
+			sheet.set_row(i, None, dge_format)
+			i += 1
+
+		#save tmp file
+		writer.save()
+
+		return dcc.send_file(f"{tmpdir}/{file_name}")
+
 #search genes in the textarea
 def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, already_selected_genes_species, add_gsea_switch, number_of_features):
 	#click on GO-plot
@@ -742,7 +881,7 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 				if expression_dataset == "lipid":
 					element = "lipids"
 				else:
-					element = expression_dataset.replace("_", " ").replace("viruses", "viral").replace("bacteria", "bacterial").replace("archaea", "archaeal").replace("eukaryota", "eukaryotic").replace("order", "orders").replace("family", "families").replace("category", "categories")
+					element = expression_dataset.replace("_", " ").replace("bacteria", "bacterial").replace("archaea", "archaeal").replace("eukaryota", "eukaryotic").replace("order", "orders").replace("family", "families").replace("category", "categories")
 				log_div = [html.Br(), "No " + element + " in the search area!"]
 			log_hidden_status = False
 		else:
