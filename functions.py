@@ -19,16 +19,17 @@ deconvolution_fig.update_xaxes(range=[0, 4])
 deconvolution_fig.update_yaxes(range=[0, 4])
 deconvolution_fig.add_shape(type="rect", x0=0, y0=0, x1=4, y1=4, line=dict(color="black"))
 
+#read config file
+config = open("config.yaml")
+config = yaml.load(config, Loader=yaml.FullLoader)
+
 #color palette
-colors = ["#E31A1C", "#FF7F00", "#DFFB71", "#33A02C", "#3B5DFF", "#6A3D9A", "#F46D43", "#FDAE61", "#E3DF00", "#B2DF8A", "#A6CEE3", "#CAB2D6", "#9E0142", "#FDB462", "#FFED6F", "#008941", "#1F78B4", "#5E4FA2", "#D53E4F", "#CCAA35", "#F4D749", "#B3DE69", "#3288BD", "#BC80BD", "#FB9A99", "#FED976", "#B15928", "#ABDDA4", "#8FB0FF", "#BB8BFF", "#CC002B", "#FB8072", "#CDA727", "#009131", "#0A09AE", "#5D00B9", "#772600", "#F7924C", "#FAD09F", "#006C31", "#5B93FF", "#5C006A", "#FF3944", "#BEAC3B", "#C48700", "#008531", "#4C43ED", "#BC29E1", "#AB2E00", "#E69A49", "#00B433", "#0000A6", "#6300A3", "#6B002C", "#CA834E", "#CCEBC5", "#9FA064", "#002DB5", "#9F94F0"]
+colors = config["palette"]
 #NA color
 na_color = "#E6E6E6"
 #gender colors
 gender_colors = {"Female": "#FA9FB5", "Male": "#9ECAE1"}
 
-#read config file
-config = open("config.yaml")
-config = yaml.load(config, Loader=yaml.FullLoader)
 
 #data
 if config["github"]["private_repo"]:

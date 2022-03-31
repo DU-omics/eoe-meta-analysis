@@ -2467,6 +2467,11 @@ def define_callbacks(app):
 				popover_status = False
 				hidden_status = False
 
+				#transparent figure
+				box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+				box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+				box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+
 			#more then 20 elements to plot
 			else:
 				#default values used when the figure is hidden
@@ -2478,9 +2483,5 @@ def define_callbacks(app):
 		config_multi_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
-
-		box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
-		box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		return box_fig, config_multi_boxplots, hidden_status, popover_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width
