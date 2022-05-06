@@ -6,7 +6,7 @@ github:
   private_repo: True
   username: "daneseomics"
   token: "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"
-  repo_name: "Danese-Omics-Web-Apps/eoe_tamma_data"
+  repo_name: "DU-omics/eoe-meta-analysis_data"
 credentials:
   use_credentials: True
   username: "ungaro"
