@@ -444,9 +444,14 @@ def define_callbacks(app):
 		
 		#define options and default value
 		options = []
+		possible_values = []
 		for contrast in contrasts:
 			options.append({"label": contrast.replace("-", " ").replace("_", " "), "value": contrast})
-		value = options[0]["value"]
+			possible_values.append(contrast)
+		if config["default_comparison"] != "First" and config["default_comparison"] in possible_values:
+			value = config["default_comparison"]
+		else:
+			value = options[0]["value"]
 
 		return options, value
 
@@ -984,7 +989,7 @@ def define_callbacks(app):
 			mds_title = "bacterial " + mds_dataset.split("_")[1]
 		elif "eukaryota" in mds_dataset:
 			mds_title = "eukaryota " + mds_dataset.split("_")[1]
-		elif "viruses" in mds_dataset:
+		elif "viral" in mds_dataset:
 			mds_title = "viral " + mds_dataset.split("_")[1]
 
 		#apply title
@@ -1091,7 +1096,7 @@ def define_callbacks(app):
 			mds_title = "bacterial " + mds_dataset.split("_")[1]
 		elif "eukaryota" in mds_dataset:
 			mds_title = "eukaryota " + mds_dataset.split("_")[1]
-		elif "viruses" in mds_dataset:
+		elif "viral" in mds_dataset:
 			mds_title = "viral " + mds_dataset.split("_")[1]
 
 		#apply title
