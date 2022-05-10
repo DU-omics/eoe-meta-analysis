@@ -3,7 +3,7 @@ from dash import html
 from dash import dcc
 import dash_bootstrap_components as dbc
 from dash import dash_table
-from functions import config, organism, expression_datasets_options, mds_dataset_options, metadata_options, discrete_metadata_options, continuous_metadata_options, metadata_table_data, metadata_table_columns, heatmap_annotation_options, deconvolution_fig
+from functions import config, organism, expression_datasets_options, mds_dataset_options, metadata_options, discrete_metadata_options, continuous_metadata_options, metadata_table_data, metadata_table_columns, heatmap_annotation_options
 
 #styles for tabs and selected tabs
 tab_style = {
@@ -15,7 +15,6 @@ tab_selected_style = {
     "padding": 6,
 	"border-top": "3px solid #597ea2"
 }
-
 #header type
 if config["header"]["logo"] == "NA":
 	header_content = html.Div(config["header"]["text"], style={"width": "100%", "font-size": 50, "text-align": "center"})
@@ -54,7 +53,7 @@ layout = html.Div([
 
 			#info comparison filter
 			html.Div([
-				html.Div(id="info_comparison_filter",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 14, "margin": "auto"}),
+				html.Div(id="info_comparison_filter",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
 				dbc.Tooltip(
 					children=[dcc.Markdown(
 						"""
@@ -131,7 +130,7 @@ layout = html.Div([
 
 				#info mds
 				html.Div([
-					html.Div(id="info_mds",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+					html.Div(id="info_mds",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
 					dbc.Tooltip(
 						children=[dcc.Markdown(
 							"""
@@ -232,7 +231,7 @@ layout = html.Div([
 				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 				#info boxplots
 				html.Div([
-					html.Div(id="info_boxplots",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+					html.Div(id="info_boxplots",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
 					dbc.Tooltip(
 						children=[dcc.Markdown(
 							"""
@@ -327,13 +326,13 @@ layout = html.Div([
 		html.Br(),
 		html.Br(),
 
-		#MA-plot + go plot
+		#MA-plot + go plot + deconvolution
 		html.Div([
-			#MA-plot + deconvolution
+			#MA-plot + go plot
 			html.Div([
 				#info MA-plot
 				html.Div([
-					html.Div(id="info_ma_plot",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+					html.Div(id="info_ma_plot",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
 					dbc.Tooltip(
 						children=[dcc.Markdown(
 							"""
@@ -358,39 +357,13 @@ layout = html.Div([
 						size = "md",
 						color = "lightgray"
 					)
-				], style={"width": "100%", "display": "inline-block"}),
+				], style={"width": "52%", "display": "inline-block"}),
 
-				#info deconvolution
-				html.Div([
-					html.Div(id="info_deconvolution",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
-					dbc.Tooltip(
-						children=[dcc.Markdown(
-							"""
-							Coming soon...
-							""")
-						],
-						target="info_deconvolution",
-						style={"font-family": "arial", "font-size": 14}
-					),
-				], style={"width": "100%", "display": "inline-block"}),
-				#deconvolution plot
-				html.Div([
-					dbc.Spinner(
-						id = "loading_deconvolution",
-						children = dcc.Graph(id="deconvolution_graph", figure = deconvolution_fig),
-						size = "md",
-						color = "lightgray"
-					)
-				], style={"width": "100%", "display": "inline-block"}),
-			], style={"width": "32%", "display": "inline-block"}),
-
-			#go plot
-			html.Div([
-				#info and search bar
+				#info and search bar go plot
 				html.Div([
 					#info
 					html.Div([
-						html.Div(id="info_go_plot",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+						html.Div(id="info_go_plot",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
 						dbc.Tooltip(
 							children=[dcc.Markdown(
 								"""
@@ -432,7 +405,7 @@ layout = html.Div([
 					], style={"width": "35%", "display": "inline-block", "vertical-align": "middle"})
 				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "text-align": "right"}),
 				#plot
-				html.Div([
+				html.Div(id="go_plot_div", children=[
 					dbc.Spinner(
 						id = "loading_go_plot",
 						children = [html.Br(), dcc.Graph(id="go_plot_graph")],
@@ -440,10 +413,68 @@ layout = html.Div([
 						color = "lightgray", 
 					),
 				], style={"width": "100%", "display": "inline-block"})
-			], style={"width": "68%", "display": "inline-block", "vertical-align": "top"})
-		], style = {"width": "80%", "height": 800, "display": "inline-block"}),
+				
+			], style={"width": "50%", "display": "inline-block", "font-size": "12px"}),
+
+			#deconvolution
+			html.Div([
+				#info deconvolution
+				html.Div([
+					html.Div(id="info_deconvolution",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+					dbc.Tooltip(
+						children=[dcc.Markdown(
+							"""
+							Coming soon...
+							""")
+						],
+						target="info_deconvolution",
+						style={"font-family": "arial", "font-size": 14}
+					),
+				], style={"width": "100%", "display": "inline-block"}),
+				
+				#split_by dropdown
+				html.Label(["Split by",
+					dcc.Dropdown(
+					id="split_by_1_deconvolution_dropdown",
+					clearable=False,
+					options=discrete_metadata_options,
+					value="condition"
+				)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+				#second split_by dropdown
+				html.Label(["Split also by",
+					dcc.Dropdown(
+					id="split_by_2_deconvolution_dropdown",
+					clearable=False,
+					options=discrete_metadata_options,
+					value="condition"
+				)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+				#plot per row dropdown
+				html.Label(["Plots per row",
+					dcc.Dropdown(
+					id="plots_per_row_deconvolution_dropdown",
+					clearable=False,
+					options=[{"label": "1", "value": 1}, {"label": "2", "value": 2}, {"label": "3", "value": 3}, {"label": "4", "value": 4}, {"label": "5", "value": 5}],
+					value=4
+				)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+				#deconvolution plot
+				html.Div([
+					dbc.Spinner(
+						id = "loading_deconvolution",
+						children = dcc.Graph(id="deconvolution_graph"),
+						size = "md",
+						color = "lightgray"
+					)
+				], style={"width": "100%", "display": "inline-block"})
+			], style={"width": "50%", "display": "inline-block", "vertical-align": "top", "font-size": "12px"})
+		], style = {"width": "100%", "display": "inline-block"}),
 
 		#tabs
+		html.Br(),
+		html.Br(),
+
 		html.Div(children=[
 			dcc.Tabs(id="site_tabs", value="metadata_tab", children=[
 				#metadata tab
@@ -485,7 +516,7 @@ layout = html.Div([
 									"font-family": "arial",
 									"text-align": "left"
 								},
-								style_data_conditional=[                
+								style_data_conditional=[
 									{
 										"if": {"state": "selected"},
 										"backgroundColor": "rgba(44, 62, 80, 0.2)",
@@ -522,7 +553,7 @@ layout = html.Div([
 										
 										#info
 										html.Div([
-											html.Div(id="info_heatmap",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+											html.Div(id="info_heatmap",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
 											dbc.Tooltip(
 												children=[dcc.Markdown(
 													"""
@@ -690,7 +721,7 @@ layout = html.Div([
 										
 										#info
 										html.Div([
-											html.Div(id="info_multiboxplots",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+											html.Div(id="info_multiboxplots",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
 											dbc.Tooltip(
 												children=[dcc.Markdown(
 													"""
@@ -891,7 +922,7 @@ layout = html.Div([
 
 							#info dge table
 							html.Div([
-								html.Div(id="info_dge_table",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+								html.Div(id="info_dge_table",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
 								dbc.Tooltip(
 									children=[dcc.Markdown(
 										"""
@@ -1033,7 +1064,7 @@ layout = html.Div([
 
 							#info go table
 							html.Div([
-								html.Div(id="info_go_table",  children="i", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+								html.Div(id="info_go_table",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
 								dbc.Tooltip(
 									children=[dcc.Markdown(
 										"""

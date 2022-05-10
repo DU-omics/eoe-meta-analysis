@@ -7,8 +7,10 @@ dash_daq
 plotly
 dash_extensions
 openpyxl
+xlsxwriter
 dash_bootstrap_components
 PyGithub
 PyYAML
 scipy
 sklearn
+Werkzeug==2.0.3

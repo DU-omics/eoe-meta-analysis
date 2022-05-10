@@ -31,6 +31,6 @@ if __name__ == "__main__":
 	#run app
 	import os.path
 	if os.path.isfile(".vscode/settings.json"):
-		app.run_server(debug=True, host = "10.39.173.120", port = "8052")
+		app.run_server(debug=True, host = "172.21.17.26", port = "8052")
 	else:
 		app.run_server()

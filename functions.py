@@ -10,14 +10,7 @@ from dash.dash_table.Format import Format, Scheme
 from dash.exceptions import PreventUpdate
 from dash import html, dcc
 import tempfile
-
-#tmp deconvolution fig
-deconvolution_fig = go.Figure()
-deconvolution_fig.add_annotation(text="Deconvolution coming soon.", showarrow=False)
-deconvolution_fig.update_layout(xaxis_fixedrange=True, yaxis_fixedrange=True, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_linecolor="rgba(0,0,0,0)", yaxis_linecolor="rgba(0,0,0,0)", xaxis_showticklabels=False, yaxis_showticklabels=False, margin=dict(l=0, t=0, r=0, b=0), height=300)
-deconvolution_fig.update_xaxes(range=[0, 4])
-deconvolution_fig.update_yaxes(range=[0, 4])
-deconvolution_fig.add_shape(type="rect", x0=0, y0=0, x1=4, y1=4, line=dict(color="black"))
+import gzip
 
 #read config file
 config = open("config.yaml")
@@ -54,6 +47,9 @@ repo = session.get_repo(github_repo_name, lazy=False)
 def download_from_github(file_url):
 	file_url = github_raw_link + file_url
 	download = github_session.get(file_url).content
+	#decompress gzip data
+	if file_url.split(".")[-1] == "gz":
+		download = gzip.decompress(download)
 	#read the downloaded content and make a pandas dataframe
 	df_downloaded_data = StringIO(download.decode('utf-8'))
 
@@ -162,16 +158,10 @@ for dir in subdirs:
 		else:
 			kingdom = dir.split("_")[0]
 			lineage = dir.split("_")[1]
-			if lineage == "genes":
-				expression_datasets_options.append({"label": kingdom.capitalize() + " " + lineage, "value": dir})
-			else:
-				expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+			expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
 			#check if there is mds for each metatranscriptomics
 			if "mds" in non_host_content:
-				if lineage == "genes":
-					mds_dataset_options.append({"label": kingdom.capitalize() + " " + lineage, "value": dir})
-				else:
-					mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+				mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
 
 #dbc switch as boolean switch
 def boolean_switch(switch_value):
@@ -192,6 +182,68 @@ def get_color(metadata_value, variable):
 		color = color_mapping[metadata_value][variable]
 	
 	return color
+
+#feature dropdown dataset variables
+def get_list_label_placeholder_feature_dropdown(expression_dataset):
+	if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+		features = "data/" + expression_dataset + "/counts/genes_list.tsv"
+		if expression_dataset in ["human", "mouse"]:
+			placeholder = "Type here to search host genes"
+			label = "Host gene"
+		else:
+			placeholder = "Type here to search {}".format(expression_dataset.replace("_", " "))
+			label = expression_dataset.capitalize().replace("_", " ")
+	else:
+		if "lipid" in expression_dataset:
+			features = "data/" + expression_dataset + "/counts/lipid_list.tsv"
+			label = expression_dataset.capitalize().replace("_", " ")
+			if expression_dataset == "lipid":
+				placeholder = "Type here to search lipids"
+			else:
+				placeholder = "Type here to search lipid categories"
+		else:
+			features = "data/" + expression_dataset + "/counts/feature_list.tsv"
+			placeholder = "Type here to search {}".format(expression_dataset.replace("_", " ").replace("order", "orders").replace("family", "families"))
+			label = expression_dataset.capitalize().replace("_", " by ")
+
+	features = download_from_github(features)
+	features = pd.read_csv(features, sep = "\t", header=None, names=["feature"])
+	features = features["feature"].tolist()
+	
+	return features, label, placeholder
+
+#get options based on user search features dropdown
+def get_options_feature_dropdown(expression_dataset, features, search_value, current_value, dropdown_type):
+	options = []
+	if not search_value is None:
+		for feature in features:
+			#get feature label
+			if expression_dataset in ["human", "mouse"]:
+				feature_label = feature.replace("€", "/")
+				search_value = search_value.replace("€", "/")
+			elif "genes" in expression_dataset:
+				feature_gene = feature.split("@")[0]
+				feature_beast = feature.split("@")[1]
+				feature_beast = feature_beast.replace("_", " ")
+				feature_label = feature_gene + " - " + feature_beast
+				if "@" in search_value:
+					search_gene = search_value.split("@")[0]
+					search_beast = search_value.split("@")[1]
+					search_beast = search_beast.replace("_", " ")
+					search_value = search_gene + " - " + search_beast
+			else:
+				feature_label = feature.replace("_", " ").replace("[", "").replace("]", "")
+				search_value = search_value.replace("_", " ").replace("[", "").replace("]", "")
+
+			#single and multidropdown
+			if dropdown_type == "single":
+				if search_value in feature_label:
+					options.append({"label": feature_label, "value": feature})
+			elif dropdown_type == "multi":
+				if search_value in feature_label or feature in (current_value or []):
+					options.append({"label": feature_label, "value": feature})
+		
+	return options
 
 #function for zoom synchronization mds
 def synchronize_zoom(mds_to_update, reference_mds):
@@ -536,18 +588,33 @@ def dge_table_operations(table, dataset, stringency, target_prioritization):
 			#remove external resources where gene is not defined
 			table.loc[table["Gene"] == "", "External resources"] = external_resources_geneid
 		else:
-			base_mean_label = "Average abundance"
+			#base mean label
+			if "genes" in dataset:
+				base_mean_label = "Average expression"	
+			else:
+				base_mean_label = "Average abundance"
+			#all other variables
+			gene_column_name = dataset.replace("_", " ").capitalize()
 			if "lipid" in dataset:
-				gene_column_name = dataset.replace("_", " ").capitalize()
 				table = table.rename(columns={"Gene": gene_column_name, "Geneid": "Gene ID"})
 				table["Gene ID"] = table["Gene ID"].fillna("")
 				table["External resources"] = "[![LIPID MAPS](assets/icon_lipid_maps.png 'LIPID MAPS')](https://www.lipidmaps.org/databases/lmsd/" + table["Gene ID"] + ")"
 				table.loc[table["Gene ID"] == "", "External resources"] = ""
-			else:
-				gene_column_name = dataset.split("_")[1].capitalize()
+			elif "genes" in dataset:
 				table = table.rename(columns={"Gene": gene_column_name})
+				clean_gen_column_name = []
+				for x in table[gene_column_name]:
+					gene_x = x.split("@")[0]
+					beast_x = x.split("@")[1]
+					beast_x = beast_x.replace("_", " ")
+					x = gene_x + " - " + beast_x
+					clean_gen_column_name.append(x)
+				table[gene_column_name] = clean_gen_column_name.copy()
+				table["External resources"] = ["[![NCBI](assets/icon_ncbi.png 'NCBI')](https://www.ncbi.nlm.nih.gov/search/all/?term=" + x.replace(" - ", " ").replace(" ", "+") + ")" for x in table[gene_column_name]]
+			else:
+				table = table.rename(columns={"Gene": gene_column_name})
+				table[gene_column_name] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table[gene_column_name]]
 				table["External resources"] = ["[![NCBI](assets/icon_ncbi.png 'NCBI')](https://www.ncbi.nlm.nih.gov/genome/?term=" + x.replace(" ", "+") + ")" for x in table[gene_column_name]]
-			table[gene_column_name] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table[gene_column_name]]
 
 		#data carpentry
 		table["id"] = table[gene_column_name]
@@ -619,10 +686,11 @@ def dge_table_operations(table, dataset, stringency, target_prioritization):
 def dge_table_download_operations(df, dataset, contrast, stringency, filtered):
 	
 	#define dataset specific variables
-	if dataset in ["human", "mouse"]:
+	if dataset in ["human", "mouse"] or "genes" in dataset:
 		base_mean_label = "Average expression"
 		gene_id = "Gene ID"
 		file_name = "DGE_{}_{}.xlsx".format(dataset, contrast)
+		gene_column_name = "Gene"
 	else:
 		base_mean_label = "Average abundance"
 		if "lipid" in dataset:
@@ -632,7 +700,7 @@ def dge_table_download_operations(df, dataset, contrast, stringency, filtered):
 		else:
 			gene_column_name = dataset.split("_")[1].capitalize()
 			gene_id = "Meta ID"
-			file_name = "DGE_{}_{}.xlsx".format(dataset, contrast)
+			file_name = "DA_{}_{}.xlsx".format(dataset, contrast)
 		df = df.rename(columns={"Gene": gene_column_name})
 
 	#filtered file name
@@ -757,7 +825,7 @@ def go_table_download_operations(go_df, expression_dataset, contrast, filtered):
 		return dcc.send_file(f"{tmpdir}/{file_name}")
 
 #search genes in the textarea
-def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, already_selected_genes_species, add_gsea_switch, number_of_features):
+def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, number_of_features):
 	#click on GO-plot
 	if trigger_id == "go_plot_graph.clickData":
 		if isinstance(go_plot_click["points"][0]["y"], str):
@@ -766,11 +834,14 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			log_hidden_status = True
 
 			#do not add genes to metatranscriptomics elements!
-			if expression_dataset not in ["human", "mouse"]:
+			if expression_dataset not in ["human", "mouse", "lipid"]:
 				raise PreventUpdate
 
 			#read go table
-			go_df = download_from_github("data/{}/".format(expression_dataset) + stringency_info + "/" + contrast + ".merged_go.tsv")
+			if expression_dataset in ["human", "mouse"]:
+				go_df = download_from_github("data/{}/".format(expression_dataset) + stringency_info + "/" + contrast + ".merged_go.tsv")
+			else:
+				go_df = download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
 			go_df = pd.read_csv(go_df, sep = "\t")
 			go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 			#concatenate gsea results if the switch is true
@@ -802,15 +873,16 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 				genes = genes[0] + " " + genes[1]
 			else:
 				genes = genes[0]
-			#remove last ;
-			genes = genes[:-1]
+			#remove last ; if present
+			if genes[-1] == ";":
+				genes = genes[:-1]
 			#add genes to text area
 			if len(text) > 0:
 				text += "; "
 			text += genes
 			#create a list of genes and add them to the multidropdown
 			genes = genes.split("; ")
-			already_selected_genes_species = already_selected_genes_species + genes
+			selected_features = selected_features + genes
 		
 		#click on the enrichment legend should not trigger anything
 		else:
@@ -835,25 +907,49 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 		diffexp_df.loc[(diffexp_df[pvalue_type] <= float(pvalue_value)) & (diffexp_df["log2FoldChange"] > 0), "DEG"] = "Up"
 		diffexp_df.loc[(diffexp_df[pvalue_type] <= float(pvalue_value)) & (diffexp_df["log2FoldChange"] < 0), "DEG"] = "Down"
 
-		#get top up 15 DEGs by log2FC
-		up_genes = diffexp_df[diffexp_df["DEG"] == "Up"]
-		#sort by log2FC
-		up_genes = up_genes.sort_values(by=["log2FoldChange"], ascending=False)
-		#take top n
-		up_genes = up_genes.head(number_of_features)
-		#get genes
-		up_genes = up_genes["Gene"].tolist()
-		#get top down 15 DEGs by log2FC
-		down_genes = diffexp_df[diffexp_df["DEG"] == "Down"]
-		#sort by log2FC
-		down_genes = down_genes.sort_values(by=["log2FoldChange"])
-		#take top n
-		down_genes = down_genes.head(number_of_features)
-		#get genes
-		down_genes = down_genes["Gene"].tolist()
+		#function to select top n genes
+		def get_top_n(list_type, number_of_features, diffexp_df):
+			#get top up 15 DEGs by log2FC
+			genes = diffexp_df[diffexp_df["DEG"] == list_type]
+			#sort by log2FC
+			genes = genes.sort_values(by=["log2FoldChange"], ascending=False)
+			#take top n
+			genes = genes.head(number_of_features)
+			#get genes
+			genes = genes["Gene"].tolist()
+
+			return genes
+
+		#apply function
+		up_genes = get_top_n("Up", number_of_features, diffexp_df)
+		down_genes = get_top_n("Down", number_of_features, diffexp_df)
+
+		#add genes to dropdown
+		selected_features = up_genes + down_genes
+		selected_features = [gene_species.replace(" ", "_").replace("/", "€") for gene_species in selected_features]
+
+		#clean feature names
+		def clean_feature_names_for_text_area(gene_list):
+			clean_list = []
+			for gene in gene_list:
+				if expression_dataset not in ["human", "mouse", "lipid"]:
+					if "genes" in expression_dataset:
+						feature_gene = gene.split("@")[0]
+						feature_beast = gene.split("@")[1]
+						feature_beast = feature_beast.replace("_", " ")
+						gene = feature_gene + " - " + feature_beast
+					else:
+						gene = gene.replace("_", " ").replace("[", "").replace("]", "")
+				clean_list.append(gene)
+			
+			return clean_list
+		
+		#apply function
+		up_genes = clean_feature_names_for_text_area(up_genes)
+		down_genes = clean_feature_names_for_text_area(down_genes)
 
 		#add genes in text area
-		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+		if expression_dataset in ["human", "mouse", "lipid"]:
 			sep = "; "
 		else:
 			sep = "\n"
@@ -867,16 +963,12 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			text = ""
 		else:
 			text = up_genes_string + sep + down_genes_string
-
-		#add genes to dropdown
-		already_selected_genes_species = up_genes + down_genes
-		already_selected_genes_species = [gene_species.replace(" ", "_").replace("/", "€") for gene_species in already_selected_genes_species]
 	
 	#button click by the user
 	else:
 		#text is none, do almost anything
 		if text is None or text == "":
-			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+			if expression_dataset in ["human", "mouse", "lipid"] or "genes" in expression_dataset:
 				log_div = [html.Br(), "No genes in the search area!"]
 			else:
 				if expression_dataset == "lipid":
@@ -894,53 +986,88 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 					list = "data/" + expression_dataset + "/counts/lipid_list.tsv"
 				else:
 					list = "data/" + expression_dataset + "/counts/feature_list.tsv"
-			all_genes = download_from_github(list)
-			all_genes = pd.read_csv(all_genes, sep = "\t", header=None, names=["genes"])
-			all_genes = all_genes["genes"].replace("€", "/").dropna().tolist()
+			all_features = download_from_github(list)
+			all_features = pd.read_csv(all_features, sep = "\t", header=None, names=["genes"])
+			all_features = all_features["genes"].replace("€", "/").dropna().tolist()
 
 			#upper for case insensitive search
-			if expression_dataset not in ["human", "mouse"] or "genes" not in expression_dataset:
+			if expression_dataset not in ["human", "mouse", "lipid"]:
 				original_names = {}
-				for gene in all_genes:
-					original_names[gene.upper()] = gene
-				all_genes = [x.upper() for x in all_genes]
-				already_selected_genes_species = [x.upper() for x in already_selected_genes_species]
+				for feature in all_features:
+					#setup metatranscriptomics genes
+					if "genes" in expression_dataset:
+						beast_gene = feature.split("@")[0]
+						beast_feature = feature.split("@")[1]
+						beast_feature = beast_feature.replace("_", " ")
+						meta_gene = beast_gene + " - " + beast_feature.upper()
+						original_names[meta_gene] = feature
+					else:
+						original_names[feature.upper().replace("[", "").replace("]", "")] = feature
+				if "genes" in expression_dataset:
+					#clean all_features
+					clean_all_features = []
+					for x in all_features:
+						beast_gene = x.split("@")[0]
+						beast_feature = x.split("@")[1]
+						beast_feature = beast_feature.replace("_", " ")
+						meta_gene = beast_gene + " - " + beast_feature
+						clean_all_features.append(meta_gene.upper())
+					all_features = clean_all_features.copy()
+					#clean selected_features
+					clean_selected_features = []
+					for x in selected_features:
+						beast_gene = x.split("@")[0]
+						beast_feature = x.split("@")[1]
+						beast_feature = beast_feature.replace("_", " ")
+						meta_gene = beast_gene + " - " + beast_feature
+						clean_all_features.append(meta_gene.upper())
+					selected_features = clean_selected_features.copy()
+				else:
+					all_features = [x.upper().replace("[", "").replace("]", "") for x in all_features]
+					selected_features = [x.upper().replace("[", "").replace("]", "") for x in selected_features]
 			
 			#search genes in text
-			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset: 
-				genes_species_in_text_area = re.split(r"[\s,;]+", text)
+			if expression_dataset in ["human", "mouse", "lipid"]: 
+				features_in_text_area = re.split(r"[\s,;]+", text)
 			else:
-				genes_species_in_text_area = re.split(r"[\n]+", text)
+				features_in_text_area = re.split(r";?[\n]+", text)
 
 			#remove last gene if empty
-			if genes_species_in_text_area[-1] == "":
-				genes_species_in_text_area = genes_species_in_text_area[0:-1]
+			if features_in_text_area[-1] == "":
+				features_in_text_area = features_in_text_area[0:-1]
 
 			#parse gene
-			genes_species_not_found = []
-			for gene in genes_species_in_text_area:
-				if expression_dataset != "mouse":
-					gene = gene.upper().replace(" ", "_")
+			features_not_found = []
+			for feature in features_in_text_area:
+				#save what the user wrote to use it in case is not found
+				user_feature = feature
+				if expression_dataset == "mouse":
+					feature = feature.capitalize().replace(" ", "_")
+				elif "genes" in expression_dataset:
+					feature = feature.upper()
 				else:
-					gene = gene.capitalize().replace(" ", "_")
+					feature = feature.upper().replace(" ", "_")
 				#gene existing but not in selected: add it to selected
-				if gene in all_genes:
-					if already_selected_genes_species is None:
-						already_selected_genes_species = [gene]
-					elif gene not in already_selected_genes_species:
-						already_selected_genes_species.append(gene)
+				if feature in all_features:
+					if selected_features is None:
+						selected_features = [feature]
+					elif feature not in selected_features:
+						selected_features.append(feature)
 				#gene not existing
-				elif gene not in all_genes:
-					if gene not in genes_species_not_found:
-						genes_species_not_found.append(gene)
+				elif feature not in all_features:
+					if feature not in features_not_found:
+						features_not_found.append(user_feature)
 
-			if expression_dataset not in ["human", "mouse"]  or "genes" not in expression_dataset:
-				already_selected_genes_species = [original_names[gene.upper()] for gene in already_selected_genes_species]
-				genes_species_not_found = [gene.lower().capitalize() for gene in genes_species_not_found]
+			#get the original name to make it match with the dropdown option
+			if expression_dataset not in ["human", "mouse", "lipid"]:
+				if "genes" in expression_dataset:
+					selected_features = [original_names[feature] for feature in selected_features]
+				else:
+					selected_features = [original_names[feature.upper().replace("[", "").replace("]", "")] for feature in selected_features]
 
 			#log for genes not found
-			if len(genes_species_not_found) > 0:
-				log_div_string = ", ".join(genes_species_not_found)
+			if len(features_not_found) > 0:
+				log_div_string = ", ".join(features_not_found)
 				log_div = [html.Br(), "Can not find:", html.Br(), log_div_string]
 				log_hidden_status = False
 			#hide div if all genes has been found
@@ -948,4 +1075,4 @@ def serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 				log_div = []
 				log_hidden_status = True
 
-	return already_selected_genes_species, log_div, log_hidden_status, text
+	return selected_features, log_div, log_hidden_status, text

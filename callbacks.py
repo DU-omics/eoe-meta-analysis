@@ -14,7 +14,7 @@ from sklearn.preprocessing import scale
 import tempfile
 #import modules
 import functions
-from functions import config, label_to_value, metadata_table
+from functions import config, label_to_value, metadata_table, colors
 
 def define_callbacks(app):
 
@@ -69,7 +69,7 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value")
 	)
 	def get_placeholder_heatmap_text_area(expression_dataset):
-		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+		if expression_dataset in ["human", "mouse", "lipid"] or "genes" in expression_dataset:
 			placeholder = "Paste list (plot allowed for max 10 features)"
 		else:
 			placeholder = "Paste list (plot allowed for max 10 features, one per line)"
@@ -95,14 +95,14 @@ def define_callbacks(app):
 		State("update_heatmap_plot_button", "n_clicks"),
 		State("add_gsea_switch", "value")
 	)
-	def serach_genes_in_text_area_heatmap(n_clicks_search, go_plot_click, contrast, stringency_info, text, expression_dataset, already_selected_genes_species, log_hidden_status, log_div, n_clicks_update_plot, add_gsea_switch):
+	def serach_genes_in_text_area_heatmap(n_clicks_search, go_plot_click, contrast, stringency_info, text, expression_dataset, selected_features, log_hidden_status, log_div, n_clicks_update_plot, add_gsea_switch):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		already_selected_genes_species, log_div, log_hidden_status, text = functions.serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, already_selected_genes_species, add_gsea_switch, 15)
+		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15)
 
-		return already_selected_genes_species, log_div, log_hidden_status, text, n_clicks_update_plot
+		return selected_features, log_div, log_hidden_status, text, n_clicks_update_plot
 
 	#search genes for multiboxplots
 	@app.callback(
@@ -122,14 +122,14 @@ def define_callbacks(app):
 		State("add_gsea_switch", "value"),
 		State("update_multiboxplot_plot_button", "n_clicks")
 	)
-	def serach_genes_in_text_area_multiboxplots(n_clicks_search, go_plot_click, contrast, stringency_info, expression_dataset, text, already_selected_genes_species, log_hidden_status, add_gsea_switch, update_multiboxplot_plot_button):
+	def serach_genes_in_text_area_multiboxplots(n_clicks_search, go_plot_click, contrast, stringency_info, expression_dataset, text, selected_features, log_hidden_status, add_gsea_switch, update_multiboxplot_plot_button):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		already_selected_genes_species, log_div, log_hidden_status, text = functions.serach_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, already_selected_genes_species, add_gsea_switch, 10)
+		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15)
 		
-		return already_selected_genes_species, log_div, log_hidden_status, text, update_multiboxplot_plot_button
+		return selected_features, log_div, log_hidden_status, text, update_multiboxplot_plot_button
 
 	#target prioritization switch
 	@app.callback(
@@ -172,59 +172,191 @@ def define_callbacks(app):
 
 		return options, value
 
-	#get features dropdown
+	#change label and setup feature dropdown
 	@app.callback(
-		Output("feature_dropdown", "value"),
-		Output("feature_dropdown", "options"),
 		Output("feature_label", "children"),
-		Output("feature_heatmap_dropdown", "options"),
-		Output("feature_multi_boxplots_dropdown", "options"),
-		Output("feature_multi_boxplots_dropdown", "placeholder"),
-		Output("multi_gene_dge_table_selection_dropdown", "options"),
-		Output("multi_gene_dge_table_selection_dropdown", "placeholder"),
+		Output("multi_gene_dge_table_selection_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("ma_plot_graph", "clickData"),
-		Input("dge_table", "active_cell"),
-		Input("dge_table_filtered", "active_cell"),
-		State("feature_dropdown", "options")
+		State("feature_dropdown", "value")
 	)
-	def get_features(expression_dataset, selected_point_ma_plot, active_cell_full, active_cell_filtered, current_dropdown_options):
+	def setup_new_dataset_features(expression_dataset, current_value):
+		#for web app startup, get default value
+		if expression_dataset not in ["human", "mouse"]:
+			if "lipid" in expression_dataset:
+				if expression_dataset == "lipid":
+					search_value = "10-HDoHE"
+				else:
+					search_value = "DHA"
+			else:
+				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+					search_value = "data/" + expression_dataset + "/counts/genes_list.tsv"
+				else:
+					if "lipid" in expression_dataset:
+						search_value = "data/" + expression_dataset + "/counts/lipid_list.tsv"
+					else:
+						search_value = "data/" + expression_dataset + "/counts/feature_list.tsv"
+				search_value = functions.download_from_github(search_value)
+				search_value = search_value.readline()
+				search_value = search_value.rstrip()
+		else:
+			if expression_dataset == "human":
+				search_value = "GAPDH"
+			elif expression_dataset == "mouse":
+				search_value = "Gapdh"
+
+		#get feature list and label
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+
+		#populate options based on user search
+		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
+
+		#populate children
+		children = [
+			label, 	
+			dcc.Dropdown(
+				id="feature_dropdown",
+				clearable=False,
+				value=search_value,
+				options=options
+			)
+		]
+
+		return children, None
+
+	#feature dropdown options
+	@app.callback(
+		Output("feature_dropdown", "options"),
+		Input("feature_dropdown", "search_value"),
+		Input("feature_dropdown", "value"),
+		State("feature_dataset_dropdown", "value")
+	)
+	def update_options(search_value, current_value, expression_dataset):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		#dataset specific variables
-		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-			list = "data/" + expression_dataset + "/counts/genes_list.tsv"
-			if expression_dataset in ["human", "mouse"]:
-				placeholder = "Type here to search host genes"
-				label = "Host gene"
-			else:
-				placeholder = "Type here to search {}".format(expression_dataset.replace("_", " "))
-				label = "{}".format(expression_dataset.replace("genes", "gene"))
-		else:
-			label = expression_dataset.replace("_", " ")
-			if "lipid" in expression_dataset:
-				list = "data/" + expression_dataset + "/counts/lipid_list.tsv"
-				if expression_dataset == "lipid":
-					placeholder = "Type here to search lipids"
-				else:
-					placeholder = "Type here to search lipid categories"
-			else:
-				list = "data/" + expression_dataset + "/counts/feature_list.tsv"
-				placeholder = "Type here to search {}".format(expression_dataset.replace("_", " ").replace("order", "orders").replace("family", "families"))
-				label = expression_dataset.capitalize().replace("_", " by ")
+		#don't change the options when the search value is empty
+		if not search_value and trigger_id == "feature_dropdown.search_value":
+			raise PreventUpdate
 
-		#if you click a gene, update only the dropdown value and keep the rest as it is
+		#mock search when updating automatically
+		if trigger_id == "feature_dropdown.value":
+			search_value = current_value
+
+		#get feature list and label
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+
+		#populate options based on user search
+		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
+
+		return options
+
+	#features heatmap dropdown options
+	@app.callback(
+		Output("feature_heatmap_dropdown", "options"),
+		Output("feature_heatmap_dropdown", "placeholder"),
+		Input("feature_heatmap_dropdown", "search_value"),
+		Input("feature_heatmap_dropdown", "value"),
+		State("feature_dataset_dropdown", "value")
+	)
+	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		
+		#don't change the options when the search value is empty
+		if not search_value and trigger_id == "feature_heatmap_dropdown.search_value":
+			raise PreventUpdate
+		
+		#mock search when updating automatically
+		if trigger_id == "feature_heatmap_dropdown.value":
+			search_value = "ç"
+
+		#get feature list and label
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+
+		#populate options based on user search
+		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
+
+		return options, placeholder
+
+	#features multi-boxplots dropdown options
+	@app.callback(
+		Output("feature_multi_boxplots_dropdown", "options"),
+		Output("feature_multi_boxplots_dropdown", "placeholder"),
+		Input("feature_multi_boxplots_dropdown", "search_value"),
+		Input("feature_multi_boxplots_dropdown", "value"),
+		State("feature_dataset_dropdown", "value")
+	)
+	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		
+		#don't change the options when the search value is empty
+		if not search_value and trigger_id == "feature_multi_boxplots_dropdown.search_value":
+			raise PreventUpdate
+		
+		#mock search when updating automatically
+		if trigger_id == "feature_multi_boxplots_dropdown.value":
+			search_value = "ç"
+
+		#get feature list and label
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+
+		#populate options based on user search
+		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
+
+		return options, placeholder
+
+	#features dge table dropdown options
+	@app.callback(
+		Output("multi_gene_dge_table_selection_dropdown", "options"),
+		Output("multi_gene_dge_table_selection_dropdown", "placeholder"),
+		Input("multi_gene_dge_table_selection_dropdown", "search_value"),
+		Input("multi_gene_dge_table_selection_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value")
+	)
+	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		
+		#don't change the options when the search value is empty
+		if not search_value and trigger_id == "multi_gene_dge_table_selection_dropdown.search_value":
+			raise PreventUpdate
+		
+		#get feature list and label
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+
+		#populate options based on user search
+		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
+
+		return options, placeholder
+
+	#set featuere value with automatic interactions
+	@app.callback(
+		Output("feature_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value"),
+		Input("ma_plot_graph", "clickData"),
+		Input("dge_table", "active_cell"),
+		Input("dge_table_filtered", "active_cell")
+	)
+	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, active_cell_full, active_cell_filtered):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		#if you click a feature on the ma-plot, set up the search value with that value
 		if trigger_id == "ma_plot_graph.clickData":
 			selected_element = selected_point_ma_plot["points"][0]["customdata"][0].replace(" ", "_")
 			if selected_element == "NA":
 				raise PreventUpdate
 			else:
+				if "genes" in expression_dataset:
+					selected_element = selected_element.replace("_-_", "@")
 				value = selected_element
-				options = current_dropdown_options
-
-		#active cell in dge_table
+		#active cell in dge_table will set up that gene as search value
 		elif trigger_id in ["dge_table.active_cell", "dge_table_filtered.active_cell"]:
 			#find out which active table to use
 			if trigger_id == "dge_table.active_cell":
@@ -235,56 +367,37 @@ def define_callbacks(app):
 				raise PreventUpdate
 			else:
 				#prevent update for click on wrong column or empty gene
-				if active_cell["column_id"] != "Gene" or active_cell["column_id"] == "Gene" and active_cell["row_id"] == "":
+				if active_cell["column_id"] not in ["Gene", "Family", "Order", "Species"] or active_cell["column_id"] == "Gene" and active_cell["row_id"] == "":
 					raise PreventUpdate
 				#return values
 				else:
 					value = active_cell["row_id"]
-					options = current_dropdown_options
-		else:
-			#load and open input file			
-			list = functions.download_from_github(list)
-			list = pd.read_csv(list, sep = "\t", header=None, names=["gene_species"])
-			list = list["gene_species"].tolist()
-			#parse file and get options and value
-			options = []
-			for feature in list:
-				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-					options.append({"label": feature.replace("€", "/"), "value": feature})
-				else:
-					options.append({"label": feature.replace("_", " ").replace("[", "").replace("]", ""), "value": feature})
+		#change of dataset, setup search value with defaults
+		elif trigger_id in ["feature_dataset_dropdown.value", "."]:
 			if expression_dataset not in ["human", "mouse"]:
 				if "lipid" in expression_dataset:
-					label = expression_dataset.capitalize().replace("_", " ")
 					if expression_dataset == "lipid":
 						value = "10-HDoHE"
 					else:
 						value = "DHA"
 				else:
-					if "genes" in expression_dataset:
-						label = expression_dataset.capitalize().replace("_", " ")
+					if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+						value = "data/" + expression_dataset + "/counts/genes_list.tsv"
 					else:
-						label = expression_dataset.capitalize().replace("_", " by ")
-					value = options[0]["value"]
+						if "lipid" in expression_dataset:
+							value = "data/" + expression_dataset + "/counts/lipid_list.tsv"
+						else:
+							value = "data/" + expression_dataset + "/counts/feature_list.tsv"
+					value = functions.download_from_github(value)
+					value = value.readline()
+					value = value.rstrip()
 			else:
 				if expression_dataset == "human":
 					value = "GAPDH"
 				elif expression_dataset == "mouse":
 					value = "Gapdh"
-				label = "Host gene"
 
-		#populate children
-		children = [
-			label, 	
-			dcc.Dropdown(
-				id="feature_dropdown",
-				clearable=False,
-				value=value,
-				options=options
-			)
-		]
-
-		return value, options, children, options, options, placeholder, options, placeholder
+		return value
 
 	#contrast dropdown
 	@app.callback(
@@ -465,8 +578,19 @@ def define_callbacks(app):
 		df = pd.read_csv(df, sep="\t")
 		df = df[["Gene", "Geneid", "log2FoldChange", "lfcSE", "pvalue", "padj", "baseMean"]]
 
-		if dataset not in ["human", "mouse"]:
-			df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
+		#clean features
+		if "genes" not in dataset:
+			if dataset not in ["human", "mouse"]:
+				df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
+		else:
+			clean_genes = []
+			for x in df["Gene"]:
+				gene_x = x.split("@")[0]
+				beast_x = x.split("@")[1]
+				beast_x = beast_x.replace("_", " ")
+				x = gene_x + " - " + beast_x
+				clean_genes.append(x)
+			df["Gene"] = clean_genes
 
 		return functions.dge_table_download_operations(df, dataset, contrast, stringency, False)
 
@@ -501,11 +625,30 @@ def define_callbacks(app):
 		df = df[["Gene", "Geneid", "log2FoldChange", "lfcSE", "pvalue", "padj", "baseMean"]]
 
 		#filter selected genes
-		if dataset not in ["human", "mouse"]:
-			df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
-			dropdown_values = [value.replace("_", " ").replace("[", "").replace("]", "") for value in dropdown_values]
+		if "genes" not in dataset:
+			if dataset not in ["human", "mouse"]:
+				df["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in df["Gene"]]
+				dropdown_values = [value.replace("_", " ").replace("[", "").replace("]", "") for value in dropdown_values]
+			else:
+				dropdown_values = [value.replace("€", "/") for value in dropdown_values]
 		else:
-			dropdown_values = [value.replace("€", "/") for value in dropdown_values]
+			clean_genes = []
+			for x in df["Gene"]:
+				gene_x = x.split("@")[0]
+				beast_x = x.split("@")[1]
+				beast_x = beast_x.replace("_", " ")
+				x = gene_x + " - " + beast_x
+				clean_genes.append(x)
+			df["Gene"] = clean_genes
+			#clean dropdown values
+			clean_dropdown_values = []
+			for x in dropdown_values:
+				gene_x = x.split("@")[0]
+				beast_x = x.split("@")[1]
+				beast_x = beast_x.replace("_", " ")
+				x = gene_x + " - " + beast_x
+				clean_dropdown_values.append(x)
+			dropdown_values = clean_dropdown_values.copy()
 		df = df[df["Gene"].isin(dropdown_values)]
 
 		return functions.dge_table_download_operations(df, dataset, contrast, stringency, True)
@@ -952,7 +1095,14 @@ def define_callbacks(app):
 			mds_title = "viral " + mds_dataset.split("_")[1]
 
 		#apply title
-		mds_expression_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n=" + str(n_samples_mds_expression)
+		if "genes" in expression_dataset:
+			feature_gene = feature.split("@")[0]
+			feature_beast = feature.split("@")[1]
+			feature_beast = feature_beast.replace("_", " ")
+			feature = feature_gene + " - " + feature_beast
+			mds_expression_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS colored by<br>" + feature + expression_or_abundance + " n=" + str(n_samples_mds_expression)
+		else:
+			mds_expression_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n=" + str(n_samples_mds_expression)
 
 		mds_expression_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 		mds_expression_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
@@ -971,7 +1121,6 @@ def define_callbacks(app):
 		Output("hide_unselected_boxplot_switch", "value"),
 		Output("boxplots_width_slider", "value"),
 		Output("boxplots_height_slider", "value"),
-		Input("feature_dataset_dropdown", "value"),
 		Input("feature_dropdown", "value"),
 		Input("x_boxplot_dropdown", "value"),
 		Input("x_filter_boxplot_dropdown", "value"),
@@ -983,10 +1132,11 @@ def define_callbacks(app):
 		Input("show_as_boxplot_switch", "value"),
 		Input("boxplots_width_slider", "value"),
 		Input("boxplots_height_slider", "value"),
+		State("feature_dataset_dropdown", "value"),
 		State("boxplots_graph", "figure"),
 		State("x_filter_dropdown_div", "hidden"),
 	)
-	def plot_boxplots(expression_dataset, feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, box_fig, hidden):
+	def plot_boxplots(feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, expression_dataset, box_fig, hidden):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1016,7 +1166,7 @@ def define_callbacks(app):
 				if "abundance" in box_fig["layout"]["title"]["text"]:
 					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
 				else:
-					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace("profile ", "profile<br>")
+					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
 		#new plot
 		else:
 			if trigger_id != "hide_unselected_boxplot_switch.value":
@@ -1058,21 +1208,14 @@ def define_callbacks(app):
 					metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
 					metadata_fields_ordered.sort()
 
-				#changing the gene does not reset the figure
-				if trigger_id == "feature_dropdown.value":
-					visible = {}
-					for trace in box_fig["data"]:
-						visible[trace["name"]] = trace["visible"]
-				#if there is a change in the plot beside the gene, reset the figure 
-				else:
-					hide_unselected_switch = []
-					boolean_hide_unselected_switch = False
-					if trigger_id != "comparison_only_boxplots_switch.value":
-						width = 900
-						height = 375
-					visible = {}
-					for metadata in metadata_fields_ordered:
-						visible[metadata] = True
+				hide_unselected_switch = []
+				boolean_hide_unselected_switch = False
+				if trigger_id != "comparison_only_boxplots_switch.value":
+					width = 900
+					height = 375
+				visible = {}
+				for metadata in metadata_fields_ordered:
+					visible[metadata] = True
 
 				#grouped or not boxplot setup
 				boxmode = "overlay"
@@ -1092,6 +1235,13 @@ def define_callbacks(app):
 							selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
 							metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
 				
+				#tmp
+				if "genes" in expression_dataset:
+					feature_gene = feature.split("@")[0]
+					feature_beast = feature.split("@")[1]
+					feature_beast = feature_beast.replace("_", " ")
+					feature = feature_gene + " - " + feature_beast
+
 				#create figure
 				box_fig = go.Figure()
 				for metadata in metadata_fields_ordered:
@@ -1103,7 +1253,10 @@ def define_callbacks(app):
 					if y_metadata in ["log2_expression", "log2_abundance"]:
 						y_values = filtered_metadata[log2_expression_or_abundance]
 						y_axis_title = "Log2 {}".format(expression_or_abundance)
-						title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+						if "genes" in expression_dataset:
+							title_text = feature + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+						else:
+							title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
 					else:
 						y_values = filtered_metadata[y_metadata]
 						y_axis_title = y_metadata
@@ -1130,7 +1283,7 @@ def define_callbacks(app):
 					if "abundance" in box_fig["layout"]["title"]["text"]:
 						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
 					else:
-						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace("profile ", "profile<br>")
+						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
 				if boolean_show_as_boxplot:
 					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
 				else:
@@ -1166,13 +1319,9 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
-		Input("feature_dropdown", "value"),
-		State("ma_plot_graph", "figure")
+		Input("feature_dropdown", "value")
 	)
-	def plot_MA_plot(expression_dataset, contrast, stringecy_info, gene, old_ma_plot_figure):
-		#define contexts
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
+	def plot_MA_plot(expression_dataset, contrast, stringecy_info, feature):
 
 		#stingency specs
 		pvalue_type = stringecy_info.split("_")[0]
@@ -1180,56 +1329,49 @@ def define_callbacks(app):
 
 		#labels
 		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-			gene = gene.replace("€", "/")
+			if expression_dataset in ["human", "mouse"]:
+				feature = feature.replace("€", "/")
+			else:
+				feature_gene = feature.split("@")[0]
+				feature_beast = feature.split("@")[1]
+				feature_beast = feature_beast.replace("_", " ")
+				feature = feature_gene + " - " + feature_beast
 			gene_or_species = "Gene"
 			expression_or_abundance = expression_dataset.split("_")[0] + " gene expression"
 			xaxis_title = "Log2 average expression"
 		else:
-			gene = gene.replace("_", " ").replace("[", "").replace("]", "")
+			feature = feature.replace("_", " ").replace("[", "").replace("]", "")
 			xaxis_title = "Log2 average abundance"
 			gene_or_species = expression_dataset.replace("_", " ")
 			expression_or_abundance = gene_or_species + " abundance"
 			gene_or_species = gene_or_species
 
-		#read tsv if change in dataset or contrast
-		if trigger_id in ["feature_dataset_dropdown.value", "contrast_dropdown.value"] or old_ma_plot_figure is None:
-			table = functions.download_from_github("data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
-			table = pd.read_csv(table, sep = "\t")
-			table["Gene"] = table["Gene"].fillna("NA")
-			#log2 base mean
-			table["log2_baseMean"] = np.log2(table["baseMean"])
-			#clean gene/species name
-			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-				table["Gene"] = [i for i in table["Gene"]]
-			else:
-				table["Gene"] = [i.replace("_", " ").replace("[", "").replace("]", "") for i in table["Gene"]]
-
-		#parse existing figure for change in stringency or gene
-		elif trigger_id in ["stringency_dropdown.value", "feature_dropdown.value"] and old_ma_plot_figure is not None:
-			figure_data = {}
-			figure_data["Gene"] = []
-			figure_data[pvalue_type] = []
-			figure_data["log2_baseMean"] = []
-			figure_data["log2FoldChange"] = []
-
-			for trace in range(0, len(old_ma_plot_figure["data"])):
-				figure_data["log2_baseMean"].extend(old_ma_plot_figure["data"][trace]["x"])
-				figure_data["log2FoldChange"].extend(old_ma_plot_figure["data"][trace]["y"])
-				for dot in old_ma_plot_figure["data"][trace]["customdata"]:
-					figure_data["Gene"].append(dot[0])
-					if dot[1] == "NA":
-						dot[1] = np.nan
-					figure_data[pvalue_type].append(dot[1])
-			
-			table = pd.DataFrame(figure_data)
+		#read table
+		table = functions.download_from_github("data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
+		table = pd.read_csv(table, sep = "\t")
+		table["Gene"] = table["Gene"].fillna("NA")
+		#log2 base mean
+		table["log2_baseMean"] = np.log2(table["baseMean"])
+		#clean gene/species name
+		if "genes" in expression_dataset:
+			clean_genes = []
+			for x in table["Gene"]:
+				x_gene = x.split("@")[0]
+				x_beast = x.split("@")[1]
+				x_beast = x_beast.replace("_", " ")
+				x = x_gene + " - " + x_beast
+				clean_genes.append(x)
+			table["Gene"] = clean_genes
+		else:
+			table["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table["Gene"]]
 
 		#find DEGs and selected gene
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0) & (table["Gene"] != gene), "DEG"] = "Up"
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0) & (table["Gene"] != gene), "DEG"] = "Down"
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0) & (table["Gene"] == gene), "DEG"] = "selected_Up"
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0) & (table["Gene"] == gene), "DEG"] = "selected_Down"
-		table.loc[(table["DEG"].isnull()) & (table["Gene"] != gene), "DEG"] = "no_DEG"
-		table.loc[(table["DEG"].isnull()) & (table["Gene"] == gene), "DEG"] = "selected_no_DEG"
+		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0) & (table["Gene"] != feature), "DEG"] = "Up"
+		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0) & (table["Gene"] != feature), "DEG"] = "Down"
+		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0) & (table["Gene"] == feature), "DEG"] = "selected_Up"
+		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0) & (table["Gene"] == feature), "DEG"] = "selected_Down"
+		table.loc[(table["DEG"].isnull()) & (table["Gene"] != feature), "DEG"] = "no_DEG"
+		table.loc[(table["DEG"].isnull()) & (table["Gene"] == feature), "DEG"] = "selected_no_DEG"
 
 		#replace nan values with NA
 		table = table.fillna(value={pvalue_type: "NA"})
@@ -1245,7 +1387,7 @@ def define_callbacks(app):
 		down += len(down_selected["Gene"])
 
 		#find out if the selected gene have more than 1 gene ID
-		filtered_table = table[table["Gene"] == gene]
+		filtered_table = table[table["Gene"] == feature]
 		number_of_geneids_for_gene = len(filtered_table["Gene"])
 
 		#if there are more gene ID for the same gene, a warning should appear on the ceneter of the plot
@@ -1295,7 +1437,7 @@ def define_callbacks(app):
 			ma_plot_fig.add_trace(go.Scattergl(x=filtered_table["log2_baseMean"], y=filtered_table["log2FoldChange"], marker_opacity=1, marker_color=color, marker_symbol=2, marker_size=marker_size, marker_line=marker_line, customdata=custom_data, mode="markers", hovertemplate = hover_template))
 
 		#update layout
-		title_text = "Differential {expression_or_abundance}<br>".format(expression_or_abundance=expression_or_abundance) + contrast.replace("_", " ").replace("-", " ").replace("Control", "Control")
+		title_text = "Differential {expression_or_abundance}<br>".format(expression_or_abundance=expression_or_abundance) + contrast.replace("_", " ").replace("-", " ")
 		
 		ma_plot_fig.update_layout(title={"text": title_text, "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_zeroline=True, yaxis_automargin=True, yaxis_title="Log2 fold change", yaxis_domain=[0.25, 1], font_family="Arial", height=415, margin=dict(t=50, b=5, l=5, r=5), showlegend=False)
 
@@ -1328,6 +1470,7 @@ def define_callbacks(app):
 			active=0,
 			xanchor = "left",
 			direction = "up",
+			bgcolor = "#ffffff",
 			x=0,
 			y=0,
 			buttons=[
@@ -1382,17 +1525,178 @@ def define_callbacks(app):
 			])
 		])
 
-		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)}, "edits": {"annotationPosition": True, "annotationTail": True, "titleText": True}}
+		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)}, "edits": {"annotationPosition": True, "annotationTail": True, "annotationText": True, "titleText": True}}
 
 		ma_plot_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 		ma_plot_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 		
 		return ma_plot_fig, config_ma_plot
 	
+	#deconvolution
+	@app.callback(
+		Output("deconvolution_graph", "figure"),
+		Output("deconvolution_graph", "config"),
+		Output("plots_per_row_deconvolution_dropdown", "value"),
+		Input("split_by_1_deconvolution_dropdown", "value"),
+		Input("split_by_2_deconvolution_dropdown", "value"),
+		Input("plots_per_row_deconvolution_dropdown", "value")
+	)
+	def plot_deconvolution(split_by, split_by_2, plot_per_row):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		#open deconvolution df
+		deconvolution_df = functions.download_from_github("deconvolution.tsv")
+		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t")
+
+		if deconvolution_df.empty:
+			fig = go.Figure()
+			fig.add_annotation(text="Deconvolution not done yet.", showarrow=False)
+			fig.update_layout(xaxis_fixedrange=True, yaxis_fixedrange=True, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_linecolor="rgba(0,0,0,0)", yaxis_linecolor="rgba(0,0,0,0)", xaxis_showticklabels=False, yaxis_showticklabels=False, margin=dict(l=0, t=0, r=0, b=0), height=300)
+			fig.update_xaxes(range=[0, 4], ticks="")
+			fig.update_yaxes(range=[0, 4], ticks="")
+			title_text="missing_deconvolution"
+		else:
+			
+			#clean df
+			deconvolution_df[split_by] = deconvolution_df[split_by].str.replace("_", " ")
+			deconvolution_df = deconvolution_df.dropna(subset = [split_by])
+			
+			#get cell types
+			cell_types = deconvolution_df["Cell type"].unique().tolist()
+
+			#sum proportion for each selected value
+			if split_by == split_by_2:
+				#group by
+				grouped_df = deconvolution_df.groupby([split_by]).sum()
+				grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
+				grouped_df = grouped_df.reset_index()
+
+				#create x_values column
+				grouped_df["x_values"] = grouped_df[split_by]
+				deconvolution_df["x_values"] = deconvolution_df[split_by]
+			else:
+				if trigger_id == "split_by_2_deconvolution_dropdown.value":
+					plot_per_row = 3
+				
+				#clean also the second column
+				deconvolution_df = deconvolution_df.dropna(subset = [split_by_2])
+				deconvolution_df[split_by_2] = deconvolution_df[split_by_2].str.replace("_", " ")
+				
+				#group by
+				grouped_df = deconvolution_df.groupby([split_by, split_by_2]).sum()
+				grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
+				grouped_df = grouped_df.reset_index()
+
+				#create x_values column with the two variables
+				grouped_df["x_values"] = grouped_df[split_by] + " " + grouped_df[split_by_2]
+				deconvolution_df["x_values"] = deconvolution_df[split_by] + " " + deconvolution_df[split_by_2]
+
+			#get values that will be on the x axis of the subplots
+			x_values = deconvolution_df["x_values"].unique().tolist()
+			x_values.sort()
+			grouped_df = grouped_df.set_index("x_values")
+
+			#compute relative proportion by Cell type
+			filtered_df_list = []
+			for x_value in x_values:
+				#get value to compute relative proportion
+				sum_value = grouped_df.loc[x_value, "proportion_sum"]
+				#filter df for x value and compute his relative proportion
+				filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+				filtered_df["relative_proportion"] = filtered_df["Proportion"] / sum_value
+				#sum values of the same Cell type
+				filtered_df = filtered_df.groupby(["Cell type"]).sum()
+				#reconstruct df
+				filtered_df = pd.DataFrame({"relative_proportion": filtered_df["relative_proportion"]})
+				filtered_df["x_values"] = x_value
+				filtered_df = filtered_df.reset_index()
+				#append to list
+				filtered_df_list.append(filtered_df)
+
+			#cat dfs
+			deconvolution_df = pd.concat(filtered_df_list)
+
+			#setup deconvolution color dict
+			deconvolution_color_dict = {}
+			i = 0
+			for cell_type in cell_types:
+				deconvolution_color_dict[cell_type] = colors[i]
+				i += 1
+
+			#create figure
+			fig = go.Figure()
+
+			#define number of rows
+			if (len(x_values) % plot_per_row) == 0:
+				n_rows = len(x_values)/plot_per_row
+			else:
+				n_rows = len(x_values)/plot_per_row + 1
+			n_rows = int(n_rows)
+
+			#define specs for subplot starting from the space for the legend
+			specs = []
+
+			#define specs for each plot row
+			for i in range(0, n_rows):
+				specs.append([])
+				for y in range(0, plot_per_row):
+					specs[i].append({})
+			
+			#in case of odd number of selected elements, some plots in the grid are None
+			if (len(x_values) % plot_per_row) != 0:
+				odd_elements_to_plot = len(x_values) - plot_per_row * (n_rows - 1)
+				for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
+					specs[-1][-i] = None
+
+			fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes=True, y_title="Relative proportion")
+
+			#get cell types and populate figure
+			working_row = 1
+			working_col = 1
+			showlegend = True
+			for x_value in x_values:
+				filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+				filtered_df = filtered_df.set_index("Cell type")
+				for cell_type in cell_types:
+					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type]), row=working_row, col=working_col)
+				
+				#adjust row and col counts
+				working_col += 1
+				if working_col == plot_per_row + 1:
+					working_row += 1
+					working_col = 1
+
+				#showlegend only on the first tracw
+				if showlegend:
+					showlegend = False
+
+			#update layout
+			height = (n_rows*100) + 40
+			if height == 140:
+				height = 240
+			#get host for title
+			host = functions.get_content_from_github("data")
+			if "human" in host:
+				host = "human"
+			else:
+				host = "mouse"
+			title_text = "Cell type compositions by {host} transcriptome deconvolution".format(host=host)
+			fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"})
+
+			fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+
+		config_deconvolution = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": title_text}, "edits": {"titleText": True, "legendPosition": True}}
+
+		return fig, config_deconvolution, plot_per_row
+
 	#GO-plot
 	@app.callback(
 		Output("go_plot_graph", "figure"),
 		Output("go_plot_graph", "config"),
+		Output("go_plot_div", "style"),
 		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
 		Input("go_plot_filter_input", "value"),
@@ -1521,20 +1825,6 @@ def define_callbacks(app):
 			#filter df by important unique categories
 			filtered_go_df = go_df[go_df["Process"].isin(unique_go_categories)]
 
-			#get enrichments as lists
-			all_enrichments = filtered_go_df["Enrichment"]
-			all_enrichments_interpolated = filtered_go_df["enrichment_interpolated"].tolist()
-
-			#compute figure height
-			pixels_per_go_category = 21
-			computed_height = len(all_enrichments) * pixels_per_go_category
-
-			#min and max height
-			if computed_height < 500:
-				computed_height = 500
-			elif computed_height > 600:
-				computed_height = 600
-			
 			#divide up and down GO categories and sort by enrichment
 			go_df_up = filtered_go_df[filtered_go_df["DGE"] == "up"]
 			go_df_up = go_df_up.sort_values(by=["Enrichment", "GO p-value"])
@@ -1546,6 +1836,20 @@ def define_callbacks(app):
 				filtered_go_df = go_df[go_df["Process"].isin(double_go_categories)]
 				go_df_up = pd.concat([go_df_up, filtered_go_df[filtered_go_df["DGE"] == "up"].sort_values(by=["Enrichment", "GO p-value"])])
 				go_df_down = pd.concat([go_df_down, filtered_go_df[filtered_go_df["DGE"] == "down"].sort_values(by=["Enrichment", "GO p-value"])])
+
+			#get enrichments as lists
+			all_enrichments = go_df_up["Enrichment"].tolist() + go_df_down["Enrichment"].tolist()
+			all_enrichments_interpolated = go_df_up["enrichment_interpolated"].tolist() + go_df_down["enrichment_interpolated"].tolist()
+
+			#compute figure height
+			pixels_per_go_category = 21
+			computed_height = len(all_enrichments) * pixels_per_go_category
+
+			#min and max height
+			if computed_height < 500:
+				computed_height = 500
+			elif computed_height > 700:
+				computed_height = 700
 
 		#create figure
 		go_plot_fig = go.Figure()
@@ -1625,7 +1929,7 @@ def define_callbacks(app):
 
 		config_go_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "responsive": True, "toImageButtonOptions": {"filename": "GO-plot_with_{contrast}".format(contrast = contrast)}, "edits": {"titleText": True}}
 
-		return go_plot_fig, config_go_plot
+		return go_plot_fig, config_go_plot, {"width": "100%", "display": "inline-block", "height": computed_height}
 
 	#heatmap
 	@app.callback(
@@ -1710,7 +2014,13 @@ def define_callbacks(app):
 				for feature in features:
 					df = functions.download_from_github("data/" + expression_dataset + "/counts/" + feature + ".tsv")
 					df = pd.read_csv(df, sep = "\t")
-					feature = feature.replace("€", "/")
+					if "genes" in expression_dataset:
+						feature_gene = feature.split("@")[0]
+						featre_beast = feature.split("@")[1]
+						featre_beast = featre_beast.replace("_", " ")
+						feature = feature_gene + " - " + featre_beast
+					else:
+						feature = feature.replace("€", "/")
 					df = df.rename(columns={"counts": feature})
 					df = df[["sample", feature]]
 					counts_df_list.append(df)
@@ -1920,7 +2230,7 @@ def define_callbacks(app):
 					space_for_legend = 200
 
 				#create main heatmap
-				heatmap = go.Heatmap(x=clustered_samples, y=clustered_features, z=heat_data, colorscale="Reds", hovertemplate="Sample: %{{x}}<br>{feature}:%{{y}}<extra></extra>".format(feature=feature), hoverlabel_bgcolor="lightgrey", colorbar_title="Row scaled " + colorbar_title, colorbar_title_side="right", colorbar_title_font_family="Arial", colorbar_thicknessmode="pixels", colorbar_thickness=20, colorbar_lenmode="pixels", colorbar_len=100)
+				heatmap = go.Heatmap(x=clustered_samples, y=clustered_features, z=heat_data, colorscale="Reds", hovertemplate="Sample: %{{x}}<br>{feature}: %{{y}}<extra></extra>".format(feature=feature), hoverlabel_bgcolor="lightgrey", colorbar_title="Row scaled " + colorbar_title, colorbar_title_side="right", colorbar_title_font_family="Arial", colorbar_thicknessmode="pixels", colorbar_thickness=20, colorbar_lenmode="pixels", colorbar_len=100)
 				if boolean_clustering_switch:
 					heatmap["x"] = dendro_top["layout"]["xaxis"]["tickvals"]
 				heatmap["y"] = dendro_side["layout"]["yaxis"]["tickvals"]
@@ -2350,7 +2660,17 @@ def define_callbacks(app):
 						y_axis_title = y_metadata
 
 					#make subplots
-					box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=[feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/") for feature in selected_features], shared_xaxes=True, vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
+					subplot_titles = []
+					for feature in selected_features:
+						if "genes" in expression_dataset:
+							feature_gene = feature.split("@")[0]
+							feature_beast = feature.split("@")[1]
+							feature_beast = feature_beast.replace("_", " ")
+							feature = feature_gene + " - " + feature_beast
+						else:
+							feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
+						subplot_titles.append(feature)
+					box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True, vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
 
 					#loop 1 plot per gene
 					working_row = 1
