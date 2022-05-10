@@ -5,12 +5,13 @@ stringecy: "padj_0.1"
 github:
   private_repo: True
   username: "daneseomics"
-  token: "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"
+  token: "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"
   repo_name: "DU-omics/eoe-meta-analysis_data"
 credentials:
   use_credentials: True
   username: "ungaro"
   pass: "steams"
+default_comparison: "First"
 sorted_conditions: False
 condition_list:
   - Healthy_GFP
