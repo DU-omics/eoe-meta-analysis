@@ -230,7 +230,7 @@ def define_callbacks(app):
 		Input("feature_dropdown", "value"),
 		State("feature_dataset_dropdown", "value")
 	)
-	def update_options(search_value, current_value, expression_dataset):
+	def update_options_feature_dropdown(search_value, current_value, expression_dataset):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1183,6 +1183,18 @@ def define_callbacks(app):
 				metadata_df = metadata_df.fillna("NA")
 				metadata_df = metadata_df.replace("_", " ", regex=True)
 
+				#reset hide unselected switch
+				hide_unselected_switch = []
+				boolean_hide_unselected_switch = False
+				
+				#default reset values
+				if trigger_id == "comparison_only_boxplots_switch.value" or box_fig is None and boolean_comparison_only_switch:
+					width = 500
+					height = 375
+				elif trigger_id != "comparison_only_boxplots_switch.value" and boolean_comparison_only_switch is False:
+					width = 900
+					height = 375
+
 				#filter samples for comparison
 				if boolean_comparison_only_switch:
 					contrast = contrast.replace("_", " ")
@@ -1212,12 +1224,7 @@ def define_callbacks(app):
 					column_for_filtering = group_by_metadata
 					metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
 					metadata_fields_ordered.sort()
-
-				hide_unselected_switch = []
-				boolean_hide_unselected_switch = False
-				if trigger_id != "comparison_only_boxplots_switch.value":
-					width = 900
-					height = 375
+				#reset visible
 				visible = {}
 				for metadata in metadata_fields_ordered:
 					visible[metadata] = True
@@ -1285,6 +1292,10 @@ def define_callbacks(app):
 
 				#figure layout
 				if width < 600:
+					#apply title if not present
+					if box_fig["layout"]["title"]["text"] is None:
+						box_fig["layout"]["title"]["text"] = title_text
+					
 					if "abundance" in box_fig["layout"]["title"]["text"]:
 						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
 					else:
@@ -2000,9 +2011,6 @@ def define_callbacks(app):
 				raise PreventUpdate
 		#plot
 		else:
-			if trigger_id == "update_heatmap_plot_button.n_clicks":
-				comparison_only_switch = []
-
 			#coerce features to list
 			if features is None:
 				features = []
@@ -2058,7 +2066,11 @@ def define_callbacks(app):
 
 				#parse old figure if present to get conditions to plot
 				if old_figure is None or len(old_figure["data"]) == 0:
-					conditions_to_keep = conditions
+					if boolean_comparison_only_switch:
+						contrast = contrast.replace("_", " ")
+						conditions_to_keep = contrast.split("-vs-")
+					else:
+						conditions_to_keep = conditions
 				else:
 					#filter samples according to legend status
 					conditions_to_keep = []
@@ -2079,11 +2091,11 @@ def define_callbacks(app):
 									if trace["visible"] is True:
 										conditions_to_keep.append(trace["name"])
 
-					#filter metadata and get remaining samples
-					metadata = metadata[metadata["condition"].isin(conditions_to_keep)]
-					samples_to_keep = metadata.index.tolist()
-					#filter counts for these samples
-					counts = counts[counts.index.isin(samples_to_keep)]
+				#filter metadata and get remaining samples
+				metadata = metadata[metadata["condition"].isin(conditions_to_keep)]
+				samples_to_keep = metadata.index.tolist()
+				#filter counts for these samples
+				counts = counts[counts.index.isin(samples_to_keep)]
 
 				#create df with features as columns
 				feature_df = counts

@@ -237,10 +237,10 @@ def get_options_feature_dropdown(expression_dataset, features, search_value, cur
 
 			#single and multidropdown
 			if dropdown_type == "single":
-				if search_value in feature_label:
+				if search_value.upper() in feature_label.upper():
 					options.append({"label": feature_label, "value": feature})
 			elif dropdown_type == "multi":
-				if search_value in feature_label or feature in (current_value or []):
+				if search_value.upper() in feature_label.upper() or feature in (current_value or []):
 					options.append({"label": feature_label, "value": feature})
 		
 	return options
@@ -707,9 +707,8 @@ def dge_table_download_operations(df, dataset, contrast, stringency, filtered):
 	if filtered:
 		file_name = file_name.replace(".xlsx", "_filtered.xlsx")
 
-	#rename and sort
+	#rename
 	df = df.rename(columns={"Geneid": gene_id, "log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
-	df = df.sort_values(by=["FDR"])
 
 	#remove a geneid in non human dge
 	if dataset not in ["human", "mouse", "lipid", "lipid_id"]:
@@ -721,6 +720,8 @@ def dge_table_download_operations(df, dataset, contrast, stringency, filtered):
 		stringency_column = "FDR"
 	else:
 		stringency_column = "P-value"
+	#sort by stringecy type
+	df = df.sort_values(by=[stringency_column])
 	
 	(max_row, max_col) = df.shape
 

@@ -257,7 +257,7 @@ layout = html.Div([
 							options=[
 								{"label": "", "value": 1},
 							],
-							value=[],
+							value=[1],
 							id="comparison_only_boxplots_switch",
 							switch=True
 						)
@@ -619,7 +619,7 @@ layout = html.Div([
 												options=[
 													{"label": "", "value": 1},
 												],
-												value=[],
+												value=[1],
 												id="comparison_only_heatmap_switch",
 												switch=True
 											)
@@ -836,7 +836,7 @@ layout = html.Div([
 												options=[
 													{"label": "", "value": 1},
 												],
-												value=[],
+												value=[1],
 												id="comparison_only_multiboxplots_switch",
 												switch=True
 											)
