@@ -1633,6 +1633,7 @@ def define_callbacks(app):
 
 			#cat dfs
 			deconvolution_df = pd.concat(filtered_df_list)
+			deconvolution_df["percentage_relative_proportion"] = deconvolution_df["relative_proportion"] * 100
 
 			#setup deconvolution color dict
 			deconvolution_color_dict = {}
@@ -1666,6 +1667,7 @@ def define_callbacks(app):
 				for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
 					specs[-1][-i] = None
 
+			#create subplot
 			fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes=True, y_title="Relative proportion")
 
 			#get cell types and populate figure
@@ -1674,9 +1676,10 @@ def define_callbacks(app):
 			showlegend = True
 			for x_value in x_values:
 				filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+				customdata = filtered_df.copy()
 				filtered_df = filtered_df.set_index("Cell type")
 				for cell_type in cell_types:
-					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type]), row=working_row, col=working_col)
+					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], customdata=customdata, showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate="Level: %{x}<br>Cell type: %{customdata[0]}<br>Fraction: %{y:.0f}%<extra></extra>"), row=working_row, col=working_col)
 				
 				#adjust row and col counts
 				working_col += 1
@@ -1689,7 +1692,7 @@ def define_callbacks(app):
 					showlegend = False
 
 			#update layout
-			height = (n_rows*100) + 40
+			height = (n_rows*100) + 150
 			if height == 140:
 				height = 240
 			#get host for title
@@ -1699,7 +1702,7 @@ def define_callbacks(app):
 			else:
 				host = "mouse"
 			title_text = "Cell type compositions by {host} transcriptome deconvolution".format(host=host)
-			fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"})
+			fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, legend_orientation="h")
 
 			fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 			fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"

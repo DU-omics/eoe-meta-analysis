@@ -163,6 +163,13 @@ for dir in subdirs:
 			if "mds" in non_host_content:
 				mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
 
+#mofa
+main_folders = get_content_from_github("./")
+if "mofa" in main_folders:
+	mofa_analysis = True
+else:
+	mofa_analysis = False
+
 #dbc switch as boolean switch
 def boolean_switch(switch_value):
 	if len(switch_value) == 1:
