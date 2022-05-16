@@ -11,7 +11,7 @@ credentials:
   use_credentials: True
   username: "ungaro"
   pass: "steams"
-default_comparison: "First"
+default_comparison: "Esophagus_EoE-vs-Esophagus_Control"
 sorted_conditions: False
 condition_list:
   - Healthy_GFP
