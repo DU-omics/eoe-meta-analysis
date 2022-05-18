@@ -3,7 +3,7 @@ from dash import html
 from dash import dcc
 import dash_bootstrap_components as dbc
 from dash import dash_table
-from functions import config, organism, expression_datasets_options, mds_dataset_options, metadata_options, discrete_metadata_options, continuous_metadata_options, metadata_table_data, metadata_table_columns, heatmap_annotation_options, mofa_analysis
+from functions import config, organism, expression_datasets_options, mds_dataset_options, metadata_options, discrete_metadata_options, continuous_metadata_options, metadata_table_data, metadata_table_columns, heatmap_annotation_options, mofa_analysis, mofa_contrasts_options
 
 #styles for tabs and selected tabs
 tab_style = {
@@ -730,6 +730,18 @@ all_tabs = [metadata_tab] + [expression_abundance_profiling_tab] + [differential
 ## additional tabs ##
 if mofa_analysis:
 	mofa_tab = dcc.Tab(label="Multi-omics signatures", value="mofa_tab", children=[
+		#mofa contrast dropdown
+		html.Div([
+			html.Label(["MOFA contrast",
+				dcc.Dropdown(
+					id="mofa_contrast_dropdown",
+					clearable=False,
+					options=mofa_contrasts_options,
+					value=organism
+			)], style={"width": "100%"}, className="dropdown-luigi"),
+		], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+
+		
 		html.Div([
 			dcc.Graph(id="data_overview_mofa")
 		])

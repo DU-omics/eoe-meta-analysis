@@ -1671,7 +1671,7 @@ def define_callbacks(app):
 					specs[-1][-i] = None
 
 			#create subplot
-			fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes=True, y_title="Relative proportion")
+			fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion")
 
 			#get cell types and populate figure
 			working_row = 1

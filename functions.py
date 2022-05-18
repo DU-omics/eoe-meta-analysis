@@ -167,6 +167,11 @@ for dir in subdirs:
 main_folders = get_content_from_github("./")
 if "mofa" in main_folders:
 	mofa_analysis = True
+	mofa_contrasts = get_content_from_github("mofa")
+	mofa_contrasts_options = []
+	for mofa_contrast in mofa_contrasts:
+		mofa_contrasts_options.append({"label": mofa_contrast.replace("-", " ").replace("_", " "), "value": mofa_contrast})
+
 else:
 	mofa_analysis = False
 
