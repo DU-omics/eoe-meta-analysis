@@ -14,7 +14,7 @@ from sklearn.preprocessing import scale
 import tempfile
 #import modules
 import functions
-from functions import config, label_to_value, metadata_table, colors
+from functions import config, label_to_value, metadata_table, colors, mofa_analysis
 
 def define_callbacks(app):
 
@@ -1553,6 +1553,7 @@ def define_callbacks(app):
 		Output("deconvolution_graph", "figure"),
 		Output("deconvolution_graph", "config"),
 		Output("plots_per_row_deconvolution_dropdown", "value"),
+		Output("deconvolution_div", "hidden"),
 		Input("split_by_1_deconvolution_dropdown", "value"),
 		Input("split_by_2_deconvolution_dropdown", "value"),
 		Input("plots_per_row_deconvolution_dropdown", "value")
@@ -1573,8 +1574,10 @@ def define_callbacks(app):
 			fig.update_xaxes(range=[0, 4], ticks="")
 			fig.update_yaxes(range=[0, 4], ticks="")
 			title_text="missing_deconvolution"
+			hidden = True
 		else:
-			
+			hidden = False
+
 			#clean df
 			deconvolution_df[split_by] = deconvolution_df[split_by].str.replace("_", " ")
 			deconvolution_df = deconvolution_df.dropna(subset = [split_by])
@@ -1632,8 +1635,8 @@ def define_callbacks(app):
 				filtered_df_list.append(filtered_df)
 
 			#cat dfs
-			deconvolution_df = pd.concat(filtered_df_list)
-			deconvolution_df["percentage_relative_proportion"] = deconvolution_df["relative_proportion"] * 100
+			proportion_df = pd.concat(filtered_df_list)
+			proportion_df["percentage_relative_proportion"] = proportion_df["relative_proportion"] * 100
 
 			#setup deconvolution color dict
 			deconvolution_color_dict = {}
@@ -1674,12 +1677,22 @@ def define_callbacks(app):
 			working_row = 1
 			working_col = 1
 			showlegend = True
+			split_by_for_hover = split_by.capitalize().replace("_", " ")
+			split_by_2_for_hover = split_by_2.capitalize().replace("_", " ")
 			for x_value in x_values:
-				filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
-				customdata = filtered_df.copy()
+				filtered_df = proportion_df[proportion_df["x_values"] == x_value]
 				filtered_df = filtered_df.set_index("Cell type")
 				for cell_type in cell_types:
-					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], customdata=customdata, showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate="Level: %{x}<br>Cell type: %{customdata[0]}<br>Fraction: %{y:.0f}%<extra></extra>"), row=working_row, col=working_col)
+					if split_by == split_by_2:
+						hovertemplate = f"{split_by_for_hover}: %{{x}}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
+					else:
+						filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+						x_1 = filtered_deconvolution_df[split_by].unique().tolist()
+						x_1 = x_1[0]
+						x_2 = filtered_deconvolution_df[split_by_2].unique().tolist()
+						x_2 = x_2[0]
+						hovertemplate = f"{split_by_for_hover}: {x_1}<br>{split_by_2_for_hover}: {x_2}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
+					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate=hovertemplate), row=working_row, col=working_col)
 				
 				#adjust row and col counts
 				working_col += 1
@@ -1692,7 +1705,7 @@ def define_callbacks(app):
 					showlegend = False
 
 			#update layout
-			height = (n_rows*100) + 150
+			height = (n_rows*100) + 200
 			if height == 140:
 				height = 240
 			#get host for title
@@ -1709,7 +1722,7 @@ def define_callbacks(app):
 
 		config_deconvolution = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": title_text}, "edits": {"titleText": True, "legendPosition": True}}
 
-		return fig, config_deconvolution, plot_per_row
+		return fig, config_deconvolution, plot_per_row, hidden
 
 	#GO-plot
 	@app.callback(
@@ -2825,3 +2838,10 @@ def define_callbacks(app):
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
 
 		return box_fig, config_multi_boxplots, hidden_status, popover_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width
+
+	#mofa callbacks
+	#if mofa_analysis:
+		#@app.callback(
+			#Output("data_overview_mofa", "graph"),
+			
+		#)

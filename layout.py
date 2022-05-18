@@ -1132,7 +1132,7 @@ layout = html.Div([
 			], style={"width": "50%", "display": "inline-block", "font-size": "12px"}),
 
 			#deconvolution
-			html.Div([
+			html.Div(id="deconvolution_div", children=[
 				#info deconvolution
 				html.Div([
 					html.Div(id="info_deconvolution",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
