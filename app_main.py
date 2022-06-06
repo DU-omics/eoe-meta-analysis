@@ -9,7 +9,7 @@ from functions import config
 pio.templates.default = "simple_white"
 
 #assign objects to app
-app = dash.Dash(__name__, title=config["header"]["text"], external_stylesheets=[dbc.themes.FLATLY])
+app = dash.Dash(__name__, title=config["header"]["text"], external_stylesheets=[dbc.themes.FLATLY], suppress_callback_exceptions=True)
 server = app.server
 
 #layout

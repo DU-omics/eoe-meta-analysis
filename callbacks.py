@@ -1,11 +1,13 @@
 #import packages
 import dash
+from dash import dcc, html
 from dash.exceptions import PreventUpdate
-from dash import dcc
+import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from dash.dash_table.Format import Format, Scheme
 import pandas as pd
 import numpy as np
+import re
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from plotly.subplots import make_subplots
@@ -14,7 +16,7 @@ from sklearn.preprocessing import scale
 import tempfile
 #import modules
 import functions
-from functions import config, label_to_value, metadata_table, colors, mofa_analysis
+from functions import config, label_to_value, metadata_table, colors, na_color, heatmap_annotation_options, tab_style, tab_selected_style, discrete_metadata_options, continuous_metadata_options, mofa_analysis
 
 def define_callbacks(app):
 
@@ -38,30 +40,6 @@ def define_callbacks(app):
 		value = []
 		
 		return hidden, value
-
-	#labels for tabs titles
-	@app.callback(
-		Output("expression_abundance_profiling", "label"),
-		Output("dge_table_tab", "label"),
-		Output("go_table_tab", "label"),
-		Input("feature_dataset_dropdown", "value")
-	)
-	def get_tabs_titles(expression_dataset):
-		if expression_dataset in ["human", "mouse"]:
-			expression_abundance_profiling_label = "Gene expression profiling"
-		elif "genes" in expression_dataset:
-			expression_abundance_profiling_label = "{} expression profiling".format(expression_dataset.replace("_genes", " gene").capitalize())
-		else:
-			expression_abundance_profiling_label = expression_dataset.replace("_", " ").capitalize() + " abundance profiling"
-
-		if "lipid" in expression_dataset:
-			dge_table_label = "DLE table"
-			go_table_label = "LO table"
-		else:
-			dge_table_label = "DGE table"
-			go_table_label = "GO table"
-		
-		return expression_abundance_profiling_label, dge_table_label, go_table_label
 
 	#placeholder for heatmap_text_area
 	@app.callback(
@@ -143,6 +121,436 @@ def define_callbacks(app):
 			hidden = True
 		
 		return hidden
+
+	#expression_abundance_profiling_tabs content
+	@app.callback(
+		Output("expression_abundance_profiling_tabs", "children"),
+		Output("expression_abundance_profiling", "label"),
+		Output("dge_table_tab", "label"),
+		Output("go_table_tab", "label"),
+		Input("feature_dataset_dropdown", "value")
+	)
+	def update_tabs(expression_dataset):
+		
+		#label for expression_abundance_profiling
+		if expression_dataset in ["human", "mouse"]:
+			expression_abundance_profiling_label = "Gene expression profiling"
+		elif "genes" in expression_dataset:
+			expression_abundance_profiling_label = "{} expression profiling".format(expression_dataset.replace("_genes", " gene").capitalize())
+		else:
+			expression_abundance_profiling_label = expression_dataset.replace("_", " ").capitalize() + " abundance profiling"
+
+		#label for dge_table_tab and go_table_tab
+		if "lipid" in expression_dataset:
+			dge_table_label = "DLE table"
+			go_table_label = "LO table"
+		else:
+			dge_table_label = "DGE table"
+			go_table_label = "GO table"
+		
+		#heatmap tab
+		heatmap_tab = dcc.Tab(label="Heatmap", value="heatmap", children=[
+			html.Div([
+				html.Br(),
+				
+				#heatmap input
+				html.Div([
+					
+					#info + update plot button
+					html.Div([
+						
+						#info
+						html.Div([
+							html.Div(id="info_heatmap",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+							dbc.Tooltip(
+								children=[dcc.Markdown(
+									"""
+									##### Heatmap showing row scaled log2 expression/abundance profiles
+									
+									Use the __feature__ dropdown and form to select the features to be displayed.
+									
+									Use the __annotations__ dropdown to decorate the heatmap with metadata.
+									
+									Click a GO plot __balloon__ to display in the heatmap the genes responsible for its enrichment.
+									
+									Use the __clustered samples__ switch to perform unsupervised hierarchical clustering along the x-axis.
+									
+									Use the __comparison only__ switch to display only the samples belonging to the two conditions of interest.
+									
+									Use the __legend__ to hide a group of samples. Use the __hide unselected__ switch to clear the legend from undisplayed samples.
+									
+									Use __height__ and __width__ sliders to resize the entire plot.
+									""")
+								],
+								target="info_heatmap",
+								style={"font-family": "arial", "font-size": 14}
+							),
+						], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
+
+						#update plot button
+						html.Div([
+							dbc.Button("Update plot", id="update_heatmap_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+							#warning popup
+							dbc.Popover(
+								children=[
+									dbc.PopoverHeader(children=["Warning!"], tag="div", style={"font-family": "arial", "font-size": 14}),
+									dbc.PopoverBody(children=["Plotting more than 10 features is not allowed."], style={"font-family": "arial", "font-size": 12})
+								],
+								id="popover_plot_heatmap",
+								target="update_heatmap_plot_button",
+								is_open=False,
+								style={"font-family": "arial"}
+							),
+						], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
+					]),
+					
+					html.Br(),
+
+					#cluster heatmap switch
+					html.Div([
+						html.Label(["Clustered samples",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[1],
+								id="clustered_heatmap_switch",
+								switch=True
+							)
+						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+					], style={"width": "34%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+					#comparison only heatmap switch
+					html.Div([
+						html.Label(["Comparison only",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[1],
+								id="comparison_only_heatmap_switch",
+								switch=True
+							)
+						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+					], style={"width": "33%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+					#hide unselected legend heatmap switch
+					html.Div([
+						html.Label(["Hide unselected",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="hide_unselected_heatmap_switch",
+								switch=True
+							)
+						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+					], style={"width": "33%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+					#dropdowns
+					html.Label(["Annotations", 
+						dcc.Dropdown(id="annotation_dropdown", 
+							multi=True, 
+							options=heatmap_annotation_options, 
+							value=[], 
+							style={"textAlign": "left", "font-size": "12px"})
+					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+
+					html.Br(),
+
+					html.Label(["Features",
+						dcc.Dropdown(id="feature_heatmap_dropdown", 
+							multi=True, 
+							placeholder="Select features", 
+							style={"textAlign": "left", "font-size": "12px"})
+					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+
+					html.Br(),
+
+					#text area
+					dbc.Textarea(id="heatmap_text_area", style={"height": 300, "resize": "none", "font-size": "12px"}),
+
+					html.Br(),
+
+					#search button
+					dbc.Button("Search", id="heatmap_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+
+					html.Br(),
+
+					#genes not found area
+					html.Div(id="genes_not_found_heatmap_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}), 
+
+					html.Br()
+				], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
+
+				#spacer
+				html.Div([], style={"width": "1%", "display": "inline-block"}),
+
+				#heatmap graph and legend
+				html.Div(children=[
+					
+					#custom hetmap dimension
+					html.Div([
+						#height slider
+						html.Label(["Height",
+							dcc.Slider(id="hetamap_height_slider", min=200, step=1)
+						], style={"width": "30%", "display": "inline-block"}),
+						#spacer
+						html.Div([], style={"width": "3%", "display": "inline-block"}),
+						#width slider
+						html.Label(["Width",
+							dcc.Slider(id="hetamap_width_slider", min=200, max=885, step=1)
+						], style={"width": "30%", "display": "inline-block"})
+					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+
+					#graph
+					dbc.Spinner(
+						children = [dcc.Graph(id="heatmap_graph")],
+						size = "md",
+						color = "lightgray"
+					),
+					#legend
+					html.Div(id="heatmap_legend_div", hidden=True)
+				], style = {"width": "74%", "display": "inline-block"})
+			], style = {"width": "100%", "height": 800, "display": "inline-block"})
+		], style=tab_style, selected_style=tab_selected_style)
+		#multiviolins tab
+		multi_violin_tab = dcc.Tab(label="Multi-violin", value="multi_violin", children=[
+			html.Div(id="multiboxplot_div", children=[
+				
+				html.Br(),
+				
+				#input section
+				html.Div([
+					
+					#info + update plot button
+					html.Div([
+						
+						#info
+						html.Div([
+							html.Div(id="info_multiboxplots",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+							dbc.Tooltip(
+								children=[dcc.Markdown(
+									"""
+									Use the __features__ dropdown and form to select the features to be displayed.
+									
+									Use __x__ and __y__, or the __group by__ dropdowns to select the data or facet the plot, respectively.
+									
+									Use the __plot per row__ dropdown to choose how many features to be displayed per row.
+									
+									Use the __comparison only__ switch to display only the groups belonging to the two conditions of interest.
+									
+									Use the appropriate switch to __show as boxplots__.
+									
+									Use __height__ and __width__ sliders to resize the entire plot.
+									
+									Use the __legend__ to hide a group. Use the __hide unselected__ switch to clear the legend from undisplayed groups.
+									
+									A maximum of 20 features has been set.
+
+									""")
+								],
+								target="info_multiboxplots",
+								style={"font-family": "arial", "font-size": 14}
+							),
+						], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+
+						#update plot button
+						html.Div([
+							dbc.Button("Update plot", id="update_multiboxplot_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+							#warning popup
+							dbc.Popover(
+								children=[
+									dbc.PopoverHeader(children=["Warning!"], tag="div", style={"font-family": "arial", "font-size": 14}),
+									dbc.PopoverBody(children=["Plotting more than 20 features is not allowed."], style={"font-family": "arial", "font-size": 12})
+								],
+								id="popover_plot_multiboxplots",
+								target="update_multiboxplot_plot_button",
+								is_open=False,
+								style={"font-family": "arial"}
+							),
+						], style={"width": "30%", "display": "inline-block", "vertical-align": "middle"}),
+					]),
+					
+					html.Br(),
+
+					#dropdown
+					html.Label(["Features",
+						dcc.Dropdown(id="feature_multi_boxplots_dropdown", 
+							multi=True, 
+							placeholder="Select features",
+							style={"textAlign": "left", "font-size": "12px"}
+						),
+					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+
+					html.Br(),
+
+					#text area
+					dbc.Textarea(id="multi_boxplots_text_area", style={"width": "100%", "height": 300, "resize": "none", "font-size": "12px"}),
+
+					html.Br(),
+
+					#search button
+					dbc.Button("Search", id="multi_boxplots_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+
+					html.Br(),
+
+					#genes not found area
+					html.Div(id="genes_not_found_multi_boxplots_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}), 
+
+					html.Br()
+				], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
+
+				#multiboxplots options and graph
+				html.Div([
+					#x dropdown
+					html.Label(["x",
+						dcc.Dropdown(
+						id="x_multiboxplots_dropdown",
+						clearable=False,
+						options=discrete_metadata_options,
+						value="condition"
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#y dropdown
+					html.Label(["y", 
+						dcc.Dropdown(
+							id="y_multiboxplots_dropdown",
+							clearable=False,
+							value="log2_expression",
+							options=continuous_metadata_options, 
+							className="dropdown-luigi"
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#group by dropdown
+					html.Label(["Group by", 
+						dcc.Dropdown(
+							id="group_by_multiboxplots_dropdown",
+							clearable=False,
+							value="condition",
+							options=discrete_metadata_options
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#plot per row
+					html.Label(["Plot per row", 
+						dcc.Dropdown(
+							id="plot_per_row_multiboxplots_dropdown",
+							clearable=False,
+							value=3,
+							options=[{"label": n, "value": n} for n in [1, 2, 3]]
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#comparison_only switch
+					html.Div([
+						html.Label(["Comparison only",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[1],
+								id="comparison_only_multiboxplots_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+					#hide unselected switch
+					html.Div([
+						html.Label(["Hide unselected",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="hide_unselected_multiboxplots_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+					#show as boxplot switch
+					html.Div([
+						html.Label(["Show as boxplots",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="show_as_multiboxplot_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+					#custom hetmap dimension
+					html.Div([
+						#height slider
+						html.Label(["Height",
+							dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max = 2000)
+						], style={"width": "30%", "display": "inline-block"}),
+						#spacer
+						html.Div([], style={"width": "3%", "display": "inline-block"}),
+						#width slider
+						html.Label(["Width",
+							dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1)
+						], style={"width": "30%", "display": "inline-block"})
+					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+					#x filter dropdown
+					html.Div(id="x_filter_dropdown_multiboxplots_div", hidden=True, children=[
+						html.Label(["x filter", 
+							dcc.Dropdown(
+								id="x_filter_multiboxplots_dropdown",
+								multi=True, 
+								className="dropdown-luigi"
+						)], style={"width": "100%", "textAlign": "left"}),
+					], style={"width": "90%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
+
+					#graph
+					html.Div(id="multiboxplot_graph_div", children=[
+						dbc.Spinner(size = "md", color = "lightgray", children=[
+							html.Div(
+								id="multi_boxplots_div",
+								children=[dbc.Spinner(
+									children = [dcc.Graph(id="multi_boxplots_graph", figure={})],
+									size = "md",
+									color = "lightgray")
+							], hidden=True)
+						])
+					], style={"height": 800, "width": "100%", "display": "inline-block", "vertical-align": "top"})
+				], style={"width": "75%", "font-size": "12px", "display": "inline-block"}),
+			], style={"width": "100%", "height": 800, "display": "inline-block"})
+		], style=tab_style, selected_style=tab_selected_style)
+
+		children = [heatmap_tab, multi_violin_tab]
+
+		#add diversity tab when some species expression dataset is selected
+		main_folders = functions.get_content_from_github("./")
+		if "species" in expression_dataset and "diversity" in main_folders:
+
+			#defrine layout for diversity tab
+			diversity_tab = dcc.Tab(label="Species diversity", value="diversity", children=[
+				html.Div([
+					html.Br(),
+
+					#dropdown and sliders
+					html.Div([
+						html.Label(["Group by",
+							dcc.Dropdown(
+								id="group_by_diversity_dropdown",
+								clearable=False,
+								options=discrete_metadata_options,
+								value="condition"
+						)], style={"width": "15%", "vertical-align": "middle", "textAlign": "left"}, className="dropdown-luigi"),
+					], style={"width": "100%", "display": "inline-block", "font-size": "12px"}),
+					
+					#graph
+					html.Div([
+						dbc.Spinner(
+							id = "loading_mds_metadata",
+							children = dcc.Graph(id="diversity_graph"),
+							size = "md",
+							color = "lightgray"
+						)
+					], style={"width": "100%", "display": "inline-block"})
+				], style={"width": "100%", "display": "inline-block"})
+			], style=tab_style, selected_style=tab_selected_style)
+			children.append(diversity_tab)
+		
+		return children, expression_abundance_profiling_label, dge_table_label, go_table_label
 
 	##### DROPDOWNS #####
 
@@ -925,7 +1333,7 @@ def define_callbacks(app):
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		
 		#do not update the plot for change in contrast if the switch is off
-		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and mds_expression_fig is not None:
 			raise PreventUpdate
 
 		#open metadata
@@ -983,14 +1391,8 @@ def define_callbacks(app):
 			omics = "transcriptome"
 		if mds_dataset in ["human", "mouse"]:
 			mds_title = mds_dataset
-		elif "archaea" in mds_dataset:
-			mds_title = "archaeal " + mds_dataset.split("_")[1]
-		elif "bacteria" in mds_dataset:
-			mds_title = "bacterial " + mds_dataset.split("_")[1]
-		elif "eukaryota" in mds_dataset:
-			mds_title = "eukaryota " + mds_dataset.split("_")[1]
-		elif "viral" in mds_dataset:
-			mds_title = "viral " + mds_dataset.split("_")[1]
+		else:
+			mds_title = mds_dataset.replace("_", " ")
 
 		#apply title
 		mds_metadata_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + metadata_to_plot.replace("_", " ") + " metadata n=" + str(n_samples_mds_metadata)
@@ -1090,14 +1492,8 @@ def define_callbacks(app):
 			omics = "transcriptome"
 		if mds_dataset in ["human", "mouse"]:
 			mds_title = mds_dataset
-		elif "archaea" in mds_dataset:
-			mds_title = "archaeal " + mds_dataset.split("_")[1]
-		elif "bacteria" in mds_dataset:
-			mds_title = "bacterial " + mds_dataset.split("_")[1]
-		elif "eukaryota" in mds_dataset:
-			mds_title = "eukaryota " + mds_dataset.split("_")[1]
-		elif "viral" in mds_dataset:
-			mds_title = "viral " + mds_dataset.split("_")[1]
+		else:
+			mds_title = mds_dataset.replace("_", " ")
 
 		#apply title
 		if "genes" in expression_dataset:
@@ -1959,7 +2355,7 @@ def define_callbacks(app):
 		go_plot_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 		go_plot_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
-		config_go_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "responsive": True, "toImageButtonOptions": {"filename": "GO-plot_with_{contrast}".format(contrast = contrast)}, "edits": {"titleText": True}}
+		config_go_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 10, "filename": f"GO-plot_with_{contrast}"}, "responsive": True, "edits": {"titleText": True}}
 
 		return go_plot_fig, config_go_plot, {"width": "100%", "display": "inline-block", "height": computed_height}
 
@@ -2565,7 +2961,7 @@ def define_callbacks(app):
 			
 		return children, hidden
 
-	#multiboxplots callback
+	#multiboxplots
 	@app.callback(
 		Output("multi_boxplots_graph", "figure"),
 		Output("multi_boxplots_graph", "config"),
@@ -2838,10 +3234,510 @@ def define_callbacks(app):
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
 
 		return box_fig, config_multi_boxplots, hidden_status, popover_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width
+	
+	#diversity plot
+	@app.callback(
+		Output("diversity_graph", "figure"),
+		Output("diversity_graph", "config"),
+		Input("group_by_diversity_dropdown", "value"),
+		State("feature_dataset_dropdown", "value")
+	)
+	def plot_species_diversity(group_by, expression_dataset):
+		
+		#make subplots
+		#plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index", "Species dominance<br>by Inverse Simpson index"]
+		#fig = make_subplots(rows=1, cols=3, subplot_titles=plots, y_title="Index")
+		plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index"]
+		fig = make_subplots(rows=1, cols=2, subplot_titles=plots, y_title="Index")
 
+		#populate subplots
+		col = 1
+		showlegend = True
+		for plot in plots:
+
+			#define which file to open
+			if plot == "Species diversity<br>by Shannon index":
+				file_name = "shannon"
+				index_column = "Shannon_index"
+			elif plot == "Species dominance<br>by Simpson index":
+				file_name = "simpson"
+				index_column = "Simpson_index"
+			elif plot == "Species dominance<br>by Inverse Simpson index":
+				file_name = "invsimpson"
+				index_column = "Inversed_Simpson_index"
+
+			#open df
+			diversity_df = functions.download_from_github(f"diversity/{expression_dataset}/{file_name}.tsv")
+			diversity_df = pd.read_csv(diversity_df, sep = "\t")
+			diversity_df = diversity_df.replace("_", " ", regex=True)
+
+			#get x values
+			x_values = diversity_df[group_by].unique().tolist()
+			x_values.sort()
+
+			#add traces for each x value
+			for x_value in x_values:
+				filtered_diversity_df = diversity_df[diversity_df[group_by] == x_value]
+				marker_color = functions.get_color(group_by, x_value)
+
+				#create hovertext
+				filtered_diversity_df["hovertext"] = ""
+				for column in filtered_diversity_df.columns:
+					if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+						filtered_diversity_df["hovertext"] = filtered_diversity_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_diversity_df[column].astype(str) + "<br>"
+				hovertext = filtered_diversity_df["hovertext"].tolist()
+
+				fig.add_trace(go.Violin(x=filtered_diversity_df[group_by], y=filtered_diversity_df[index_column], name=x_value, marker_color=marker_color, hoverinfo="text", marker_size=3, line_width=4, hovertext=hovertext, legendgroup=x_value, showlegend=showlegend, points="all"), row=1, col=col)
+
+			#next subplot
+			if showlegend:
+				showlegend=False
+			col += 1
+		
+		#update final layout
+		fig.update_layout(legend_orientation="h", height=500, legend_yanchor="bottom", legend_y=1.25)
+		fig.update_xaxes(tickangle=-90)
+
+		#add tab with figure
+		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{expression_dataset}_diversity"}, "edits": {"legendPosition": True, "annotationText": True}}
+
+		return fig, config
+	
 	#mofa callbacks
-	#if mofa_analysis:
-		#@app.callback(
-			#Output("data_overview_mofa", "graph"),
+	if mofa_analysis:
+		#data overview
+		@app.callback(
+			Output("mofa_data_overview", "figure"),
+			Output("mofa_data_overview", "config"),
+			Input("contrast_dropdown", "value")
+		)
+		def plot_data_overview_mofa(contrast):
 			
-		#)
+			#open metadata
+			metadata = functions.download_from_github("metadata.tsv")
+			metadata = pd.read_csv(metadata, sep = "\t")
+
+			#get group contrast from main contrast
+			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+
+			#open df
+			data_overview_df = functions.download_from_github(f"mofa/{group_contrast}/data_overview.tsv")
+			data_overview_df = pd.read_csv(data_overview_df, sep = "\t")
+
+			##get titles
+			subplot_titles = []
+			for group in groups:
+				group_data_overview_df = data_overview_df[data_overview_df["group"] == group]
+				n = group_data_overview_df["ntotal"].unique().tolist()
+				n = n[0]
+				n = n.replace("N", "n")
+				clean_group = group.replace("_", " ")
+				title = f"{clean_group} {n}"
+				subplot_titles.append(title)
+
+			#create figure
+			fig = make_subplots(rows=2, cols=1, subplot_titles=subplot_titles, vertical_spacing=0.07)
+
+			#define colorscale
+			colorscale = [[0, na_color], [1, "#02818a"]]
+
+			#loop over groups
+			row=1
+			for group in groups:
+				group_data_overview_df = data_overview_df[data_overview_df["group"] == group]
+
+				#heatmap x and y
+				x = group_data_overview_df["sample"].unique().tolist()
+				group_data_overview_df["y"] = group_data_overview_df["view"].str.replace("_", " ") + "<br>" + group_data_overview_df["ptotal"].str.replace("D", "n")
+				y = group_data_overview_df["y"].unique().tolist()
+
+				#get z for each level in y
+				z = []
+				levels = group_data_overview_df["view"].unique().tolist()
+				for level in levels:
+					#translate true/false in numbers for z
+					z_for_level = []
+					level_group_data_overview_filtered = group_data_overview_df[group_data_overview_df["view"] == level]
+					values = level_group_data_overview_filtered["value"].tolist()
+					for value in values:
+						if value:
+							z_for_level.append(1)
+						else:
+							z_for_level.append(0)
+					z.append(z_for_level)
+
+				#create heatmap
+				fig.add_trace(go.Heatmap(x=x, y=y, z=z, zmax=1, colorscale=colorscale, showscale=False, hovertemplate="Sample: %{x}<extra></extra>"), row=row, col=1)
+
+				#change row
+				row +=1
+
+			#update layout
+			fig.update_xaxes(visible=False)
+			fig.update_layout(height=80+(35*len(levels)*2), margin_t=80, margin_b=0, margin_r=0, title={"text": "Data overview", "font_size": 20, "x": 0.5, "xanchor": "center"})
+
+			#config
+			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"data_overview_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
+
+			return fig, config
+
+		#variance hetmap
+		@app.callback(
+			Output("mofa_variance_heatmap", "figure"),
+			Output("mofa_variance_heatmap", "config"),
+			Input("contrast_dropdown", "value")
+		)
+		def plot_variance_heatmap(contrast):
+			#open metadata
+			metadata = functions.download_from_github("metadata.tsv")
+			metadata = pd.read_csv(metadata, sep = "\t")
+
+			#get group contrast from main contrast
+			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+
+			#clean variables
+			metadata = metadata.replace("_", " ", regex=True)
+			contrast = contrast.replace("_", " ")
+			groups = [group.replace("_", " ") for group in groups]
+
+			#open df
+			variance_heatmap_df = functions.download_from_github(f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
+			variance_heatmap_df = pd.read_csv(variance_heatmap_df, sep = "\t")
+			variance_heatmap_df = variance_heatmap_df.replace([np.inf, -np.inf], None)
+			variance_heatmap_df = variance_heatmap_df.replace("_", " ", regex=True)
+			variance_heatmap_df.columns = variance_heatmap_df.columns.str.replace("_", " ")
+
+			#get zmax and zmin
+			zmax = None
+			zmin = None
+			for column in variance_heatmap_df.columns:
+				if column not in ["factor", "group"]:
+					column_max = variance_heatmap_df[column].max()
+					column_min = variance_heatmap_df[column].min()
+					if zmax is None or column_max > zmax:
+						zmax = column_max
+					if zmin is None or column_min < zmin:
+						zmin = column_min
+
+			#create subplots
+			fig = make_subplots(rows=1, cols=2, subplot_titles=groups, shared_yaxes=True)
+
+			#loop over groups
+			col = 1
+			for group in groups:
+				filtered_df = variance_heatmap_df[variance_heatmap_df["group"] == group]
+				filtered_df = filtered_df.drop(["group"], axis=1)
+				filtered_df = pd.melt(filtered_df, id_vars="factor")
+
+				#get x and y
+				x = filtered_df["variable"].unique().tolist()
+				y = filtered_df["factor"].unique().tolist()
+
+				#get z for each y (factor)
+				z = []
+				for factor in y:
+					factor_filtered_df = filtered_df[filtered_df["factor"] == factor]
+					z.append(factor_filtered_df["value"].tolist())
+
+				#show colorbar only once
+				if col == 1:
+					showscale = True
+				else:
+					showscale = False
+
+				#add heatmap
+				fig.add_trace(go.Heatmap(x=x, y=y, z=z, zmax=zmax, zmin=zmin, zauto=False, colorscale=["white", "#02818a"], showscale=showscale, colorbar_title="Variance explained", colorbar_title_side="right", colorbar_ticksuffix="%", colorbar_thickness=15, hovertemplate="Layer: %{x}<br>Factor: %{y}<br>Variance explained: %{z:.0f}%<extra></extra>", hoverongaps=False), row=1, col=col)
+
+				#change subplot
+				col += 1				
+
+			#update layout
+			fig.update_layout(height=200+(20*len(y)), margin_t=75, margin_b=0, title={"text": "Multi-layer signatures", "font_size": 20, "x": 0.5, "xanchor": "center"}, plot_bgcolor="#d9d9d9")
+			fig.update_xaxes(tickangle=-90)
+
+			#config
+			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mofa_signatures_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
+
+			return fig, config
+
+		#factor plot
+		@app.callback(
+			Output("mofa_factor_plot", "figure"),
+			Output("mofa_factor_plot", "config"),
+			Input("contrast_dropdown", "value"),
+			Input("mofa_variance_heatmap", "clickData")
+		)
+		def plot_factor_plot(contrast, click_data):
+			#define contexts
+			ctx = dash.callback_context
+			trigger_id = ctx.triggered[0]["prop_id"]
+
+			#open metadata
+			metadata = functions.download_from_github("metadata.tsv")
+			metadata = pd.read_csv(metadata, sep = "\t")
+
+			#get group contrast from main contrast
+			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+
+			#default plot is the one which explain more variance
+			if trigger_id == "contrast_dropdown.value":
+				variance_heatmap_df = functions.download_from_github(f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
+				variance_heatmap_df = pd.read_csv(variance_heatmap_df, sep = "\t")
+				
+				#get max variance explained
+				max_variance = None
+				for column in variance_heatmap_df.columns:
+					if column not in ["factor", "group"]:
+						column_max = variance_heatmap_df[column].max()
+						if max_variance is None or column_max > max_variance:
+							view = column
+							max_variance = column_max
+				
+				#given vew and max, get factor
+				variance_heatmap_df = variance_heatmap_df[variance_heatmap_df[view] == max_variance]
+				factor = variance_heatmap_df["factor"].tolist()
+				factor = factor[0]
+			#click on heatmap
+			else:
+				factor = click_data["points"][0]["y"]
+				view = click_data["points"][0]["x"]
+				view = view.replace(" ", "_")
+
+			#open weights df
+			weights_df = functions.download_from_github(f"mofa/{group_contrast}/weights.tsv")
+			weights_df = pd.read_csv(weights_df, sep = "\t")
+			
+			#filter by factor and value and then sort by value
+			weights_df = weights_df[weights_df["factor"] == factor]
+			weights_df = weights_df[weights_df["view"] == view]
+
+			#get first 10 (and the others which have the same value as the 10th)
+			weights_df["abs_value"] = weights_df["value"].abs()
+			weights_df = weights_df.sort_values(by=["abs_value"], ascending=False)
+			#get top 10 df
+			top_10_df = weights_df.head(10)
+			#find lower value of top 10
+			top_10_last_value = top_10_df["abs_value"].unique().tolist()
+			top_10_last_value = min(top_10_last_value)
+			#get all features with the lower value
+			features_with_top_10_last_value = weights_df[weights_df["abs_value"] == top_10_last_value]
+			features_with_top_10_last_value = features_with_top_10_last_value["feature"].tolist()
+			#concat if there are multiple features with the same lower value
+			if len(features_with_top_10_last_value) > 1:
+				weights_df = weights_df[weights_df["feature"].isin(features_with_top_10_last_value)]
+				weights_df = pd.concat(top_10_df, weights_df)
+			else:
+				weights_df = top_10_df
+
+			#sort by value so that positive numbers will be on the top
+			weights_df = weights_df.sort_values(by=["value"], ascending=True)
+
+			#clean features
+			clean_features = []
+			for index, row in weights_df.iterrows():
+				view = row["view"]
+				feature = row["feature"]
+				if view in feature:
+					feature = feature.split("_")[0]
+				feature = feature.replace("[", "").replace("]", "")
+				clean_features.append(feature)
+			weights_df["feature"] = clean_features
+
+			#create figure with dots
+			fig = go.Figure(go.Scatter(x=weights_df["value"], y=weights_df["feature"], marker_color="#02818a", marker_size=8, showlegend=False, mode="markers", hovertemplate="Feature: %{y}<br>Weight: %{x:.1f}<extra></extra>"))
+			
+			#add lines
+			weights_df = weights_df.reset_index()
+			for i in range(0, len(weights_df)):
+				fig.add_shape(type='line', x0=0, y0=i, x1=weights_df["value"][i], y1=i, line=dict(color="#02818a", width=3))
+
+			#update layout
+			view = view.replace("_", " ")
+			fig.update_layout(title={"text": f"Top features per {factor} in {view}", "font_size": 16, "x": 0.5, "xanchor": "center"}, xaxis_title_text="Weight", yaxis_title_text="Feature", margin_t=40)
+			fig.update_xaxes(zeroline=True)
+			fig.update_yaxes(showline=False)
+
+			#config
+			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mofa_factor"}, "edits": {"titleText": True, "annotationText": True}}
+
+			return fig, config
+
+		#all factors plot
+		@app.callback(
+			Output("mofa_all_factors_values", "figure"),
+			Output("mofa_all_factors_values", "config"),
+			Input("contrast_dropdown", "value"),
+			Input("group_condition_switch_mofa", "value")
+		)
+		def plot_all_factor_values(contrast, switch_value):
+			
+			#get which metadata variable to use for x axis
+			if len(switch_value) == 0:
+				metadata_column = "group"
+			else:
+				metadata_column = "condition"
+
+			#open metadata
+			metadata = functions.download_from_github("metadata.tsv")
+			metadata = pd.read_csv(metadata, sep = "\t")
+
+			#get group contrast from main contrast
+			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+
+			#open weights df
+			factors_df = functions.download_from_github(f"mofa/{group_contrast}/factors.tsv")
+			factors_df = pd.read_csv(factors_df, sep = "\t")
+			factors_df = factors_df.replace("_", " ", regex=True)
+
+			#get all factors
+			factors = factors_df["factor"].unique().tolist()
+			factors.sort()
+
+			#create figure
+			fig = make_subplots(rows=1, cols=len(factors), subplot_titles=factors, horizontal_spacing=0.4/len(factors))
+
+			#populate subplots
+			col = 1
+			for factor in factors:
+				filtered_factor_df = factors_df[factors_df["factor"] == factor]
+				
+				#get groups
+				groups = filtered_factor_df[metadata_column].unique().tolist()
+				groups.sort(reverse=True)
+
+				#add groups violins
+				for group in groups:
+					group_df = filtered_factor_df[filtered_factor_df[metadata_column] == group]
+					x_values = group_df[metadata_column].tolist()
+					y_values = group_df["value"].tolist()
+					marker_color = functions.get_color(metadata_column, group)
+
+					#create hovertext
+					group_df["hovertext"] = ""
+					for column in group_df.columns:
+						if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+							group_df["hovertext"] = group_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + group_df[column].astype(str) + "<br>"
+					hovertext = group_df["hovertext"].tolist()
+
+					fig.add_trace(go.Violin(x=x_values, y=y_values, name=group, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all", showlegend=False), row=1, col=col)
+					if col == 1:
+						fig.update_yaxes(title_text="Factor score", title_standoff=5, row=1, col=col)
+
+				#new subplot
+				col += 1
+			
+			#update layout
+			fig.update_layout(margin_l=10, margin_r=0, margin_t=40, height=225)
+			fig.update_annotations(font_size=14)
+
+			#config
+			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "factor_score_distribution"}}
+
+			return fig, config
+
+		#feature expression or abundance
+		@app.callback(
+			Output("mofa_factor_expression_abundance", "figure"),
+			Output("mofa_factor_expression_abundance", "config"),
+			Input("mofa_factor_plot", "figure"),
+			Input("mofa_factor_plot", "clickData"),
+			Input("group_condition_switch_mofa", "value"),
+			State("contrast_dropdown", "value")
+		)
+		def plot_factor_feature(factor_figure, click_data, switch_value, contrast):
+			#define contexts
+			ctx = dash.callback_context
+			trigger_id = ctx.triggered[0]["prop_id"]
+
+			#get which metadata variable to use for x axis
+			if len(switch_value) == 0:
+				metadata_column = "group"
+			else:
+				metadata_column = "condition"
+
+			#get mofa level to understand which feature list to use for searching
+			level = factor_figure["layout"]["title"]["text"]
+			level = re.match(r"Top features per Factor\d in (Archaea|Bacteria|Fungi|Human|Mouse|Protozoa|Viral) \w+", level).group(1)
+			level = level.lower()
+			if level in ["human", "mouse"]:
+				features_df = "data/" + level + "/counts/genes_list.tsv"
+				log2_expression_or_abundance = "Log2 expression"
+			else:
+				level = level + "_species"
+				features_df = "data/" + level + "/counts/feature_list.tsv"
+				log2_expression_or_abundance = "Log2 abundance"
+
+			#get features and their clean version
+			features_df = functions.download_from_github(features_df)
+			features_df = pd.read_csv(features_df, sep = "\t", header=None, names=["feature"])
+			features_df["clean_feature"] = features_df["feature"].str.replace("_", " ", regex=False).str.replace("[", "", regex=False).str.replace("]", "", regex=False).str.replace("€", "/", regex=False)
+
+			#setup
+			if trigger_id in ["mofa_factor_plot.figure", "group_condition_switch_mofa.value"]:
+				df = pd.DataFrame({"feature": factor_figure["data"][0]["y"], "weight": factor_figure["data"][0]["x"]})
+				df["abs_weight"] = df["weight"].abs()
+				max_weight = df["abs_weight"].max()
+				df = df[df["abs_weight"] == max_weight]
+				clean_feature = df["feature"].tolist()
+				clean_feature = clean_feature[0]
+			#user click
+			else:
+				clean_feature = click_data["points"][0]["y"]
+
+			#search feature counts
+			feature = features_df[features_df["clean_feature"] == clean_feature]
+			feature = feature["feature"].tolist()
+			feature = feature[0]
+
+			counts = functions.download_from_github("data/" + level + "/counts/" + feature + ".tsv")
+			counts = pd.read_csv(counts, sep = "\t")
+			counts = counts.replace("_", " ", regex=True)
+			
+			#open metadata
+			metadata = functions.download_from_github("metadata.tsv")
+			metadata = pd.read_csv(metadata, sep = "\t")
+
+			#filter metadata, keep only conditions which contain the groups
+			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+			metadata = metadata[metadata["group"].isin(groups)]
+
+			#clean metadata
+			metadata = metadata.fillna("NA")
+			metadata = metadata.replace("_", " ", regex=True)
+
+			#merge and compute log2 and replace inf with 0
+			metadata = metadata.merge(counts, how="inner", on="sample")
+			metadata[log2_expression_or_abundance] = np.log2(metadata["counts"])
+			metadata[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
+
+			#plot per condition
+			conditions = metadata[metadata_column].unique().tolist()
+			conditions.sort()
+			
+			#setup plot
+			fig = go.Figure()
+			for condition in conditions:
+				filtered_df = metadata[metadata[metadata_column] == condition]
+
+				x_values = filtered_df[metadata_column].tolist()
+				y_values = filtered_df[log2_expression_or_abundance].tolist()
+				marker_color = functions.get_color(metadata_column, condition)
+
+				#create hovertext
+				filtered_df["hovertext"] = ""
+				for column in filtered_df.columns:
+					if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+						filtered_df["hovertext"] = filtered_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_df[column].astype(str) + "<br>"
+				hovertext = filtered_df["hovertext"].tolist()
+
+				#add trace
+				fig.add_trace(go.Violin(x=x_values, y=y_values, name=condition, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all"))
+
+			#update layout
+			fig.update_layout(title={"text": f"{clean_feature}", "font_size": 16, "x": 0.5, "xanchor": "center"}, yaxis_title=log2_expression_or_abundance, height=142, margin_t=30, margin_b=0, margin_l=0)
+			fig.update_xaxes(showticklabels=False)
+
+			#general config for boxplots
+			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{clean_feature}_profiling"}, "edits": {"legendPosition": True, "titleText": True}}
+
+			return fig, config
