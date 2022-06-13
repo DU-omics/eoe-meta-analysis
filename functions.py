@@ -23,29 +23,32 @@ na_color = "#E6E6E6"
 #gender colors
 gender_colors = {"Female": "#FA9FB5", "Male": "#9ECAE1"}
 
+#setup analysis dropdown
+repos = list(config["repos"].keys())
 
-#data
+#multiple analysis dropdown will compare only when there are more repos to choose
+if len(repos) > 1:
+	multiple_analysis = False
+else:
+	multiple_analysis = True
+
+repos_options = []
+for repo in repos:
+	repos_options.append({"label": config["repos"][repo]["analysis"], "value": config["repos"][repo]["path"]})
+
+#login to github
+github_session = requests.Session()
 if config["github"]["private_repo"]:
 	github_username = config["github"]["username"]
 	github_token = config["github"]["token"]
-github_repo_name = config["github"]["repo_name"]
-github_raw_link = "https://raw.githubusercontent.com/" + github_repo_name + "/master/"
-
-#session for file download
-github_session = requests.Session()
-if config["github"]["private_repo"]:
 	github_session.auth = (github_username, github_token)
-
-#session for content
-if config["github"]["private_repo"]:
 	session = Github(github_token)
 else:
 	session = Github()
-repo = session.get_repo(github_repo_name, lazy=False)
 
 #function for downloading files from GitHub
-def download_from_github(file_url):
-	file_url = github_raw_link + file_url
+def download_from_github(path, file_url):
+	file_url = "https://raw.githubusercontent.com/" + path + file_url
 	download = github_session.get(file_url).content
 	#decompress gzip data
 	if file_url.split(".")[-1] == "gz":
@@ -56,112 +59,25 @@ def download_from_github(file_url):
 	return df_downloaded_data
 
 #function to list GitHub repo content of a folder
-def get_content_from_github(folder_path):
+def get_content_from_github(path, folder_path):
 	dirs = []
-	if folder_path[-1] == "/":
-		folder_path = folder_path.rstrip()
-	contents = repo.get_contents(folder_path)
+	match = re.match(r"(.+/.+)/(.+)/", path)
+	github_repo_name = match.group(1)
+	github_branch_name = match.group(2)
+	if github_branch_name == "master":
+		github_branch_name = "main"
+	repo = session.get_repo(github_repo_name, lazy=False)
+	contents = repo.get_contents(folder_path, ref=github_branch_name)
 	for folder in contents:
 		folder = folder.name
 		dirs.append(folder)
 	return dirs
 
-#metadata related elements
-metadata = download_from_github("metadata.tsv")
-metadata = pd.read_csv(metadata, sep = "\t")
-metadata = metadata.replace("_", " ", regex=True)
-metadata_options = []
-heatmap_annotation_options = []
-discrete_metadata_options = []
-continuous_metadata_options = [{"label": "Log2 expression", "value": "log2_expression"}]
-label_to_value = {"sample": "Sample"}
-columns_to_keep = []
-for column in metadata.columns:
-	#color by and heatmap annotation dropdowns
-	if column not in ["sample", "fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-		#dict used for translating colnames
-		label_to_value[column] = column.capitalize().replace("_", " ")
-		metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-		if column != "condition":
-			heatmap_annotation_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-		#discrete and continuous metadatas
-		if str(metadata.dtypes[column]) == "object":
-			#condition should always be the first
-			if column == "condition":
-				discrete_metadata_options.insert(0, {"label": column.capitalize().replace("_", " "), "value": column})
-			else:
-				discrete_metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-		else:
-			continuous_metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
-
-	#metadata teble columns
-	if column not in [ "fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-		columns_to_keep.append(column)
-
-#color dictionary
-i = 0
-color_mapping = {}
-#discrete color mapping
-for dicscrete_option in discrete_metadata_options:
-	column = dicscrete_option["value"]
-	if column not in color_mapping:
-		color_mapping[column] = {}
-	metadata[column] = metadata[column].fillna("NA")
-	values = metadata[column].unique().tolist()
-	values.sort()
-	for value in values:
-		if value == "NA":
-			color_mapping[column][value] = na_color
-		elif value == "Male":
-			color_mapping[column][value] = gender_colors["Male"]
-		elif value == "Female":
-			color_mapping[column][value] = gender_colors["Female"]
-		else:
-			if i == len(colors):
-				i = 0
-			color_mapping[column][value] = colors[i]
-			i += 1
-#continuous color mapping
-for continuous_option in continuous_metadata_options:
-	column = continuous_option["value"]
-	if column != "log2_expression":
-		if i == len(colors):
-			i = 0
-		if column not in color_mapping:
-			color_mapping[column] = {}
-		color_mapping[column]["continuous"] = colors[i]
-		i += 1
-
-#shape metadata table
-metadata_table = metadata[columns_to_keep]
-metadata_table = metadata_table.rename(columns=label_to_value)
-metadata_table_columns = []
-for column in metadata_table.columns:
-	metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": column})
-metadata_table_data = metadata_table.to_dict("records")
-
-#get all subdir to populate expression dataset
-subdirs = get_content_from_github("data")
-expression_datasets_options = []
-mds_dataset_options = []
-for dir in subdirs:
-	if dir in ["human", "mouse"]:
-		organism = dir
-		expression_datasets_options.append({"label": dir.capitalize(), "value": dir})
-		mds_dataset_options.append({"label": dir.capitalize(), "value": dir})
-	else:
-		non_host_content = get_content_from_github("data/" + dir)
-		if "lipid" in dir:
-			expression_datasets_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
-			if "mds" in non_host_content:
-				mds_dataset_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
-		else:
-			kingdom = dir.split("_")[0]
-			lineage = dir.split("_")[1]
-			expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
-			#check if there is mds for each metatranscriptomics
-			if "mds" in non_host_content:
-				mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+#get repo name from path
+def get_repo_name_from_path(path, repos):
+	for repo in repos:
+		if path == config["repos"][repo]["path"]:
+			return repo
 
 #styles for tabs and selected tabs
 tab_style = {
@@ -174,33 +90,25 @@ tab_selected_style = {
 	"border-top": "3px solid #597ea2"
 }
 
-#mofa
-main_folders = get_content_from_github("./")
-if "mofa" in main_folders:
-	mofa_analysis = True
+#function to get mofa group contrast from main contrast
+def get_group_contrast_from_condition_contrast(metadata, contrast, path):
+	groups = []
+	for condition in contrast.split("-vs-"):
+		metadata_filtered = metadata[metadata["condition"] == condition]
+		if "group" in metadata_filtered.columns:
+			group = metadata_filtered["group"].unique().tolist()
+		else:
+			group = metadata_filtered["condition"].unique().tolist()
+		group = group[0]
+		groups.append(group)
 
-	#function to get group contrast from main contrast
-	def get_group_contrast_from_condition_contrast(metadata, contrast):
-		groups = []
-		for condition in contrast.split("-vs-"):
-			metadata_filtered = metadata[metadata["condition"] == condition]
-			if "group" in metadata_filtered.columns:
-				group = metadata_filtered["group"].unique().tolist()
-			else:
-				group = metadata_filtered["condition"].unique().tolist()
-			group = group[0]
-			groups.append(group)
+	#open data overview
+	group_contrast = "-vs-".join(groups)
+	mofa_contrasts = get_content_from_github(path, "mofa")
+	if not group_contrast in mofa_contrasts:
+		group_contrast = groups[1] + "-vs-" + groups[0]
 
-		#open data overview
-		group_contrast = "-vs-".join(groups)
-		mofa_contrasts = get_content_from_github("mofa")
-		if not group_contrast in mofa_contrasts:
-			group_contrast = groups[1] + "-vs-" + groups[0]
-	
-		return group_contrast, groups
-
-else:
-	mofa_analysis = False
+	return group_contrast, groups
 
 #dbc switch as boolean switch
 def boolean_switch(switch_value):
@@ -212,18 +120,18 @@ def boolean_switch(switch_value):
 	return boolean_switch_value
 
 #function to assign colors
-def get_color(metadata_value, variable):
-	if metadata_value == "NA":
+def get_color(color_mapping, metadata_column, variable):
+	if metadata_column == "NA":
 		color = na_color
-	elif metadata_value == "Log2 expression":
+	elif metadata_column == "Log2 expression":
 		color = "reds"
 	else:
-		color = color_mapping[metadata_value][variable]
+		color = color_mapping[metadata_column][variable]
 	
 	return color
 
 #feature dropdown dataset variables
-def get_list_label_placeholder_feature_dropdown(expression_dataset):
+def get_list_label_placeholder_feature_dropdown(path, expression_dataset):
 	if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 		features = "data/" + expression_dataset + "/counts/genes_list.tsv"
 		if expression_dataset in ["human", "mouse"]:
@@ -245,7 +153,7 @@ def get_list_label_placeholder_feature_dropdown(expression_dataset):
 			placeholder = "Type here to search {}".format(expression_dataset.replace("_", " ").replace("order", "orders").replace("family", "families"))
 			label = expression_dataset.capitalize().replace("_", " by ")
 
-	features = download_from_github(features)
+	features = download_from_github(path, features)
 	features = pd.read_csv(features, sep = "\t", header=None, names=["feature"])
 	features = features["feature"].tolist()
 	
@@ -294,9 +202,9 @@ def synchronize_zoom(mds_to_update, reference_mds):
 	return mds_to_update
 
 #function for creating a discrete colored mds from tsv file
-def plot_mds_discrete(mds_type, mds_dataset, selected_metadata, mds_discrete_fig, height, label_to_value, boolean_comparison_only_switch, contrast):
+def plot_mds_discrete(color_mapping, mds_type, mds_dataset, selected_metadata, mds_discrete_fig, height, label_to_value, boolean_comparison_only_switch, contrast, path):
 	#open tsv
-	mds_df = download_from_github("data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
+	mds_df = download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
 	mds_df = pd.read_csv(mds_df, sep = "\t")
 	#comparison only will filter the samples
 	if boolean_comparison_only_switch:
@@ -313,9 +221,12 @@ def plot_mds_discrete(mds_type, mds_dataset, selected_metadata, mds_discrete_fig
 	mds_df = mds_df.rename(columns=label_to_value)
 	mds_df = mds_df.replace("_", " ", regex=True)
 
+	#get repo
+	repo = get_repo_name_from_path(path, repos)
+
 	#plot
 	i = 0
-	if config["sorted_conditions"] and selected_metadata == "condition":
+	if config["repos"][repo]["sorted_conditions"] and selected_metadata == "condition":
 		metadata_fields_ordered = config["condition_list"]
 		metadata_fields_ordered = [metadata_field.replace("_", " ") for metadata_field in metadata_fields_ordered]
 	else:
@@ -347,7 +258,7 @@ def plot_mds_discrete(mds_type, mds_dataset, selected_metadata, mds_discrete_fig
 		filtered_mds_df = mds_df[mds_df[label_to_value[selected_metadata]] == metadata]
 		filtered_mds_df = filtered_mds_df.round(2)
 		custom_data = filtered_mds_df[metadata_columns].fillna("NA")
-		marker_color = get_color(selected_metadata, metadata)
+		marker_color = get_color(color_mapping, selected_metadata, metadata)
 		mds_discrete_fig.add_trace(go.Scatter(x=filtered_mds_df[x], y=filtered_mds_df[y], marker_opacity=1, marker_color=marker_color, marker_size=marker_size, customdata=custom_data, mode="markers", legendgroup=metadata, showlegend=True, hovertemplate=hover_template, name=metadata, visible=True))
 
 	#update layout
@@ -358,7 +269,7 @@ def plot_mds_discrete(mds_type, mds_dataset, selected_metadata, mds_discrete_fig
 	return mds_discrete_fig
 
 #function for creating a continuous colored mds from tsv file
-def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuous_fig, height, label_to_value):
+def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuous_fig, height, label_to_value, path):
 	#operations on mds_df
 	number_of_samples = len(mds_df["sample"].tolist())
 	if number_of_samples > 20:
@@ -385,7 +296,7 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 		continuous_variable_to_plot = "Log2 expression"
 
 		#download counts
-		counts = download_from_github("data/" + expression_dataset + "/counts/" + feature + ".tsv")
+		counts = download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
 		counts = pd.read_csv(counts, sep = "\t")
 		counts = counts.rename(columns={"sample": "Sample"})
 		counts = counts.replace("_", " ", regex=True)
@@ -473,9 +384,9 @@ def get_displayed_samples(figure_data):
 	return n_samples
 
 #elements in the x axis in boxplots
-def get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset):
+def get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path):
 	#open metadata
-	metadata_df = download_from_github("metadata.tsv")
+	metadata_df = download_from_github(path, "metadata.tsv")
 	metadata_df = pd.read_csv(metadata_df, sep = "\t")
 
 	#counts as y need external file with count values
@@ -488,11 +399,11 @@ def get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset):
 				list = "data/" + feature_dataset + "/counts/lipid_list.tsv"
 			else:
 				list = "data/" + feature_dataset + "/counts/feature_list.tsv"
-		list = download_from_github(list)
+		list = download_from_github(path, list)
 		list = pd.read_csv(list, sep = "\t", header=None, names=["gene_species"])
 		list = list["gene_species"].tolist()
 		feature = list[0]
-		counts = download_from_github("data/" + feature_dataset + "/counts/" + feature + ".tsv")
+		counts = download_from_github(path, "data/" + feature_dataset + "/counts/" + feature + ".tsv")
 		counts = pd.read_csv(counts, sep = "\t")
 		metadata_df = metadata_df.merge(counts, how="inner", on="sample")
 	
@@ -541,7 +452,7 @@ def serach_go(search_value, df, expression_dataset, add_gsea_switch):
 	return processes_to_keep
 
 #dge table rendering
-def dge_table_operations(table, dataset, stringency, target_prioritization):
+def dge_table_operations(table, dataset, stringency, target_prioritization, path):
 	pvalue_type = stringency.split("_")[0]
 	pvalue_threshold = stringency.split("_")[1]
 
@@ -553,7 +464,7 @@ def dge_table_operations(table, dataset, stringency, target_prioritization):
 		table = table[["Gene", "Gene ID", "log2 FC", "FDR", "id"]]
 
 		#build df from data
-		opentarget_df = download_from_github("opentargets.tsv")
+		opentarget_df = download_from_github(path, "opentargets.tsv")
 		opentarget_df = pd.read_csv(opentarget_df, sep="\t")
 		table = pd.merge(table, opentarget_df, on="Gene ID")
 
@@ -865,7 +776,8 @@ def go_table_download_operations(go_df, expression_dataset, contrast, filtered):
 		return dcc.send_file(f"{tmpdir}/{file_name}")
 
 #search genes in the textarea
-def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, number_of_features):
+def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, number_of_features, path):
+	
 	#click on GO-plot
 	if trigger_id == "go_plot_graph.clickData":
 		if isinstance(go_plot_click["points"][0]["y"], str):
@@ -879,15 +791,15 @@ def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 
 			#read go table
 			if expression_dataset in ["human", "mouse"]:
-				go_df = download_from_github("data/{}/".format(expression_dataset) + stringency_info + "/" + contrast + ".merged_go.tsv")
+				go_df = download_from_github(path, "data/{}/".format(expression_dataset) + stringency_info + "/" + contrast + ".merged_go.tsv")
 			else:
-				go_df = download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
+				go_df = download_from_github(path, "data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
 			go_df = pd.read_csv(go_df, sep = "\t")
 			go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 			#concatenate gsea results if the switch is true
 			boolean_add_gsea_switch = boolean_switch(add_gsea_switch)
 			if boolean_add_gsea_switch:
-				gsea_df = download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
+				gsea_df = download_from_github(path, "data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
 				gsea_df = pd.read_csv(gsea_df, sep = "\t")
 				gsea_df["Genes"] = [gene.replace(";", "; ") for gene in gsea_df["Genes"]]
 				gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
@@ -929,12 +841,12 @@ def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			raise PreventUpdate
 
 	#reset text area if you change the input dropdowns
-	elif trigger_id in ["contrast_dropdown.value", "stringency_dropdown.value"]:
+	elif trigger_id in ["contrast_dropdown.value", "stringency_dropdown.value", "analysis_dropdown.value", "."]:
 		#reset log div
 		log_div = []
 		log_hidden_status = True
 		
-		diffexp_df = download_from_github("data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
+		diffexp_df = download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
 		diffexp_df = pd.read_csv(diffexp_df, sep = "\t")
 		diffexp_df["Gene"] = diffexp_df["Gene"].fillna("NA")
 		diffexp_df = diffexp_df[diffexp_df["Gene"] != "NA"]
@@ -1026,7 +938,7 @@ def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 					list = "data/" + expression_dataset + "/counts/lipid_list.tsv"
 				else:
 					list = "data/" + expression_dataset + "/counts/feature_list.tsv"
-			all_features = download_from_github(list)
+			all_features = download_from_github(path, list)
 			all_features = pd.read_csv(all_features, sep = "\t", header=None, names=["genes"])
 			all_features = all_features["genes"].replace("€", "/").dropna().tolist()
 

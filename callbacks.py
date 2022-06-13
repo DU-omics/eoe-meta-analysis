@@ -4,6 +4,7 @@ from dash import dcc, html
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
+from dash import dash_table
 from dash.dash_table.Format import Format, Scheme
 import pandas as pd
 import numpy as np
@@ -16,21 +17,595 @@ from sklearn.preprocessing import scale
 import tempfile
 #import modules
 import functions
-from functions import config, label_to_value, metadata_table, colors, na_color, heatmap_annotation_options, tab_style, tab_selected_style, discrete_metadata_options, continuous_metadata_options, mofa_analysis
+from functions import config, colors, gender_colors, na_color, repos, tab_style, tab_selected_style
 
 def define_callbacks(app):
 
 	##### VARIOUS ELEMENTS ######
 
+	#change analysis metadata callback
+	@app.callback(
+		#store data
+		Output("color_mapping", "data"),
+		Output("label_to_value", "data"),
+		#tabs
+		Output("site_tabs", "children"),
+		#metadata table data
+		Output("metadata_table_store", "data"),
+		#metadata options
+		Output("metadata_dropdown", "options"),
+		#heatmap annotation options
+		Output("annotation_dropdown_options", "data"),
+		#discrete metadata options
+		Output("discrete_metadata_options", "data"),
+		#continuous metadata options
+		Output("continuous_metadata_options", "data"),
+		#header
+		Output("header_div", "children"),
+		#input
+		Input("analysis_dropdown", "value")
+	)
+	def update_metadata_related_data(path):
+		#metadata related elements
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
+		metadata = metadata.replace("_", " ", regex=True)
+		metadata_options = []
+		heatmap_annotation_options = []
+		discrete_metadata_options = []
+		continuous_metadata_options = [{"label": "Log2 expression", "value": "log2_expression"}]
+		label_to_value = {"sample": "Sample"}
+		columns_to_keep = []
+		for column in metadata.columns:
+			#color by and heatmap annotation dropdowns
+			if column not in ["sample", "fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+				#dict used for translating colnames
+				label_to_value[column] = column.capitalize().replace("_", " ")
+				metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
+				if column != "condition":
+					heatmap_annotation_options.append({"label": column.capitalize().replace("_", " "), "value": column})
+				#discrete and continuous metadatas
+				if str(metadata.dtypes[column]) == "object":
+					#condition should always be the first
+					if column == "condition":
+						discrete_metadata_options.insert(0, {"label": column.capitalize().replace("_", " "), "value": column})
+					else:
+						discrete_metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
+				else:
+					continuous_metadata_options.append({"label": column.capitalize().replace("_", " "), "value": column})
+
+			#metadata teble columns
+			if column not in [ "fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+				columns_to_keep.append(column)
+
+		#color dictionary
+		i = 0
+		color_mapping = {}
+		#discrete color mapping
+		for dicscrete_option in discrete_metadata_options:
+			column = dicscrete_option["value"]
+			if column not in color_mapping:
+				color_mapping[column] = {}
+			metadata[column] = metadata[column].fillna("NA")
+			values = metadata[column].unique().tolist()
+			values.sort()
+			for value in values:
+				if value == "NA":
+					color_mapping[column][value] = na_color
+				elif value == "Male":
+					color_mapping[column][value] = gender_colors["Male"]
+				elif value == "Female":
+					color_mapping[column][value] = gender_colors["Female"]
+				else:
+					if i == len(colors):
+						i = 0
+					color_mapping[column][value] = colors[i]
+					i += 1
+		#continuous color mapping
+		for continuous_option in continuous_metadata_options:
+			column = continuous_option["value"]
+			if column != "log2_expression":
+				if i == len(colors):
+					i = 0
+				if column not in color_mapping:
+					color_mapping[column] = {}
+				color_mapping[column]["continuous"] = colors[i]
+				i += 1
+
+		#shape metadata table
+		metadata_table = metadata[columns_to_keep]
+		metadata_table = metadata_table.rename(columns=label_to_value)
+		metadata_table_columns = []
+		for column in metadata_table.columns:
+			metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": column})
+		metadata_table_data = metadata_table.to_dict("records")
+
+		#header
+		repo = functions.get_repo_name_from_path(path, repos)
+		if config["repos"][repo]["logo"] == "NA":
+			header_children = html.Div(repo, style={"width": "100%", "font-size": 50, "text-align": "center"})
+		else:
+			header_children = html.Img(src=config["repos"][repo]["logo"], alt="logo", style={"width": "70%", "height": "70%"}, title=repo)
+
+		#tabs
+		#metadata tab
+		metadata_tab = dcc.Tab(label="Metadata", value="metadata_tab", children=[
+
+			html.Br(),
+
+			#download metadata button
+			html.Div([
+				dbc.Spinner(
+					size = "md",
+					color = "lightgray",
+					children=[
+						dbc.Button("Download metadata", id="download_metadata_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
+						dcc.Download(id="download_metadata")
+					]
+				)
+			], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
+			
+			#table
+			html.Div([
+				html.Br(),
+				dbc.Spinner(
+					size="md",
+					color="lightgray",
+					children=dash_table.DataTable(
+						id="metadata_table",
+						filter_action="native",
+						style_filter={
+							"text-align": "left"
+						},
+						style_table={
+							"text-align": "left"
+						},
+						style_cell={
+							"whiteSpace": "normal",
+							"height": "auto",
+							"fontSize": 12, 
+							"font-family": "arial",
+							"text-align": "left"
+						},
+						style_data_conditional=[
+							{
+								"if": {"state": "selected"},
+								"backgroundColor": "rgba(44, 62, 80, 0.2)",
+								"border": "1px solid #597ea2",
+							},
+						],
+						page_size=25,
+						sort_action="native",
+						style_header={
+							"text-align": "left"
+						},
+						style_as_list_view=True,
+						data=metadata_table_data,
+						columns=metadata_table_columns
+					)
+				)
+			], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
+			html.Br(),
+			html.Br()
+		], style=tab_style, selected_style=tab_selected_style)
+		#expression/abundance profiling
+		expression_abundance_profiling_tab = dcc.Tab(id="expression_abundance_profiling", value="expression_abundance", children=[
+			dcc.Tabs(id="expression_abundance_profiling_tabs", value="heatmap", style= {"height": 40})
+		], style=tab_style, selected_style=tab_selected_style)
+		#differential analysis tab
+		differential_analysis_tab = dcc.Tab(label="Differential analysis", value="differential_analysis", children=[
+			dcc.Tabs(id="differential_analysis_tabs", value="dge_tab", children=[
+				#dge table tab
+				dcc.Tab(id="dge_table_tab", label="DGE table", value="dge_tab", children=[
+					
+					html.Br(),
+					#title dge table
+					html.Div(id="dge_table_title", children=[], style={"width": "100%", "display": "inline-block", "textAlign": "center", "font-size": "14px"}),
+					html.Br(),
+					html.Br(),
+
+					#info dge table
+					html.Div([
+						html.Div(id="info_dge_table",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+						dbc.Tooltip(
+							children=[dcc.Markdown(
+								"""
+								##### Table showing the differential analysis statistics for the comparison chosen in the __comparison__ dropdown (uppermost menù)
+								
+								Use the __search bar__ to display a filtered table with the selected features.
+								
+								Click a __feature name__ (first column) within the table to highlight it in the MA plot.
+								
+								Use the __icons__ in the last column to access external resources.
+								""")
+							],
+							target="info_dge_table",
+							style={"font-family": "arial", "font-size": 14}
+						),
+					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "textAlign": "center"}),
+
+					#download full table button diffexp
+					html.Div([
+						dbc.Spinner(
+							size = "md",
+							color = "lightgray",
+							children=[
+								dbc.Button("Download full table", id="download_diffexp_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
+								dcc.Download(id="download_diffexp")
+							]
+						)
+					], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
+
+					#download partial button diffexp
+					html.Div([
+						dbc.Spinner(
+							size = "md",
+							color = "lightgray",
+							children=[
+								dbc.Button("Download filtered table", id="download_diffexp_partial_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
+								dcc.Download(id="download_diffexp_partial")
+							]
+						)
+					], style={"width": "25%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
+
+					#dropdown
+					html.Div([
+						dcc.Dropdown(id="multi_gene_dge_table_selection_dropdown", 
+							multi=True, 
+							placeholder="", 
+							style={"textAlign": "left", "font-size": "12px"})
+					], className="dropdown-luigi", style={"width": "25%", "display": "inline-block", "font-size": "12px", "vertical-align": "middle"}),
+
+					#target priorization switch
+					html.Div(id = "target_prioritization_switch_div", hidden = True, children = [
+						html.Label(["Target prioritization",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="target_prioritization_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"})
+					], style={"width": "16%", "display": "inline-block", "vertical-align": "middle"}),
+
+					#filtered dge table
+					html.Div(id="filtered_dge_table_div", children=[
+						html.Br(),
+						dbc.Spinner(
+							id="loading_dge_table_filtered",
+							size="md",
+							color="lightgray",
+							children=dash_table.DataTable(
+								id="dge_table_filtered",
+								style_cell={
+									"whiteSpace": "normal",
+									"height": "auto",
+									"fontSize": 12, 
+									"font-family": "arial",
+									"textAlign": "center"
+								},
+								page_size=25,
+								sort_action="native",
+								style_header={
+									"textAlign": "center"
+								},
+								style_cell_conditional=[
+									{
+										"if": {"column_id": "External resources"},
+										"width": "12%"
+									}
+								],
+								style_data_conditional=[],
+								style_as_list_view=True
+							)
+						)
+					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}, hidden=True),
+
+					#full dge table
+					html.Div([
+						html.Br(),
+						dbc.Spinner(
+							id="loading_dge_table",
+							size="md",
+							color="lightgray",
+							children=dash_table.DataTable(
+								id="dge_table",
+								style_cell={
+									"whiteSpace": "normal",
+									"height": "auto",
+									"fontSize": 12, 
+									"font-family": "arial",
+									"textAlign": "center"
+								},
+								page_size=25,
+								sort_action="native",
+								style_header={
+									"textAlign": "center"
+								},
+								style_cell_conditional=[
+									{
+										"if": {"column_id": "External resources"},
+										"width": "12%"
+									}
+								],
+								style_data_conditional=[],
+								style_as_list_view=True
+							)
+						)
+					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
+					html.Br()
+				], style=tab_style, selected_style=tab_selected_style),
+				#go table tab
+				dcc.Tab(id="go_table_tab", label="GO table", value="go_table_tab", children=[
+					
+					html.Br(),
+					#title go table
+					html.Div(id="go_table_title", children=[], style={"width": "100%", "display": "inline-block", "textAlign": "center", "font-size": "14px"}),
+					html.Br(),
+					html.Br(),
+
+					#info go table
+					html.Div([
+						html.Div(id="info_go_table",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
+						dbc.Tooltip(
+							children=[dcc.Markdown(
+								"""
+								##### Table showing the functional enrichment statistics for the comparison chosen in the __comparison__ dropdown (uppermost menù)
+								
+								Use the GO plot __search bar__ to display a filtered table with the selected gene sets.
+								
+								Click a __gene set name__ to see its specifications within the AmiGO 2 database.
+								""")
+							],
+							target="info_go_table",
+							style={"font-family": "arial", "font-size": 14}
+						),
+					], style={"width": "12%", "display": "inline-block", "vertical-align": "middle", "textAlign": "center"}),
+
+					#download go button
+					html.Div([
+						dbc.Spinner(
+							size = "md",
+							color = "lightgray",
+							children=[
+								dbc.Button("Download full table", id="download_go_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
+								dcc.Download(id="download_go")
+							]
+						)
+					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
+
+					#download button partial
+					html.Div([
+						dbc.Spinner(
+							size = "md",
+							color = "lightgray",
+							children=[
+								dbc.Button("Download filtered table", id="download_go_button_partial", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
+								dcc.Download(id="download_go_partial")
+							]
+						)
+					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
+
+					#go table
+					html.Div([
+						html.Br(),
+						dbc.Spinner(
+							id="loading_go_table",
+							size="md",
+							color="lightgray",
+							children=dash_table.DataTable(
+								id="go_table",
+								style_cell={
+									"whiteSpace": "normal",
+									"height": "auto",
+									"fontSize": 12, 
+									"font-family": "arial",
+									"textAlign": "center"
+								},
+								page_size=10,
+								sort_action="native",
+								style_header={
+									"textAlign": "center"
+								},
+								style_cell_conditional=[
+									{
+										"if": {"column_id": "Genes"},
+										"textAlign": "left",
+										"width": "50%"
+									},
+									{
+										"if": {"column_id": "Lipids"},
+										"textAlign": "left",
+										"width": "50%"
+									},
+									{
+										"if": {"column_id": "GO biological process"},
+										"textAlign": "left",
+										"width": "15%"
+									},
+									{
+										"if": {"column_id": "Functional category"},
+										"textAlign": "left",
+										"width": "15%"
+									}
+								],
+								style_data_conditional=[
+									{
+										"if": {"filter_query": "{{DGE}} = {}".format("up")},
+										"backgroundColor": "#FFE6E6"
+									},
+									{
+										"if": {"filter_query": "{{DGE}} = {}".format("down")},
+										"backgroundColor": "#E6F0FF"
+									},
+									{
+										"if": {	"filter_query": "{{DLE}} = {}".format("up")},
+										"backgroundColor": "#FFE6E6"
+									},
+									{
+										"if": {"filter_query": "{{DLE}} = {}".format("down")},
+										"backgroundColor": "#E6F0FF"
+									},
+									{
+										"if": {"state": "selected"},
+										"backgroundColor": "rgba(44, 62, 80, 0.2)",
+										"border": "1px solid #597ea2",
+									}
+								],
+								style_as_list_view=True
+							)
+						)
+					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
+					html.Br()
+				], style=tab_style, selected_style=tab_selected_style)
+			], style= {"height": 40})
+		], style=tab_style, selected_style=tab_selected_style)
+
+		#save main tabs in a list to use as children
+		all_tabs = [metadata_tab] + [expression_abundance_profiling_tab] + [differential_analysis_tab]
+
+		## additional tabs ##
+		main_folders = functions.get_content_from_github(path, "./")
+		if "mofa" in main_folders:
+			mofa_tab = dcc.Tab(label="Multi-omics signatures", value="mofa_tab", children=[
+				#mofa data overview
+				html.Div([
+					dbc.Spinner(
+						children = dcc.Graph(id="mofa_data_overview"),
+						size = "md",
+						color = "lightgray"
+					)
+				], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
+				#heatmap and factor plot
+				html.Div([
+					#heatmap
+					html.Div([
+						dbc.Spinner(
+							children = dcc.Graph(id="mofa_variance_heatmap"),
+							size = "md",
+							color = "lightgray"
+						)
+					], style={"width": "100%", "display": "inline-block"}),
+					#factor + factor values + feature expression/abundance
+					html.Div([
+						#factor
+						html.Div([
+							dbc.Spinner(
+								children = dcc.Graph(id="mofa_factor_plot"),
+								size = "md",
+								color = "lightgray"
+							)
+						], style={"width": "50%", "display": "inline-block", "vertical-align": "top"}),
+						#factor values and feature expression/abundance
+						html.Div([
+							#group/condition switch
+							html.Div([
+								#left description
+								html.Div([
+									"Groups"
+								], style={"width": "15%", "display": "inline-block", "text-align": "left"}),
+								html.Div([], style={"width": "5%", "display": "inline-block"}),
+								#switch
+								html.Div([
+									dbc.Checklist(
+										options=[
+											{"label": "", "value": 1},
+										],
+										value=[],
+										id="group_condition_switch_mofa",
+										switch=True
+									)
+								], style={"width": "1%", "display": "inline-block"}),
+								#right description
+								html.Div([], style={"width": "5%", "display": "inline-block"}),
+								html.Div([
+									"Conditions"
+								], style={"width": "15%", "display": "inline-block", "text-align": "right"})
+							], style={"width": "100%", "display": "inline-block"}),
+							
+							#all factors values
+							html.Div([
+								dbc.Spinner(
+									children = dcc.Graph(id="mofa_all_factors_values"),
+									size = "md",
+									color = "lightgray"
+								),
+							], style={"width": "100%", "display": "inline-block"}),
+							#feature expression or abundance
+							html.Div([
+								dbc.Spinner(
+									children = dcc.Graph(id="mofa_factor_expression_abundance"),
+									size = "md",
+									color = "lightgray"
+								)
+							], style={"width": "100%", "display": "inline-block"})
+						], style={"width": "50%", "display": "inline-block", "vertical-align": "top"})
+					], style={"width": "100%", "display": "inline-block", "vertical-align": "top"})
+				], style={"width": "65%", "display": "inline-block", "vertical-align": "top"}),
+
+				html.Br()
+			], style=tab_style, selected_style=tab_selected_style)
+			all_tabs = [metadata_tab] + [mofa_tab] + [expression_abundance_profiling_tab] + [differential_analysis_tab]
+
+		return color_mapping, label_to_value, all_tabs, metadata_table_data, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, header_children
+
+	#change analysis data callback
+	@app.callback(
+		Output("feature_dataset_dropdown", "options"),
+		Output("feature_dataset_dropdown", "value"),
+		Output("mds_dataset", "options"),
+		Output("mds_dataset", "value"),
+		Input("analysis_dropdown", "value")
+	)
+	def update_data_related_dropdowns(path):
+		#get all subdir to populate expression dataset
+		subdirs = functions.get_content_from_github(path, "data")
+		expression_datasets_options = []
+		mds_dataset_options = []
+		for dir in subdirs:
+			if dir in ["human", "mouse"]:
+				organism = dir
+				expression_datasets_options.append({"label": dir.capitalize(), "value": dir})
+				mds_dataset_options.append({"label": dir.capitalize(), "value": dir})
+			else:
+				non_host_content = functions.get_content_from_github(path, "data/" + dir)
+				if "lipid" in dir:
+					expression_datasets_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
+					if "mds" in non_host_content:
+						mds_dataset_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
+				else:
+					kingdom = dir.split("_")[0]
+					lineage = dir.split("_")[1]
+					expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+					#check if there is mds for each metatranscriptomics
+					if "mds" in non_host_content:
+						mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+
+		return expression_datasets_options, organism, mds_dataset_options, organism
+
+	#get discrete and continuous variable dropdowns
+	@app.callback(
+		Output("x_boxplot_dropdown", "options"),
+		Output("group_by_boxplot_dropdown", "options"),
+		Output("split_by_1_deconvolution_dropdown", "options"),
+		Output("split_by_2_deconvolution_dropdown", "options"),
+		Input("discrete_metadata_options", "data")
+	)
+	def discrete_metadata_options(options_discrete):
+		return options_discrete, options_discrete, options_discrete, options_discrete
+
 	#add gsea switch
 	@app.callback(
 		Output("add_gsea_switch_div", "hidden"),
 		Output("add_gsea_switch", "value"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def show_add_gsea_switch(expression_dataset):
+	def show_add_gsea_switch(expression_dataset, path):
 		if expression_dataset in ["human", "mouse"]:
-			folders = functions.get_content_from_github("data/{}".format(expression_dataset))
+			folders = functions.get_content_from_github(path, "data/{}".format(expression_dataset))
 			if "gsea" in folders:
 				hidden = False	
 			else:
@@ -65,20 +640,21 @@ def define_callbacks(app):
 		Input("go_plot_graph", "clickData"),
 		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
+		Input("analysis_dropdown", "value"),
 		State("heatmap_text_area", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("feature_heatmap_dropdown", "value"),
 		State("genes_not_found_heatmap_div", "hidden"),
 		State("genes_not_found_heatmap_div", "children"),
 		State("update_heatmap_plot_button", "n_clicks"),
-		State("add_gsea_switch", "value")
+		State("add_gsea_switch", "value"),
 	)
-	def serach_genes_in_text_area_heatmap(n_clicks_search, go_plot_click, contrast, stringency_info, text, expression_dataset, selected_features, log_hidden_status, log_div, n_clicks_update_plot, add_gsea_switch):
+	def serach_genes_in_text_area_heatmap(n_clicks_search, go_plot_click, contrast, stringency_info, path, text, expression_dataset, selected_features, log_hidden_status, log_div, n_clicks_update_plot, add_gsea_switch):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15)
+		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15, path)
 
 		return selected_features, log_div, log_hidden_status, text, n_clicks_update_plot
 
@@ -93,19 +669,20 @@ def define_callbacks(app):
 		Input("go_plot_graph", "clickData"),
 		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
+		Input("analysis_dropdown", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("multi_boxplots_text_area", "value"),
 		State("feature_multi_boxplots_dropdown", "value"),
 		State("genes_not_found_multi_boxplots_div", "hidden"),
 		State("add_gsea_switch", "value"),
-		State("update_multiboxplot_plot_button", "n_clicks")
+		State("update_multiboxplot_plot_button", "n_clicks"),
 	)
-	def serach_genes_in_text_area_multiboxplots(n_clicks_search, go_plot_click, contrast, stringency_info, expression_dataset, text, selected_features, log_hidden_status, add_gsea_switch, update_multiboxplot_plot_button):
+	def serach_genes_in_text_area_multiboxplots(n_clicks_search, go_plot_click, contrast, stringency_info, path, expression_dataset, text, selected_features, log_hidden_status, add_gsea_switch, update_multiboxplot_plot_button):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15)
+		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15, path)
 		
 		return selected_features, log_div, log_hidden_status, text, update_multiboxplot_plot_button
 
@@ -128,9 +705,13 @@ def define_callbacks(app):
 		Output("expression_abundance_profiling", "label"),
 		Output("dge_table_tab", "label"),
 		Output("go_table_tab", "label"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		Input("annotation_dropdown_options", "data"),
+		Input("continuous_metadata_options", "data"),
+		State("analysis_dropdown", "value"),
+		State("annotation_dropdown_options", "data"),
 	)
-	def update_tabs(expression_dataset):
+	def update_expression_abundance_profiling_tabs(expression_dataset, options_discrete, options_continue, path, annotation_dropdown_options):
 		
 		#label for expression_abundance_profiling
 		if expression_dataset in ["human", "mouse"]:
@@ -251,8 +832,8 @@ def define_callbacks(app):
 					#dropdowns
 					html.Label(["Annotations", 
 						dcc.Dropdown(id="annotation_dropdown", 
-							multi=True, 
-							options=heatmap_annotation_options, 
+							multi=True,
+							options=annotation_dropdown_options,
 							value=[], 
 							style={"textAlign": "left", "font-size": "12px"})
 					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
@@ -358,18 +939,7 @@ def define_callbacks(app):
 
 						#update plot button
 						html.Div([
-							dbc.Button("Update plot", id="update_multiboxplot_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-							#warning popup
-							dbc.Popover(
-								children=[
-									dbc.PopoverHeader(children=["Warning!"], tag="div", style={"font-family": "arial", "font-size": 14}),
-									dbc.PopoverBody(children=["Plotting more than 20 features is not allowed."], style={"font-family": "arial", "font-size": 12})
-								],
-								id="popover_plot_multiboxplots",
-								target="update_multiboxplot_plot_button",
-								is_open=False,
-								style={"font-family": "arial"}
-							),
+							dbc.Button("Update plot", id="update_multiboxplot_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})
 						], style={"width": "30%", "display": "inline-block", "vertical-align": "middle"}),
 					]),
 					
@@ -409,7 +979,7 @@ def define_callbacks(app):
 						dcc.Dropdown(
 						id="x_multiboxplots_dropdown",
 						clearable=False,
-						options=discrete_metadata_options,
+						options=options_discrete,
 						value="condition"
 					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 					#y dropdown
@@ -417,8 +987,8 @@ def define_callbacks(app):
 						dcc.Dropdown(
 							id="y_multiboxplots_dropdown",
 							clearable=False,
+							options=options_continue,
 							value="log2_expression",
-							options=continuous_metadata_options, 
 							className="dropdown-luigi"
 					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 					#group by dropdown
@@ -426,8 +996,8 @@ def define_callbacks(app):
 						dcc.Dropdown(
 							id="group_by_multiboxplots_dropdown",
 							clearable=False,
-							value="condition",
-							options=discrete_metadata_options
+							options=options_discrete,
+							value="condition"
 					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 					#plot per row
 					html.Label(["Plot per row", 
@@ -518,7 +1088,7 @@ def define_callbacks(app):
 		children = [heatmap_tab, multi_violin_tab]
 
 		#add diversity tab when some species expression dataset is selected
-		main_folders = functions.get_content_from_github("./")
+		main_folders = functions.get_content_from_github(path, "./")
 		if "species" in expression_dataset and "diversity" in main_folders:
 
 			#defrine layout for diversity tab
@@ -532,7 +1102,7 @@ def define_callbacks(app):
 							dcc.Dropdown(
 								id="group_by_diversity_dropdown",
 								clearable=False,
-								options=discrete_metadata_options,
+								options=options_discrete,
 								value="condition"
 						)], style={"width": "15%", "vertical-align": "middle", "textAlign": "left"}, className="dropdown-luigi"),
 					], style={"width": "100%", "display": "inline-block", "font-size": "12px"}),
@@ -558,11 +1128,12 @@ def define_callbacks(app):
 	@app.callback(
 		Output("mds_type", "options"),
 		Output("mds_type", "value"),
-		Input("mds_dataset", "value")
+		Input("mds_dataset", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_mds_type_for_dataset(mds_dataset):
+	def get_mds_type_for_dataset(mds_dataset, path):
 
-		mds_files = functions.get_content_from_github("data/" + mds_dataset + "/mds")
+		mds_files = functions.get_content_from_github(path, "data/" + mds_dataset + "/mds")
 		
 		options = []
 		for file in mds_files:
@@ -585,9 +1156,10 @@ def define_callbacks(app):
 		Output("feature_label", "children"),
 		Output("multi_gene_dge_table_selection_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value"),
 		State("feature_dropdown", "value")
 	)
-	def setup_new_dataset_features(expression_dataset, current_value):
+	def setup_new_dataset_features(expression_dataset, path, current_value):
 		#for web app startup, get default value
 		if expression_dataset not in ["human", "mouse"]:
 			if "lipid" in expression_dataset:
@@ -603,7 +1175,7 @@ def define_callbacks(app):
 						search_value = "data/" + expression_dataset + "/counts/lipid_list.tsv"
 					else:
 						search_value = "data/" + expression_dataset + "/counts/feature_list.tsv"
-				search_value = functions.download_from_github(search_value)
+				search_value = functions.download_from_github(path, search_value)
 				search_value = search_value.readline()
 				search_value = search_value.rstrip()
 		else:
@@ -613,7 +1185,7 @@ def define_callbacks(app):
 				search_value = "Gapdh"
 
 		#get feature list and label
-		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
 
 		#populate options based on user search
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
@@ -636,9 +1208,10 @@ def define_callbacks(app):
 		Output("feature_dropdown", "options"),
 		Input("feature_dropdown", "search_value"),
 		Input("feature_dropdown", "value"),
-		State("feature_dataset_dropdown", "value")
+		State("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def update_options_feature_dropdown(search_value, current_value, expression_dataset):
+	def update_options_feature_dropdown(search_value, current_value, expression_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -652,7 +1225,7 @@ def define_callbacks(app):
 			search_value = current_value
 
 		#get feature list and label
-		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
 
 		#populate options based on user search
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
@@ -665,9 +1238,10 @@ def define_callbacks(app):
 		Output("feature_heatmap_dropdown", "placeholder"),
 		Input("feature_heatmap_dropdown", "search_value"),
 		Input("feature_heatmap_dropdown", "value"),
-		State("feature_dataset_dropdown", "value")
+		State("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset):
+	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -681,7 +1255,7 @@ def define_callbacks(app):
 			search_value = "ç"
 
 		#get feature list and label
-		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
 
 		#populate options based on user search
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
@@ -694,9 +1268,10 @@ def define_callbacks(app):
 		Output("feature_multi_boxplots_dropdown", "placeholder"),
 		Input("feature_multi_boxplots_dropdown", "search_value"),
 		Input("feature_multi_boxplots_dropdown", "value"),
-		State("feature_dataset_dropdown", "value")
+		State("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset):
+	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -710,7 +1285,7 @@ def define_callbacks(app):
 			search_value = "ç"
 
 		#get feature list and label
-		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
 
 		#populate options based on user search
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
@@ -723,9 +1298,10 @@ def define_callbacks(app):
 		Output("multi_gene_dge_table_selection_dropdown", "placeholder"),
 		Input("multi_gene_dge_table_selection_dropdown", "search_value"),
 		Input("multi_gene_dge_table_selection_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset):
+	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -735,7 +1311,7 @@ def define_callbacks(app):
 			raise PreventUpdate
 		
 		#get feature list and label
-		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(expression_dataset)
+		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
 
 		#populate options based on user search
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
@@ -748,9 +1324,10 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value"),
 		Input("ma_plot_graph", "clickData"),
 		Input("dge_table", "active_cell"),
-		Input("dge_table_filtered", "active_cell")
+		Input("dge_table_filtered", "active_cell"),
+		State("analysis_dropdown", "value")
 	)
-	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, active_cell_full, active_cell_filtered):
+	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, active_cell_full, active_cell_filtered, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -796,7 +1373,7 @@ def define_callbacks(app):
 							value = "data/" + expression_dataset + "/counts/lipid_list.tsv"
 						else:
 							value = "data/" + expression_dataset + "/counts/feature_list.tsv"
-					value = functions.download_from_github(value)
+					value = functions.download_from_github(path, value)
 					value = value.readline()
 					value = value.rstrip()
 			else:
@@ -812,14 +1389,15 @@ def define_callbacks(app):
 		Output("contrast_dropdown", "options"),
 		Output("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("comparison_filter_input", "value")
+		Input("comparison_filter_input", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_contrasts(expression_dataset, input_value):
+	def get_contrasts(expression_dataset, input_value, path):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		
 		dge_folder = "data/" + expression_dataset + "/dge"
-		dge_files = functions.get_content_from_github(dge_folder)
+		dge_files = functions.get_content_from_github(path, dge_folder)
 		contrasts = []
 		filtered_contrasts = []
 		#get dge files for getting all the contrasts
@@ -850,28 +1428,32 @@ def define_callbacks(app):
 		if len(filtered_contrasts) != 0:
 			contrasts = filtered_contrasts
 		
+		#get which repo has been selected
+		repo = functions.get_repo_name_from_path(path, repos)
+
 		#define options and default value
 		options = []
 		possible_values = []
 		for contrast in contrasts:
 			options.append({"label": contrast.replace("-", " ").replace("_", " "), "value": contrast})
 			possible_values.append(contrast)
-		if config["default_comparison"] != "First" and config["default_comparison"] in possible_values:
-			value = config["default_comparison"]
+		if config["repos"][repo]["default_comparison"] != "First" and config["repos"][repo]["default_comparison"] in possible_values:
+			value = config["repos"][repo]["default_comparison"]
 		else:
 			value = options[0]["value"]
 
 		return options, value
 
-	#stringecy dropdown
+	#stringency dropdown
 	@app.callback(
 		Output("stringency_dropdown", "value"),
 		Output("stringency_dropdown", "options"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		Input("analysis_dropdown", "value")
 	)
-	def get_stringecy_value(expression_dataset):
+	def get_stringency_value(expression_dataset, path):	
 		if expression_dataset in ["human", "mouse"]:
-			folders = functions.get_content_from_github("data/{}".format(expression_dataset))
+			folders = functions.get_content_from_github(path, "data/{}".format(expression_dataset))
 			options = []
 			#get all dge analyisis performed
 			for folder in folders:
@@ -892,7 +1474,8 @@ def define_callbacks(app):
 					options.append({"label": label, "value": folder})
 		
 			#default value defined in config file
-			value = functions.config["stringecy"]
+			repo = functions.get_repo_name_from_path(path, repos)
+			value = functions.config["repos"][repo]["stringency"]
 		else:
 			options = [{"label": "P-value 0.05", "value": "pvalue_0.05"}]
 			value = "pvalue_0.05"
@@ -904,9 +1487,17 @@ def define_callbacks(app):
 		Output("y_boxplot_dropdown", "options"),
 		Output("y_boxplot_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		State("y_boxplot_dropdown", "options")
+		Input("continuous_metadata_options", "data"),
+		State("y_boxplot_dropdown", "options"),
 	)
-	def get_expression_or_abundance_dropdowns(feature_dataset_dropdown, y_boxplots_dropdown):
+	def get_expression_or_abundance_dropdowns(feature_dataset_dropdown, continuous_metadata_options_data, y_boxplots_dropdown):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		if trigger_id == "continuous_metadata_options.data":
+			y_boxplots_dropdown = continuous_metadata_options_data
+		
 		if feature_dataset_dropdown in ["human", "mouse"] or "genes" in feature_dataset_dropdown:
 			y_boxplots_dropdown[0] = {"label": "Log2 expression", "value": "log2_expression"}
 			value = "log2_expression"
@@ -922,11 +1513,12 @@ def define_callbacks(app):
 		Output("x_filter_boxplot_dropdown", "value"),
 		Input("x_boxplot_dropdown", "value"),
 		Input("y_boxplot_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_x_values_boxplots(selected_x, selected_y, feature_dataset):
+	def get_x_values_boxplots(selected_x, selected_y, feature_dataset, path):
 		
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset)
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
 
 		return options, x_values
 
@@ -936,11 +1528,12 @@ def define_callbacks(app):
 		Output("x_filter_multiboxplots_dropdown", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
 		Input("y_multiboxplots_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def get_x_values_multiboxplots(selected_x, selected_y, feature_dataset):
+	def get_x_values_multiboxplots(selected_x, selected_y, feature_dataset, path):
 
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset)
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
 
 		return options, x_values
 
@@ -950,9 +1543,12 @@ def define_callbacks(app):
 	@app.callback(
 		Output("download_metadata", "data"),
 		Input("download_metadata_button", "n_clicks"),
+		State("metadata_table", "data"),
 		prevent_initial_call=True
 	)
-	def download_metadata(button_click):
+	def download_metadata(button_click, metadata_table):
+		metadata_table = pd.DataFrame(metadata_table)
+		
 		with tempfile.TemporaryDirectory() as tmpdir:
 			writer = pd.ExcelWriter(f"{tmpdir}/metadata.xlsx")
 
@@ -978,15 +1574,16 @@ def define_callbacks(app):
 	@app.callback(
 		Output("download_diffexp", "data"),
 		Input("download_diffexp_button", "n_clicks"),
+		State("analysis_dropdown", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("contrast_dropdown", "value"),
 		State("stringency_dropdown", "value"),
 		prevent_initial_call=True
 	)
-	def downlaod_diffexp_table(button_click, dataset, contrast, stringency):
+	def downlaod_diffexp_table(button_click, path, dataset, contrast, stringency):
 
 		#download from GitHub
-		df = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
+		df = functions.download_from_github(path, "data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
 		#read the downloaded content and make a pandas dataframe
 		df = pd.read_csv(df, sep="\t")
 		df = df[["Gene", "Geneid", "log2FoldChange", "lfcSE", "pvalue", "padj", "baseMean"]]
@@ -1024,16 +1621,17 @@ def define_callbacks(app):
 	@app.callback(
 		Output("download_diffexp_partial", "data"),
 		Input("download_diffexp_partial_button", "n_clicks"),
+		State("analysis_dropdown", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("contrast_dropdown", "value"),
 		State("stringency_dropdown", "value"),
 		State("multi_gene_dge_table_selection_dropdown", "value"),
 		prevent_initial_call=True
 	)
-	def downlaod_diffexp_table_partial(button_click, dataset, contrast, stringency, dropdown_values):
+	def downlaod_diffexp_table_partial(button_click, path, dataset, contrast, stringency, dropdown_values):
 		
 		#download from GitHub
-		df = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
+		df = functions.download_from_github(path, "data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
 		df = pd.read_csv(df, sep="\t")
 		df = df[["Gene", "Geneid", "log2FoldChange", "lfcSE", "pvalue", "padj", "baseMean"]]
 
@@ -1092,13 +1690,14 @@ def define_callbacks(app):
 	@app.callback(
 		Output("download_go", "data"),
 		Input("download_go_button", "n_clicks"),
+		State("analysis_dropdown", "value"),
 		State("stringency_dropdown", "value"),
 		State("contrast_dropdown", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("add_gsea_switch", "value"),
 		prevent_initial_call=True
 	)
-	def download_go_table(button_click, stringency, contrast, expression_dataset, add_gsea_switch):
+	def download_go_table(button_click, path, stringency, contrast, expression_dataset, add_gsea_switch):
 		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
 			raise PreventUpdate
 
@@ -1111,15 +1710,15 @@ def define_callbacks(app):
 
 		#download from GitHub
 		if expression_dataset in ["human", "mouse"]:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
 		else:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
 		go_df = pd.read_csv(go_df, sep="\t")
 		go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 
 		#concatenate gsea results if the switch is true
 		if boolean_add_gsea_switch:
-			gsea_df = functions.download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
+			gsea_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
 			gsea_df = pd.read_csv(gsea_df, sep = "\t")
 			gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 			go_df = pd.concat([go_df, gsea_df])
@@ -1135,9 +1734,10 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("stringency_dropdown", "value"),
 		State("add_gsea_switch", "value"),
+		State("analysis_dropdown", "value"),
 		prevent_initial_call=True
 	)
-	def download_partial_go_table(n_clicks, contrast, search_value, expression_dataset, stringency, add_gsea_switch):
+	def download_partial_go_table(n_clicks, contrast, search_value, expression_dataset, stringency, add_gsea_switch, path):
 		
 		#boolean switch
 		boolean_add_gsea_switch = functions.boolean_switch(add_gsea_switch)
@@ -1148,16 +1748,16 @@ def define_callbacks(app):
 
 		#define search query if present
 		if expression_dataset in ["human", "mouse"]:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
 		else:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
 		#open df
 		go_df = pd.read_csv(go_df, sep="\t")
 		go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 		
 		#concatenate gsea results if the switch is true
 		if boolean_add_gsea_switch:
-			gsea_df = functions.download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
+			gsea_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
 			gsea_df = pd.read_csv(gsea_df, sep = "\t")
 			gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 			go_df = pd.concat([go_df, gsea_df])
@@ -1180,9 +1780,10 @@ def define_callbacks(app):
 		Input("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
-		Input("target_prioritization_switch", "value")
+		Input("target_prioritization_switch", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def display_filtered_dge_table(dropdown_values, contrast, dataset, fdr, target_prioritization):
+	def display_filtered_dge_table(dropdown_values, contrast, dataset, fdr, target_prioritization, path):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
@@ -1196,7 +1797,7 @@ def define_callbacks(app):
 		else:
 			hidden_div = False
 			#open tsv
-			table = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
+			table = functions.download_from_github(path, "data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
 			table = pd.read_csv(table, sep = "\t")
 
 			#filter selected genes
@@ -1207,7 +1808,7 @@ def define_callbacks(app):
 				dropdown_values = [value.replace("€", "/")for value in dropdown_values]
 			table = table[table["Gene"].isin(dropdown_values)]
 
-			columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, fdr, boolean_target_prioritization)
+			columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, fdr, boolean_target_prioritization, path)
 
 		return columns, data, style_data_conditional, hidden_div
 
@@ -1219,16 +1820,17 @@ def define_callbacks(app):
 		Input("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
-		Input("target_prioritization_switch", "value")
+		Input("target_prioritization_switch", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def display_dge_table(contrast, dataset, strincency, target_prioritization):
+	def display_dge_table(contrast, dataset, strincency, target_prioritization, path):
 		#open tsv
-		table = functions.download_from_github("data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
+		table = functions.download_from_github(path, "data/" + dataset + "/dge/" + contrast + ".diffexp.tsv")
 		table = pd.read_csv(table, sep = "\t")
 		
 		boolean_target_prioritization = functions.boolean_switch(target_prioritization)
 		
-		columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, strincency, boolean_target_prioritization)
+		columns, data, style_data_conditional = functions.dge_table_operations(table, dataset, strincency, boolean_target_prioritization, path)
 
 		return columns, data, style_data_conditional
 
@@ -1240,9 +1842,10 @@ def define_callbacks(app):
 		Input("stringency_dropdown", "value"),
 		Input("go_plot_filter_input", "value"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("add_gsea_switch", "value")
+		Input("add_gsea_switch", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def display_go_table(contrast, stringency, search_value, expression_dataset, add_gsea_switch):
+	def display_go_table(contrast, stringency, search_value, expression_dataset, add_gsea_switch, path):
 		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
 			raise PreventUpdate
 		
@@ -1254,14 +1857,14 @@ def define_callbacks(app):
 			expression_dataset = "lipid"
 		
 		if expression_dataset in ["human", "mouse"]:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
 		else:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
 		go_df = pd.read_csv(go_df, sep="\t")
 		go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 		#concatenate gsea results if the switch is true
 		if boolean_add_gsea_switch:
-			gsea_df = functions.download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
+			gsea_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
 			gsea_df = pd.read_csv(gsea_df, sep = "\t")
 			gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 			gsea_df["Genes"] = gsea_df["Genes"].str.replace(";", "; ")
@@ -1321,8 +1924,11 @@ def define_callbacks(app):
 		Input("mds_metadata", "restyleData"),
 		State("mds_metadata", "figure"),
 		State("mds_expression", "figure"),
+		State("color_mapping", "data"),
+		State("label_to_value", "data"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_mds_metadata(mds_dataset, mds_type, metadata_to_plot, zoom_mds_expression, comparison_only_switch, hide_unselected_switch, contrast, legend_mds_metadata_click, zoom_mds_metadata, mds_metadata_fig, mds_expression_fig):
+	def plot_mds_metadata(mds_dataset, mds_type, metadata_to_plot, zoom_mds_expression, comparison_only_switch, hide_unselected_switch, contrast, legend_mds_metadata_click, zoom_mds_metadata, mds_metadata_fig, mds_expression_fig, color_mapping, label_to_value, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1337,7 +1943,7 @@ def define_callbacks(app):
 			raise PreventUpdate
 
 		#open metadata
-		metadata_df = functions.download_from_github("metadata.tsv")
+		metadata_df = functions.download_from_github(path, "metadata.tsv")
 		metadata_df = pd.read_csv(metadata_df, sep = "\t")
 
 		#change dataset or metadata: create a new figure from tsv
@@ -1353,17 +1959,17 @@ def define_callbacks(app):
 			#create figure from tsv
 			mds_metadata_fig = go.Figure()
 			if str(metadata_df.dtypes[metadata_to_plot]) == "object":
-				mds_metadata_fig = functions.plot_mds_discrete(mds_type, mds_dataset, metadata_to_plot, mds_metadata_fig, height, label_to_value, boolean_comparison_only_switch, contrast)
+				mds_metadata_fig = functions.plot_mds_discrete(color_mapping, mds_type, mds_dataset, metadata_to_plot, mds_metadata_fig, height, label_to_value, boolean_comparison_only_switch, contrast, path)
 			else:
 				variable_to_plot = [metadata_to_plot]
 				#get msd df
-				mds_df = functions.download_from_github("data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
+				mds_df = functions.download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
 				mds_df = pd.read_csv(mds_df, sep = "\t")
 				#comparison only will filter the samples
 				if boolean_comparison_only_switch:
 					mds_df = mds_df[mds_df["condition"].isin(contrast.split("-vs-"))]
-				color = functions.get_color(metadata_to_plot, "continuous")
-				mds_metadata_fig = functions.plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_metadata_fig, height, label_to_value)
+				color = functions.get_color(color_mapping, metadata_to_plot, "continuous")
+				mds_metadata_fig = functions.plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_metadata_fig, height, label_to_value, path)
 
 			#apply old zoom if present
 			if keep_old_zoom:
@@ -1382,7 +1988,7 @@ def define_callbacks(app):
 		#labels for graph title
 		if "lipid" in mds_dataset:
 			omics = "lipidome"
-			subdirs = functions.get_content_from_github("data")
+			subdirs = functions.get_content_from_github(path, "data")
 			if "human" in subdirs:
 				mds_title = "human"
 			elif "mouse" in subdirs:
@@ -1440,9 +2046,12 @@ def define_callbacks(app):
 		Input("mds_metadata", "restyleData"),
 		Input("mds_metadata", "figure"),
 		State("mds_expression", "figure"),
+		State("color_mapping", "data"),
+		State("label_to_value", "data"),
+		State("analysis_dropdown", "value"),
 		prevent_initial_call=True
 	)
-	def plot_mds_feature(mds_dataset, mds_type, expression_dataset, feature, zoom_mds_metadata, legend_click, mds_metadata_fig, mds_expression_fig):
+	def plot_mds_feature(mds_dataset, mds_type, expression_dataset, feature, zoom_mds_metadata, legend_click, mds_metadata_fig, mds_expression_fig, color_mapping, label_to_value, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1463,10 +2072,10 @@ def define_callbacks(app):
 			#create figure
 			mds_expression_fig = go.Figure()
 			#get msd df
-			mds_df = functions.download_from_github("data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
+			mds_df = functions.download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
 			mds_df = pd.read_csv(mds_df, sep = "\t")
-			color = functions.get_color("Log2 expression", "continuous")
-			mds_expression_fig = functions.plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_expression_fig, height, label_to_value)
+			color = functions.get_color(color_mapping, "Log2 expression", "continuous")
+			mds_expression_fig = functions.plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_expression_fig, height, label_to_value, path)
 
 		#update zoom
 		mds_metadata_fig = functions.synchronize_zoom(mds_expression_fig, mds_metadata_fig)
@@ -1483,7 +2092,7 @@ def define_callbacks(app):
 		#labels for graph title
 		if "lipid" in mds_dataset:
 			omics = "lipidome"
-			subdirs = functions.get_content_from_github("data")
+			subdirs = functions.get_content_from_github(path, "data")
 			if "human" in subdirs:
 				mds_title = "human"
 			elif "mouse" in subdirs:
@@ -1536,8 +2145,10 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("boxplots_graph", "figure"),
 		State("x_filter_dropdown_div", "hidden"),
+		State("color_mapping", "data"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_boxplots(feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, expression_dataset, box_fig, hidden):
+	def plot_boxplots(feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, expression_dataset, box_fig, hidden, color_mapping, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1572,7 +2183,7 @@ def define_callbacks(app):
 		else:
 			if trigger_id != "hide_unselected_boxplot_switch.value":
 				#open metadata
-				metadata_df = functions.download_from_github("metadata.tsv")
+				metadata_df = functions.download_from_github(path, "metadata.tsv")
 				metadata_df = pd.read_csv(metadata_df, sep = "\t")
 
 				#clean metadata
@@ -1598,7 +2209,7 @@ def define_callbacks(app):
 
 				#counts as y need external file with count values
 				if y_metadata in ["log2_expression", "log2_abundance"]:
-					counts = functions.download_from_github("data/" + expression_dataset + "/counts/" + feature + ".tsv")
+					counts = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
 					counts = pd.read_csv(counts, sep = "\t")
 					counts = counts.replace("_", " ", regex=True)
 					#merge and compute log2 and replace inf with 0
@@ -1609,9 +2220,13 @@ def define_callbacks(app):
 				#get trace names
 				if x_metadata == group_by_metadata:
 					column_for_filtering = x_metadata
+
+					#get repo used
+					repo = functions.get_repo_name_from_path(path, repos)
+
 					#user defined list of condition
-					if x_metadata == "condition" and config["sorted_conditions"]:
-						metadata_fields_ordered = config["condition_list"]
+					if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]:
+						metadata_fields_ordered = config["repos"][repo]["condition_list"]
 						metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
 					else:
 						metadata_fields_ordered = metadata_df[x_metadata].unique().tolist()
@@ -1679,7 +2294,7 @@ def define_callbacks(app):
 					hovertext = filtered_metadata["hovertext"].tolist()
 
 					#create traces
-					marker_color = functions.get_color(column_for_filtering, metadata)
+					marker_color = functions.get_color(color_mapping, column_for_filtering, metadata)
 					
 					if boolean_show_as_boxplot: 
 						box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
@@ -1731,13 +2346,14 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
-		Input("feature_dropdown", "value")
+		Input("feature_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_MA_plot(expression_dataset, contrast, stringecy_info, feature):
+	def plot_MA_plot(expression_dataset, contrast, stringency_info, feature, path):
 
 		#stingency specs
-		pvalue_type = stringecy_info.split("_")[0]
-		pvalue_value = stringecy_info.split("_")[1]
+		pvalue_type = stringency_info.split("_")[0]
+		pvalue_value = stringency_info.split("_")[1]
 
 		#labels
 		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
@@ -1759,7 +2375,7 @@ def define_callbacks(app):
 			gene_or_species = gene_or_species
 
 		#read table
-		table = functions.download_from_github("data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
+		table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
 		table = pd.read_csv(table, sep = "\t")
 		table["Gene"] = table["Gene"].fillna("NA")
 		#log2 base mean
@@ -1854,7 +2470,7 @@ def define_callbacks(app):
 		ma_plot_fig.update_layout(title={"text": title_text, "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_zeroline=True, yaxis_automargin=True, yaxis_title="Log2 fold change", yaxis_domain=[0.25, 1], font_family="Arial", height=415, margin=dict(t=50, b=5, l=5, r=5), showlegend=False)
 
 		#annotations
-		stringecy_annotation = [dict(text = "{pvalue_type} < {stringency}".format(pvalue_type=pvalue_type_for_labels, stringency = str(float(pvalue_value))), align="right", xref="paper", yref="paper", x=0.02, y=0.25, showarrow=False, font=dict(size=14, family="Arial"))]
+		stringency_annotation = [dict(text = "{pvalue_type} < {stringency}".format(pvalue_type=pvalue_type_for_labels, stringency = str(float(pvalue_value))), align="right", xref="paper", yref="paper", x=0.02, y=0.25, showarrow=False, font=dict(size=14, family="Arial"))]
 		up_genes_annotation = [dict(text = str(up) + " higher in<br>" + contrast.split("-vs-")[0].replace("_", " "), align="right", xref="paper", yref="paper", x=0.98, y=0.98, showarrow=False, font=dict(size=14, color="#DE2D26", family="Arial"))]
 		down_genes_annotation = [dict(text = str(down) + " higher in<br>" + contrast.split("-vs-")[1].replace("_", " "), align="right", xref="paper", yref="paper", x=0.98, y=0.25, showarrow=False, font=dict(size=14, color="#045A8D", family="Arial"))]
 		annotaton_title = [dict(text = "Show annotations", align="center", xref="paper", yref="paper", x=0, y=0, showarrow=False, font_size=12)]
@@ -1874,7 +2490,7 @@ def define_callbacks(app):
 			selected_gene_annotation = [dict(x=mid_x, y=mid_y, text="Multiple transcripts with the same gene name.", showarrow=False, font=dict(family="Arial", size=12, color="#252525"), align="center", bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)]
 
 		#add default annotations
-		ma_plot_fig["layout"]["annotations"] = annotaton_title + stringecy_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation
+		ma_plot_fig["layout"]["annotations"] = annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation
 
 		#buttons
 		ma_plot_fig.update_layout(updatemenus=[dict(
@@ -1896,7 +2512,7 @@ def define_callbacks(app):
 									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}},
 									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}}]
 						},
-						{"annotations": annotaton_title + stringecy_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation}]
+						{"annotations": annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation}]
 				),
 				dict(label="Differential analysis",
 					method="update",
@@ -1908,7 +2524,7 @@ def define_callbacks(app):
 									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}},
 									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}]
 						},
-						{"annotations": annotaton_title + stringecy_annotation + up_genes_annotation + down_genes_annotation}]
+						{"annotations": annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation}]
 				),
 				dict(label="Selected {gene_or_species}".format(gene_or_species = gene_or_species.lower()),
 					method="update",
@@ -1952,15 +2568,16 @@ def define_callbacks(app):
 		Output("deconvolution_div", "hidden"),
 		Input("split_by_1_deconvolution_dropdown", "value"),
 		Input("split_by_2_deconvolution_dropdown", "value"),
-		Input("plots_per_row_deconvolution_dropdown", "value")
+		Input("plots_per_row_deconvolution_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_deconvolution(split_by, split_by_2, plot_per_row):
+	def plot_deconvolution(split_by, split_by_2, plot_per_row, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
 		#open deconvolution df
-		deconvolution_df = functions.download_from_github("deconvolution.tsv")
+		deconvolution_df = functions.download_from_github(path, "deconvolution.tsv")
 		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t")
 
 		if deconvolution_df.empty:
@@ -2105,7 +2722,7 @@ def define_callbacks(app):
 			if height == 140:
 				height = 240
 			#get host for title
-			host = functions.get_content_from_github("data")
+			host = functions.get_content_from_github(path, "data")
 			if "human" in host:
 				host = "human"
 			else:
@@ -2129,9 +2746,11 @@ def define_callbacks(app):
 		Input("stringency_dropdown", "value"),
 		Input("go_plot_filter_input", "value"),
 		Input("add_gsea_switch", "value"),
-		State("feature_dataset_dropdown", "value")
+		State("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_go_plot(contrast, stringecy, search_value, add_gsea_switch, expression_dataset):
+	def plot_go_plot(contrast, stringency, search_value, add_gsea_switch, expression_dataset, path):
+
 		#metatranscriptomics does not have go
 		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
 			raise PreventUpdate
@@ -2144,9 +2763,9 @@ def define_callbacks(app):
 			expression_dataset = "lipid"
 
 		#get pvalue type and value
-		pvalue_type = stringecy.split("_")[0]
+		pvalue_type = stringency.split("_")[0]
 		pvalue_type = pvalue_type.replace("padj", "FDR").replace("pvalue", "P-value")
-		pvalue_threshold = stringecy.split("_")[1]
+		pvalue_threshold = stringency.split("_")[1]
 
 		#omics type
 		if "lipid" in expression_dataset:
@@ -2156,15 +2775,15 @@ def define_callbacks(app):
 
 		#open df
 		if expression_dataset in ["human", "mouse"]:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + stringecy + "/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + stringency + "/" + contrast + ".merged_go.tsv")
 		else:
-			go_df = functions.download_from_github("data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
+			go_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "lo/" + contrast + ".merged_go.tsv")
 		go_df = pd.read_csv(go_df, sep = "\t")
 		go_df = go_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
 		
 		#concatenate gsea results if the switch is true
 		if boolean_add_gsea_switch:
-			gsea_df = functions.download_from_github("data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
+			gsea_df = functions.download_from_github(path, "data/{}/".format(expression_dataset) + "gsea/" + contrast + ".merged_go.tsv")
 			gsea_df = pd.read_csv(gsea_df, sep = "\t")
 			gsea_df["Genes"] = [gene.replace(";", "; ") for gene in gsea_df["Genes"]]
 			gsea_df = gsea_df[["DGE", "Genes", "Process~name", "num_of_Genes", "gene_group", "percentage%", "P-value"]]
@@ -2383,8 +3002,11 @@ def define_callbacks(app):
 		#resize
 		State("hetamap_height_slider", "max"),
 		State("hetamap_width_slider", "max"),
+		State("analysis_dropdown", "value"),
+		State("label_to_value", "data"),
+		State("color_mapping", "data")
 	)
-	def plot_heatmap(n_clicks, clustered_switch, comparison_only_switch, hide_unselected_switch, height, width, features, annotations, expression_dataset, old_figure, contrast, max_height, width_max):
+	def plot_heatmap(n_clicks, clustered_switch, comparison_only_switch, hide_unselected_switch, height, width, features, annotations, expression_dataset, old_figure, contrast, max_height, width_max, path, label_to_value, color_mapping):
 		# jak1 jak2 jak3 stat3 stat4 stat5a stat5b
 
 		#define contexts
@@ -2437,7 +3059,7 @@ def define_callbacks(app):
 				#get counts dfs
 				counts_df_list = []
 				for feature in features:
-					df = functions.download_from_github("data/" + expression_dataset + "/counts/" + feature + ".tsv")
+					df = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
 					df = pd.read_csv(df, sep = "\t")
 					if "genes" in expression_dataset:
 						feature_gene = feature.split("@")[0]
@@ -2460,7 +3082,7 @@ def define_callbacks(app):
 				counts = pd.DataFrame(scale(counts), index=counts.index, columns=counts.columns)
 
 				#open metadata
-				metadata = functions.download_from_github("metadata.tsv")
+				metadata = functions.download_from_github(path, "metadata.tsv")
 				metadata = pd.read_csv(metadata, sep="\t")
 				metadata = metadata.replace("_", " ", regex=True)
 				#remove samples for which we don't have counts
@@ -2468,9 +3090,12 @@ def define_callbacks(app):
 				metadata = metadata.set_index("sample")
 				metadata_with_NA = metadata.fillna("NA")
 				
+				#get repo
+				repo = functions.get_repo_name_from_path(path, repos)
+
 				#by default all conditions are visible
-				if config["sorted_conditions"]:
-					sorted_conditions = config["condition_list"]
+				if config["repos"][repo]["sorted_conditions"]:
+					sorted_conditions = config["repos"][repo]["condition_list"]
 					conditions = [condition.replace("_", " ") for condition in sorted_conditions]
 				else:
 					conditions = metadata["condition"].unique().tolist()
@@ -2545,7 +3170,7 @@ def define_callbacks(app):
 				#sort samples by condition
 				else:
 					#custom sorting
-					if config["sorted_conditions"]:
+					if config["repos"][repo]["sorted_conditions"]:
 						df_slices = []
 						for condition in conditions:
 							df_slice = metadata[metadata["condition"] == condition]
@@ -2593,7 +3218,7 @@ def define_callbacks(app):
 					#discrete annotation
 					if str(metadata.dtypes[annotation]) == "object":
 						hovertemplate = "{annotation}: ".format(annotation=annotation.capitalize()) + "%{customdata}<Br>Sample: %{x}<extra></extra>"
-						if annotation == "condition" and config["sorted_conditions"]:
+						if annotation == "condition" and config["repos"][repo]["sorted_conditions"]:
 							values_for_discrete_color_mapping = conditions
 						else:
 							values_for_discrete_color_mapping = metadata_with_NA[annotation].unique().tolist()
@@ -2608,7 +3233,7 @@ def define_callbacks(app):
 							#give a number to the condition
 							annotation_number_mapping[value] = i
 							#map a color to this number
-							annotation_colors.append(functions.get_color(annotation, value))
+							annotation_colors.append(functions.get_color(color_mapping, annotation, value))
 							#increase incrementals
 							i += 1
 
@@ -2624,7 +3249,7 @@ def define_callbacks(app):
 					#continuous annotation
 					else:
 						hovertemplate = "{annotation}: ".format(annotation=annotation.capitalize()) + "%{z}<Br>Sample: %{x}<extra></extra>"
-						annotation_colors = ["#FFFFFF", functions.get_color(annotation, "continuous")]
+						annotation_colors = ["#FFFFFF", functions.get_color(color_mapping, annotation, "continuous")]
 						z = []
 						for sample in clustered_samples:
 							z.append(metadata.loc[sample, annotation])
@@ -2765,7 +3390,7 @@ def define_callbacks(app):
 							visible = False
 						else:
 							visible = "legendonly"
-					fig.add_trace(go.Scatter(x=[None], y=[None], marker_color=functions.get_color("condition", condition), marker_size=8, mode="markers", showlegend=True, name=condition, visible=visible))
+					fig.add_trace(go.Scatter(x=[None], y=[None], marker_color=functions.get_color(color_mapping, "condition", condition), marker_size=8, mode="markers", showlegend=True, name=condition, visible=visible))
 
 				#update layout
 				fig.update_layout(title_text=colorbar_title.capitalize() + " heatmap" + clustered_or_sorted, title_font_family="arial", title_font_size=14, title_x=0.5, title_y = 0.98, plot_bgcolor="rgba(0,0,0,0)", legend_title="Condition", legend_title_side="top", legend_orientation="h", legend_tracegroupgap=0.05, margin_t=30, margin_b=0, margin_l=0, margin_r=0, legend_x=0, legend_y=0, legend_yanchor="top", legend_xanchor="left", legend_itemclick=legend_itemclick, legend_itemdoubleclick=legend_itemdoubleclick, width=width_fig, height=height_fig)
@@ -2796,9 +3421,11 @@ def define_callbacks(app):
 		Output("heatmap_legend_div", "children"),
 		Output("heatmap_legend_div", "hidden"),
 		Input("heatmap_graph", "figure"),
-		State("annotation_dropdown", "value")	
+		State("annotation_dropdown", "value"),
+		State("color_mapping", "data"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_heatmap_annotation_legend(heatmap_fig, annotations):
+	def plot_heatmap_annotation_legend(heatmap_fig, annotations, color_mapping, path):
 		#setup empty children
 		children = []
 
@@ -2809,7 +3436,7 @@ def define_callbacks(app):
 		else:
 			hidden = False
 			#open metadata
-			metadata = functions.download_from_github("metadata.tsv")
+			metadata = functions.download_from_github(path, "metadata.tsv")
 			metadata = pd.read_csv(metadata, sep="\t")
 			metadata = metadata.replace("_", " ", regex=True)
 			metadata_with_NA = metadata.fillna("NA")
@@ -2889,7 +3516,7 @@ def define_callbacks(app):
 					#add traces to legend
 					discrete_legend = []
 					for category in categories_for_legend:
-						trace = go.Scatter(x=[1], y=[y], marker_color=functions.get_color(annotation, category), marker_size=8, mode="markers+text", name=category, text= "   " + category, textposition="middle right", hoverinfo="none")
+						trace = go.Scatter(x=[1], y=[y], marker_color=functions.get_color(color_mapping, annotation, category), marker_size=8, mode="markers+text", name=category, text= "   " + category, textposition="middle right", hoverinfo="none")
 						discrete_legend.append(trace)
 						y += 1
 					#transparent trace to move the colored markes on the left of the area
@@ -2911,7 +3538,7 @@ def define_callbacks(app):
 					colorbar_y = np.mean(fig["layout"][annotation_yaxis]["domain"])
 
 					continue_legend = []
-					trace = go.Scatter(x = [None], y = [None], marker_showscale=True, marker_color=metadata[annotation], marker_colorscale=["#FFFFFF", functions.get_color(annotation, "continuous")], marker_colorbar=dict(thicknessmode="pixels", thickness=20, lenmode="pixels", len=80, x=colorbar_x, y=colorbar_y, xanchor="right"))
+					trace = go.Scatter(x = [None], y = [None], marker_showscale=True, marker_color=metadata[annotation], marker_colorscale=["#FFFFFF", functions.get_color(color_mapping, annotation, "continuous")], marker_colorbar=dict(thicknessmode="pixels", thickness=20, lenmode="pixels", len=80, x=colorbar_x, y=colorbar_y, xanchor="right"))
 					continue_legend.append(trace)
 
 					#add legends to legends list
@@ -2966,7 +3593,6 @@ def define_callbacks(app):
 		Output("multi_boxplots_graph", "figure"),
 		Output("multi_boxplots_graph", "config"),
 		Output("multi_boxplots_div", "hidden"),
-		Output("popover_plot_multiboxplots", "is_open"),
 		Output("multiboxplot_div", "style"),
 		Output("x_filter_dropdown_multiboxplots_div", "hidden"),
 		Output("hide_unselected_multiboxplots_switch", "value"),
@@ -2988,9 +3614,11 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("multi_boxplots_graph", "figure"),
 		State("multi_boxplots_div", "hidden"),
-		State("x_filter_dropdown_multiboxplots_div", "hidden")
+		State("x_filter_dropdown_multiboxplots_div", "hidden"),
+		State("analysis_dropdown", "value"),
+		State("color_mapping", "data")
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden):
+	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden, path, color_mapping):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
 		#define contexts
@@ -3015,7 +3643,7 @@ def define_callbacks(app):
 			title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").replace("archaea", "archaeal").replace("bacteria", "bacterial").capitalize()) + x_metadata.replace("_", " ").capitalize()
 
 		#open metadata
-		metadata_df_full = functions.download_from_github("metadata.tsv")
+		metadata_df_full = functions.download_from_github(path, "metadata.tsv")
 		metadata_df_full = pd.read_csv(metadata_df_full, sep = "\t")
 
 		#clean metadata
@@ -3029,220 +3657,214 @@ def define_callbacks(app):
 			x_filter_div_hidden = True
 		#filled dropdown
 		else:
-			#up to X elements to plot
-			if len(selected_features) <= 20:
+			if trigger_id not in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
 
-				if trigger_id not in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
+				#if there is a change in the plot, hide unselected must be false
+				hide_unselected_switch = []
+				boolean_hide_unselected_switch = False
 
-					#if there is a change in the plot, hide unselected must be false
-					hide_unselected_switch = []
-					boolean_hide_unselected_switch = False
+				#filter samples for comparison
+				if boolean_comparison_only_switch:
+					contrast = contrast.replace("_", " ")
+					metadata_df_full = metadata_df_full[metadata_df_full["condition"].isin(contrast.split("-vs-"))]
 
-					#filter samples for comparison
-					if boolean_comparison_only_switch:
-						contrast = contrast.replace("_", " ")
-						metadata_df_full = metadata_df_full[metadata_df_full["condition"].isin(contrast.split("-vs-"))]
-
-					#create figure
-					box_fig = go.Figure()
-					
-					#define number of rows
-					if (len(selected_features) % plot_per_row) == 0:
-						n_rows = len(selected_features)/plot_per_row
-					else:
-						n_rows = int(len(selected_features)/plot_per_row) + 1
-					n_rows = int(n_rows)
-
-					#define specs for subplot starting from the space for the legend
-					specs = []
-
-					#define specs for each plot row
-					for i in range(0, n_rows):
-						specs.append([])
-						for y in range(0, plot_per_row):
-							specs[i].append({})
-					
-					#in case of odd number of selected elements, some plots in the grid are None
-					if (len(selected_features) % plot_per_row) != 0:
-						odd_elements_to_plot = len(selected_features) - plot_per_row * (n_rows - 1)
-						for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
-							specs[-1][-i] = None
-					
-					#compute height
-					height = 250 + n_rows*220
-					row_height = 1/n_rows
-					row_heights = []
-					for i in range(0, n_rows):
-						row_heights.append(row_height)
-
-					#labels
-					if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-						expression_or_abundance = "expression"
-						log2_expression_or_abundance = "Log2 expression"
-					else:
-						expression_or_abundance = "abundance"
-						log2_expression_or_abundance = "Log2 abundance"
-
-					if y_metadata in ["log2_expression", "log2_abundance"]:
-						y_axis_title = "Log2 {}".format(expression_or_abundance)
-					else:
-						y_axis_title = y_metadata
-
-					#make subplots
-					subplot_titles = []
-					for feature in selected_features:
-						if "genes" in expression_dataset:
-							feature_gene = feature.split("@")[0]
-							feature_beast = feature.split("@")[1]
-							feature_beast = feature_beast.replace("_", " ")
-							feature = feature_gene + " - " + feature_beast
-						else:
-							feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
-						subplot_titles.append(feature)
-					box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True, vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
-
-					#loop 1 plot per gene
-					working_row = 1
-					working_col = 1
-					showlegend = True
-					for feature in selected_features:
-						#counts as y need external file with count values
-						if y_metadata in ["log2_expression", "log2_abundance"]:
-							counts = functions.download_from_github("data/" + expression_dataset + "/counts/" + feature + ".tsv")
-							counts = pd.read_csv(counts, sep = "\t")
-							counts = counts.replace("_", " ", regex=True)
-							#merge and compute log2 and replace inf with 0
-							metadata_df = metadata_df_full.merge(counts, how="inner", on="sample")
-							metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
-							metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
-						else:
-							metadata_df = metadata_df_full.copy()
-
-						#setup traces
-						if x_metadata == group_by_metadata:
-							column_for_filtering = x_metadata
-							#user defined list of traces
-							if x_metadata == "condition" and config["sorted_conditions"]:
-								metadata_fields_ordered = config["condition_list"]
-								metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
-							else:
-								metadata_fields_ordered = metadata_df[x_metadata].unique().tolist()
-								metadata_fields_ordered.sort()
-						else:
-							column_for_filtering = group_by_metadata
-							metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
-							metadata_fields_ordered.sort()
-
-						#grouped or not boxplot setup
-						boxmode = "overlay"
-						x_filter_div_hidden = True
-						#get values that will be on the x axis
-						all_x_values = metadata_df[x_metadata].unique().tolist()
-						for x_value in all_x_values:
-							if boxmode != "group":
-								#filter df for x_value and get his traces
-								filtered_metadata = metadata_df[metadata_df[x_metadata] == x_value]
-								values_column_for_filtering = filtered_metadata[column_for_filtering].unique().tolist()
-								#if, for the same x, there is more than one trace, then should be grouped
-								if len(set(values_column_for_filtering)) > 1:
-									boxmode = "group"
-									x_filter_div_hidden = False
-									#keep only selected x_values
-									selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
-									metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
-
-						#plot
-						for metadata in metadata_fields_ordered:
-							#slice metadata
-							filtered_metadata = metadata_df[metadata_df[column_for_filtering] == metadata]
-							#only 2 decimals
-							filtered_metadata = filtered_metadata.round(2)
-							#get x and y
-							if y_metadata in ["log2_expression", "log2_abundance"]:
-								y_values = filtered_metadata[log2_expression_or_abundance]
-							else:
-								y_values = filtered_metadata[y_metadata]
-							x_values = filtered_metadata[x_metadata]
-
-							#create hovertext
-							filtered_metadata["hovertext"] = ""
-							for column in filtered_metadata.columns:
-								if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-									filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_metadata[column].astype(str) + "<br>"
-							hovertext = filtered_metadata["hovertext"].tolist()
-
-							#create traces
-							marker_color = functions.get_color(column_for_filtering, metadata)
-							if boolean_show_as_boxplot_switch:
-								box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
-							else:
-								box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
-
-						#just one legend for trece showed is enough
-						if showlegend is True:
-							showlegend = False
-
-						#row and column count
-						working_col += 1
-						#reset count
-						if working_col > plot_per_row:
-							working_col = 1
-							working_row += 1
-					
-					#update layout
-					box_fig.update_xaxes(tickangle=-90)
-					if boolean_show_as_boxplot_switch:
-						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
-					else:
-						box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", violinmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
-				else:
-					box_fig = go.Figure(box_fig)
-					if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
-						box_fig.update_layout(height=height, width=width)
+				#create figure
+				box_fig = go.Figure()
 				
-				#when the switch is true, the legend is no longer interactive
-				if boolean_hide_unselected_switch:
-					box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
-					for trace in box_fig["data"]:
-						if trace["visible"] == "legendonly":
-							trace["visible"] = False
+				#define number of rows
+				if (len(selected_features) % plot_per_row) == 0:
+					n_rows = len(selected_features)/plot_per_row
 				else:
-					box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
-					for trace in box_fig["data"]:
-						if trace["visible"] is False :
-							trace["visible"] = "legendonly"
+					n_rows = int(len(selected_features)/plot_per_row) + 1
+				n_rows = int(n_rows)
 
-				#popover and div status
-				popover_status = False
-				hidden_status = False
+				#define specs for subplot starting from the space for the legend
+				specs = []
 
-				#transparent figure
-				box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-				box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
-				box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+				#define specs for each plot row
+				for i in range(0, n_rows):
+					specs.append([])
+					for y in range(0, plot_per_row):
+						specs[i].append({})
+				
+				#in case of odd number of selected elements, some plots in the grid are None
+				if (len(selected_features) % plot_per_row) != 0:
+					odd_elements_to_plot = len(selected_features) - plot_per_row * (n_rows - 1)
+					for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
+						specs[-1][-i] = None
+				
+				#compute height
+				height = 250 + n_rows*220
+				row_height = 1/n_rows
+				row_heights = []
+				for i in range(0, n_rows):
+					row_heights.append(row_height)
 
-			#more then 20 elements to plot
+				#labels
+				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+					expression_or_abundance = "expression"
+					log2_expression_or_abundance = "Log2 expression"
+				else:
+					expression_or_abundance = "abundance"
+					log2_expression_or_abundance = "Log2 abundance"
+
+				if y_metadata in ["log2_expression", "log2_abundance"]:
+					y_axis_title = "Log2 {}".format(expression_or_abundance)
+				else:
+					y_axis_title = y_metadata
+
+				#make subplots
+				subplot_titles = []
+				for feature in selected_features:
+					if "genes" in expression_dataset:
+						feature_gene = feature.split("@")[0]
+						feature_beast = feature.split("@")[1]
+						feature_beast = feature_beast.replace("_", " ")
+						feature = feature_gene + " - " + feature_beast
+					else:
+						feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
+					subplot_titles.append(feature)
+				box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True, vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
+
+				#loop 1 plot per gene
+				working_row = 1
+				working_col = 1
+				showlegend = True
+				for feature in selected_features:
+					#counts as y need external file with count values
+					if y_metadata in ["log2_expression", "log2_abundance"]:
+						counts = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
+						counts = pd.read_csv(counts, sep = "\t")
+						counts = counts.replace("_", " ", regex=True)
+						#merge and compute log2 and replace inf with 0
+						metadata_df = metadata_df_full.merge(counts, how="inner", on="sample")
+						metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
+						metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
+					else:
+						metadata_df = metadata_df_full.copy()
+
+					#setup traces
+					if x_metadata == group_by_metadata:
+						column_for_filtering = x_metadata
+						
+						repo = functions.get_repo_name_from_path(path, repos)
+						
+						#user defined list of traces
+						if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]:
+							metadata_fields_ordered = config["repos"][repo]["condition_list"]
+							metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
+						else:
+							metadata_fields_ordered = metadata_df[x_metadata].unique().tolist()
+							metadata_fields_ordered.sort()
+					else:
+						column_for_filtering = group_by_metadata
+						metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
+						metadata_fields_ordered.sort()
+
+					#grouped or not boxplot setup
+					boxmode = "overlay"
+					x_filter_div_hidden = True
+					#get values that will be on the x axis
+					all_x_values = metadata_df[x_metadata].unique().tolist()
+					for x_value in all_x_values:
+						if boxmode != "group":
+							#filter df for x_value and get his traces
+							filtered_metadata = metadata_df[metadata_df[x_metadata] == x_value]
+							values_column_for_filtering = filtered_metadata[column_for_filtering].unique().tolist()
+							#if, for the same x, there is more than one trace, then should be grouped
+							if len(set(values_column_for_filtering)) > 1:
+								boxmode = "group"
+								x_filter_div_hidden = False
+								#keep only selected x_values
+								selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
+								metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
+
+					#plot
+					for metadata in metadata_fields_ordered:
+						#slice metadata
+						filtered_metadata = metadata_df[metadata_df[column_for_filtering] == metadata]
+						#only 2 decimals
+						filtered_metadata = filtered_metadata.round(2)
+						#get x and y
+						if y_metadata in ["log2_expression", "log2_abundance"]:
+							y_values = filtered_metadata[log2_expression_or_abundance]
+						else:
+							y_values = filtered_metadata[y_metadata]
+						x_values = filtered_metadata[x_metadata]
+
+						#create hovertext
+						filtered_metadata["hovertext"] = ""
+						for column in filtered_metadata.columns:
+							if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+								filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_metadata[column].astype(str) + "<br>"
+						hovertext = filtered_metadata["hovertext"].tolist()
+
+						#create traces
+						marker_color = functions.get_color(color_mapping, column_for_filtering, metadata)
+						if boolean_show_as_boxplot_switch:
+							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
+						else:
+							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
+
+					#just one legend for trece showed is enough
+					if showlegend is True:
+						showlegend = False
+
+					#row and column count
+					working_col += 1
+					#reset count
+					if working_col > plot_per_row:
+						working_col = 1
+						working_row += 1
+				
+				#update layout
+				box_fig.update_xaxes(tickangle=-90)
+				if boolean_show_as_boxplot_switch:
+					box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
+				else:
+					box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", violinmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
 			else:
-				#default values used when the figure is hidden
-				height = 450
-				hidden_status = True
-				popover_status = True
-				x_filter_div_hidden = True
+				box_fig = go.Figure(box_fig)
+				if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
+					box_fig.update_layout(height=height, width=width)
+			
+			#when the switch is true, the legend is no longer interactive
+			if boolean_hide_unselected_switch:
+				box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
+				for trace in box_fig["data"]:
+					if trace["visible"] == "legendonly":
+						trace["visible"] = False
+			else:
+				box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
+				for trace in box_fig["data"]:
+					if trace["visible"] is False :
+						trace["visible"] = "legendonly"
+
+			#popover and div status
+			popover_status = False
+			hidden_status = False
+
+			#transparent figure
+			box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		config_multi_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
 
-		return box_fig, config_multi_boxplots, hidden_status, popover_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width
+		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width
 	
 	#diversity plot
 	@app.callback(
 		Output("diversity_graph", "figure"),
 		Output("diversity_graph", "config"),
 		Input("group_by_diversity_dropdown", "value"),
-		State("feature_dataset_dropdown", "value")
+		State("feature_dataset_dropdown", "value"),
+		State("color_mapping", "data"),
+		State("analysis_dropdown", "value")
 	)
-	def plot_species_diversity(group_by, expression_dataset):
+	def plot_species_diversity(group_by, expression_dataset, color_mapping, path):
 		
 		#make subplots
 		#plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index", "Species dominance<br>by Inverse Simpson index"]
@@ -3267,7 +3889,7 @@ def define_callbacks(app):
 				index_column = "Inversed_Simpson_index"
 
 			#open df
-			diversity_df = functions.download_from_github(f"diversity/{expression_dataset}/{file_name}.tsv")
+			diversity_df = functions.download_from_github(path, f"diversity/{expression_dataset}/{file_name}.tsv")
 			diversity_df = pd.read_csv(diversity_df, sep = "\t")
 			diversity_df = diversity_df.replace("_", " ", regex=True)
 
@@ -3278,7 +3900,7 @@ def define_callbacks(app):
 			#add traces for each x value
 			for x_value in x_values:
 				filtered_diversity_df = diversity_df[diversity_df[group_by] == x_value]
-				marker_color = functions.get_color(group_by, x_value)
+				marker_color = functions.get_color(color_mapping, group_by, x_value)
 
 				#create hovertext
 				filtered_diversity_df["hovertext"] = ""
@@ -3303,441 +3925,469 @@ def define_callbacks(app):
 
 		return fig, config
 	
-	#mofa callbacks
-	if mofa_analysis:
-		#data overview
-		@app.callback(
-			Output("mofa_data_overview", "figure"),
-			Output("mofa_data_overview", "config"),
-			Input("contrast_dropdown", "value")
-		)
-		def plot_data_overview_mofa(contrast):
-			
-			#open metadata
-			metadata = functions.download_from_github("metadata.tsv")
-			metadata = pd.read_csv(metadata, sep = "\t")
+	##### mofa callbacks #####
 
-			#get group contrast from main contrast
-			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+	#data overview
+	@app.callback(
+		Output("mofa_data_overview", "figure"),
+		Output("mofa_data_overview", "config"),
+		Input("contrast_dropdown", "value"),
+		State("analysis_dropdown", "value")
+	)
+	def plot_data_overview_mofa(contrast, path):
+		
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		if trigger_id == ".":
+			raise PreventUpdate
 
-			#open df
-			data_overview_df = functions.download_from_github(f"mofa/{group_contrast}/data_overview.tsv")
-			data_overview_df = pd.read_csv(data_overview_df, sep = "\t")
+		#open metadata
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
 
-			##get titles
-			subplot_titles = []
-			for group in groups:
-				group_data_overview_df = data_overview_df[data_overview_df["group"] == group]
-				n = group_data_overview_df["ntotal"].unique().tolist()
-				n = n[0]
-				n = n.replace("N", "n")
-				clean_group = group.replace("_", " ")
-				title = f"{clean_group} {n}"
-				subplot_titles.append(title)
+		#get group contrast from main contrast
+		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
 
-			#create figure
-			fig = make_subplots(rows=2, cols=1, subplot_titles=subplot_titles, vertical_spacing=0.07)
+		#open df
+		data_overview_df = functions.download_from_github(path, f"mofa/{group_contrast}/data_overview.tsv")
+		data_overview_df = pd.read_csv(data_overview_df, sep = "\t")
 
-			#define colorscale
-			colorscale = [[0, na_color], [1, "#02818a"]]
+		##get titles
+		subplot_titles = []
+		for group in groups:
+			group_data_overview_df = data_overview_df[data_overview_df["group"] == group]
+			n = group_data_overview_df["ntotal"].unique().tolist()
+			n = n[0]
+			n = n.replace("N", "n")
+			clean_group = group.replace("_", " ")
+			title = f"{clean_group} {n}"
+			subplot_titles.append(title)
 
-			#loop over groups
-			row=1
-			for group in groups:
-				group_data_overview_df = data_overview_df[data_overview_df["group"] == group]
+		#create figure
+		fig = make_subplots(rows=2, cols=1, subplot_titles=subplot_titles, vertical_spacing=0.07)
 
-				#heatmap x and y
-				x = group_data_overview_df["sample"].unique().tolist()
-				group_data_overview_df["y"] = group_data_overview_df["view"].str.replace("_", " ") + "<br>" + group_data_overview_df["ptotal"].str.replace("D", "n")
-				y = group_data_overview_df["y"].unique().tolist()
+		#define colorscale
+		colorscale = [[0, na_color], [1, "#02818a"]]
 
-				#get z for each level in y
-				z = []
-				levels = group_data_overview_df["view"].unique().tolist()
-				for level in levels:
-					#translate true/false in numbers for z
-					z_for_level = []
-					level_group_data_overview_filtered = group_data_overview_df[group_data_overview_df["view"] == level]
-					values = level_group_data_overview_filtered["value"].tolist()
-					for value in values:
-						if value:
-							z_for_level.append(1)
-						else:
-							z_for_level.append(0)
-					z.append(z_for_level)
+		#loop over groups
+		row=1
+		for group in groups:
+			group_data_overview_df = data_overview_df[data_overview_df["group"] == group]
 
-				#create heatmap
-				fig.add_trace(go.Heatmap(x=x, y=y, z=z, zmax=1, colorscale=colorscale, showscale=False, hovertemplate="Sample: %{x}<extra></extra>"), row=row, col=1)
+			#heatmap x and y
+			x = group_data_overview_df["sample"].unique().tolist()
+			group_data_overview_df["y"] = group_data_overview_df["view"].str.replace("_", " ") + "<br>" + group_data_overview_df["ptotal"].str.replace("D", "n")
+			y = group_data_overview_df["y"].unique().tolist()
 
-				#change row
-				row +=1
+			#get z for each level in y
+			z = []
+			levels = group_data_overview_df["view"].unique().tolist()
+			for level in levels:
+				#translate true/false in numbers for z
+				z_for_level = []
+				level_group_data_overview_filtered = group_data_overview_df[group_data_overview_df["view"] == level]
+				values = level_group_data_overview_filtered["value"].tolist()
+				for value in values:
+					if value:
+						z_for_level.append(1)
+					else:
+						z_for_level.append(0)
+				z.append(z_for_level)
 
-			#update layout
-			fig.update_xaxes(visible=False)
-			fig.update_layout(height=80+(35*len(levels)*2), margin_t=80, margin_b=0, margin_r=0, title={"text": "Data overview", "font_size": 20, "x": 0.5, "xanchor": "center"})
+			#create heatmap
+			fig.add_trace(go.Heatmap(x=x, y=y, z=z, zmax=1, colorscale=colorscale, showscale=False, hovertemplate="Sample: %{x}<extra></extra>"), row=row, col=1)
 
-			#config
-			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"data_overview_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
+			#change row
+			row +=1
 
-			return fig, config
+		#update layout
+		fig.update_xaxes(visible=False)
+		fig.update_layout(height=80+(35*len(levels)*2), margin_t=80, margin_b=0, margin_r=0, title={"text": "Data overview", "font_size": 20, "x": 0.5, "xanchor": "center"})
 
-		#variance hetmap
-		@app.callback(
-			Output("mofa_variance_heatmap", "figure"),
-			Output("mofa_variance_heatmap", "config"),
-			Input("contrast_dropdown", "value")
-		)
-		def plot_variance_heatmap(contrast):
-			#open metadata
-			metadata = functions.download_from_github("metadata.tsv")
-			metadata = pd.read_csv(metadata, sep = "\t")
+		#config
+		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"data_overview_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
 
-			#get group contrast from main contrast
-			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
+		return fig, config
 
-			#clean variables
-			metadata = metadata.replace("_", " ", regex=True)
-			contrast = contrast.replace("_", " ")
-			groups = [group.replace("_", " ") for group in groups]
+	#variance hetmap
+	@app.callback(
+		Output("mofa_variance_heatmap", "figure"),
+		Output("mofa_variance_heatmap", "config"),
+		Input("contrast_dropdown", "value"),
+		State("analysis_dropdown", "value")
+	)
+	def plot_variance_heatmap(contrast, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		if trigger_id == ".":
+			raise PreventUpdate
+		
+		#open metadata
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
 
-			#open df
-			variance_heatmap_df = functions.download_from_github(f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
+		#get group contrast from main contrast
+		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+
+		#clean variables
+		metadata = metadata.replace("_", " ", regex=True)
+		contrast = contrast.replace("_", " ")
+		groups = [group.replace("_", " ") for group in groups]
+
+		#open df
+		variance_heatmap_df = functions.download_from_github(path, f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
+		variance_heatmap_df = pd.read_csv(variance_heatmap_df, sep = "\t")
+		variance_heatmap_df = variance_heatmap_df.replace([np.inf, -np.inf], None)
+		variance_heatmap_df = variance_heatmap_df.replace("_", " ", regex=True)
+		variance_heatmap_df.columns = variance_heatmap_df.columns.str.replace("_", " ")
+
+		#get zmax and zmin
+		zmax = None
+		zmin = None
+		for column in variance_heatmap_df.columns:
+			if column not in ["factor", "group"]:
+				column_max = variance_heatmap_df[column].max()
+				column_min = variance_heatmap_df[column].min()
+				if zmax is None or column_max > zmax:
+					zmax = column_max
+				if zmin is None or column_min < zmin:
+					zmin = column_min
+
+		#create subplots
+		fig = make_subplots(rows=1, cols=2, subplot_titles=groups, shared_yaxes=True)
+
+		#loop over groups
+		col = 1
+		for group in groups:
+			filtered_df = variance_heatmap_df[variance_heatmap_df["group"] == group]
+			filtered_df = filtered_df.drop(["group"], axis=1)
+			filtered_df = pd.melt(filtered_df, id_vars="factor")
+
+			#get x and y
+			x = filtered_df["variable"].unique().tolist()
+			y = filtered_df["factor"].unique().tolist()
+
+			#get z for each y (factor)
+			z = []
+			for factor in y:
+				factor_filtered_df = filtered_df[filtered_df["factor"] == factor]
+				z.append(factor_filtered_df["value"].tolist())
+
+			#show colorbar only once
+			if col == 1:
+				showscale = True
+			else:
+				showscale = False
+
+			#add heatmap
+			fig.add_trace(go.Heatmap(x=x, y=y, z=z, zmax=zmax, zmin=zmin, zauto=False, colorscale=["white", "#02818a"], showscale=showscale, colorbar_title="Variance explained", colorbar_title_side="right", colorbar_ticksuffix="%", colorbar_thickness=15, hovertemplate="Layer: %{x}<br>Factor: %{y}<br>Variance explained: %{z:.0f}%<extra></extra>", hoverongaps=False), row=1, col=col)
+
+			#change subplot
+			col += 1				
+
+		#update layout
+		fig.update_layout(height=200+(20*len(y)), margin_t=75, margin_b=0, title={"text": "Multi-layer signatures", "font_size": 20, "x": 0.5, "xanchor": "center"}, plot_bgcolor="#d9d9d9")
+		fig.update_xaxes(tickangle=-90)
+
+		#config
+		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mofa_signatures_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
+
+		return fig, config
+
+	#factor plot
+	@app.callback(
+		Output("mofa_factor_plot", "figure"),
+		Output("mofa_factor_plot", "config"),
+		Input("contrast_dropdown", "value"),
+		Input("mofa_variance_heatmap", "clickData"),
+		State("analysis_dropdown", "value")
+	)
+	def plot_factor_plot(contrast, click_data, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		if trigger_id == ".":
+			raise PreventUpdate
+
+		#open metadata
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
+
+		#get group contrast from main contrast
+		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+
+		#default plot is the one which explain more variance
+		if trigger_id == "contrast_dropdown.value":
+			variance_heatmap_df = functions.download_from_github(path, f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
 			variance_heatmap_df = pd.read_csv(variance_heatmap_df, sep = "\t")
-			variance_heatmap_df = variance_heatmap_df.replace([np.inf, -np.inf], None)
-			variance_heatmap_df = variance_heatmap_df.replace("_", " ", regex=True)
-			variance_heatmap_df.columns = variance_heatmap_df.columns.str.replace("_", " ")
-
-			#get zmax and zmin
-			zmax = None
-			zmin = None
+			
+			#get max variance explained
+			max_variance = None
 			for column in variance_heatmap_df.columns:
 				if column not in ["factor", "group"]:
 					column_max = variance_heatmap_df[column].max()
-					column_min = variance_heatmap_df[column].min()
-					if zmax is None or column_max > zmax:
-						zmax = column_max
-					if zmin is None or column_min < zmin:
-						zmin = column_min
+					if max_variance is None or column_max > max_variance:
+						view = column
+						max_variance = column_max
+			
+			#given vew and max, get factor
+			variance_heatmap_df = variance_heatmap_df[variance_heatmap_df[view] == max_variance]
+			factor = variance_heatmap_df["factor"].tolist()
+			factor = factor[0]
+		#click on heatmap
+		else:
+			factor = click_data["points"][0]["y"]
+			view = click_data["points"][0]["x"]
+			view = view.replace(" ", "_")
 
-			#create subplots
-			fig = make_subplots(rows=1, cols=2, subplot_titles=groups, shared_yaxes=True)
+		#open weights df
+		weights_df = functions.download_from_github(path, f"mofa/{group_contrast}/weights.tsv")
+		weights_df = pd.read_csv(weights_df, sep = "\t")
+		
+		#filter by factor and value and then sort by value
+		weights_df = weights_df[weights_df["factor"] == factor]
+		weights_df = weights_df[weights_df["view"] == view]
 
-			#loop over groups
-			col = 1
+		#get first 10 (and the others which have the same value as the 10th)
+		weights_df["abs_value"] = weights_df["value"].abs()
+		weights_df = weights_df.sort_values(by=["abs_value"], ascending=False)
+		#get top 10 df
+		top_10_df = weights_df.head(10)
+		#find lower value of top 10
+		top_10_last_value = top_10_df["abs_value"].unique().tolist()
+		top_10_last_value = min(top_10_last_value)
+		#get all features with the lower value
+		features_with_top_10_last_value = weights_df[weights_df["abs_value"] == top_10_last_value]
+		features_with_top_10_last_value = features_with_top_10_last_value["feature"].tolist()
+		#concat if there are multiple features with the same lower value
+		if len(features_with_top_10_last_value) > 1:
+			weights_df = weights_df[weights_df["feature"].isin(features_with_top_10_last_value)]
+			weights_df = pd.concat(top_10_df, weights_df)
+		else:
+			weights_df = top_10_df
+
+		#sort by value so that positive numbers will be on the top
+		weights_df = weights_df.sort_values(by=["value"], ascending=True)
+
+		#clean features
+		clean_features = []
+		for index, row in weights_df.iterrows():
+			view = row["view"]
+			feature = row["feature"]
+			if view in feature:
+				feature = feature.split("_")[0]
+			feature = feature.replace("[", "").replace("]", "")
+			clean_features.append(feature)
+		weights_df["feature"] = clean_features
+
+		#create figure with dots
+		fig = go.Figure(go.Scatter(x=weights_df["value"], y=weights_df["feature"], marker_color="#02818a", marker_size=8, showlegend=False, mode="markers", hovertemplate="Feature: %{y}<br>Weight: %{x:.1f}<extra></extra>"))
+		
+		#add lines
+		weights_df = weights_df.reset_index()
+		for i in range(0, len(weights_df)):
+			fig.add_shape(type='line', x0=0, y0=i, x1=weights_df["value"][i], y1=i, line=dict(color="#02818a", width=3))
+
+		#update layout
+		view = view.replace("_", " ")
+		fig.update_layout(title={"text": f"Top features per {factor} in {view}", "font_size": 16, "x": 0.5, "xanchor": "center"}, xaxis_title_text="Weight", yaxis_title_text="Feature", margin_t=40)
+		fig.update_xaxes(zeroline=True)
+		fig.update_yaxes(showline=False)
+
+		#config
+		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mofa_factor"}, "edits": {"titleText": True, "annotationText": True}}
+
+		return fig, config
+
+	#all factors plot
+	@app.callback(
+		Output("mofa_all_factors_values", "figure"),
+		Output("mofa_all_factors_values", "config"),
+		Input("contrast_dropdown", "value"),
+		Input("group_condition_switch_mofa", "value"),
+		State("analysis_dropdown", "value"),
+		State("color_mapping", "data")
+	)
+	def plot_all_factor_values(contrast, switch_value, path, color_mapping):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		if trigger_id == ".":
+			raise PreventUpdate
+
+		#get which metadata variable to use for x axis
+		if len(switch_value) == 0:
+			metadata_column = "group"
+		else:
+			metadata_column = "condition"
+
+		#open metadata
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
+
+		#get group contrast from main contrast
+		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+
+		#open weights df
+		factors_df = functions.download_from_github(path, f"mofa/{group_contrast}/factors.tsv")
+		factors_df = pd.read_csv(factors_df, sep = "\t")
+		factors_df = factors_df.replace("_", " ", regex=True)
+
+		#get all factors
+		factors = factors_df["factor"].unique().tolist()
+		factors.sort()
+
+		#create figure
+		fig = make_subplots(rows=1, cols=len(factors), subplot_titles=factors, horizontal_spacing=0.4/len(factors))
+
+		#populate subplots
+		col = 1
+		for factor in factors:
+			filtered_factor_df = factors_df[factors_df["factor"] == factor]
+			
+			#get groups
+			groups = filtered_factor_df[metadata_column].unique().tolist()
+			groups.sort(reverse=True)
+
+			#add groups violins
 			for group in groups:
-				filtered_df = variance_heatmap_df[variance_heatmap_df["group"] == group]
-				filtered_df = filtered_df.drop(["group"], axis=1)
-				filtered_df = pd.melt(filtered_df, id_vars="factor")
-
-				#get x and y
-				x = filtered_df["variable"].unique().tolist()
-				y = filtered_df["factor"].unique().tolist()
-
-				#get z for each y (factor)
-				z = []
-				for factor in y:
-					factor_filtered_df = filtered_df[filtered_df["factor"] == factor]
-					z.append(factor_filtered_df["value"].tolist())
-
-				#show colorbar only once
-				if col == 1:
-					showscale = True
-				else:
-					showscale = False
-
-				#add heatmap
-				fig.add_trace(go.Heatmap(x=x, y=y, z=z, zmax=zmax, zmin=zmin, zauto=False, colorscale=["white", "#02818a"], showscale=showscale, colorbar_title="Variance explained", colorbar_title_side="right", colorbar_ticksuffix="%", colorbar_thickness=15, hovertemplate="Layer: %{x}<br>Factor: %{y}<br>Variance explained: %{z:.0f}%<extra></extra>", hoverongaps=False), row=1, col=col)
-
-				#change subplot
-				col += 1				
-
-			#update layout
-			fig.update_layout(height=200+(20*len(y)), margin_t=75, margin_b=0, title={"text": "Multi-layer signatures", "font_size": 20, "x": 0.5, "xanchor": "center"}, plot_bgcolor="#d9d9d9")
-			fig.update_xaxes(tickangle=-90)
-
-			#config
-			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mofa_signatures_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
-
-			return fig, config
-
-		#factor plot
-		@app.callback(
-			Output("mofa_factor_plot", "figure"),
-			Output("mofa_factor_plot", "config"),
-			Input("contrast_dropdown", "value"),
-			Input("mofa_variance_heatmap", "clickData")
-		)
-		def plot_factor_plot(contrast, click_data):
-			#define contexts
-			ctx = dash.callback_context
-			trigger_id = ctx.triggered[0]["prop_id"]
-
-			#open metadata
-			metadata = functions.download_from_github("metadata.tsv")
-			metadata = pd.read_csv(metadata, sep = "\t")
-
-			#get group contrast from main contrast
-			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
-
-			#default plot is the one which explain more variance
-			if trigger_id == "contrast_dropdown.value":
-				variance_heatmap_df = functions.download_from_github(f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
-				variance_heatmap_df = pd.read_csv(variance_heatmap_df, sep = "\t")
-				
-				#get max variance explained
-				max_variance = None
-				for column in variance_heatmap_df.columns:
-					if column not in ["factor", "group"]:
-						column_max = variance_heatmap_df[column].max()
-						if max_variance is None or column_max > max_variance:
-							view = column
-							max_variance = column_max
-				
-				#given vew and max, get factor
-				variance_heatmap_df = variance_heatmap_df[variance_heatmap_df[view] == max_variance]
-				factor = variance_heatmap_df["factor"].tolist()
-				factor = factor[0]
-			#click on heatmap
-			else:
-				factor = click_data["points"][0]["y"]
-				view = click_data["points"][0]["x"]
-				view = view.replace(" ", "_")
-
-			#open weights df
-			weights_df = functions.download_from_github(f"mofa/{group_contrast}/weights.tsv")
-			weights_df = pd.read_csv(weights_df, sep = "\t")
-			
-			#filter by factor and value and then sort by value
-			weights_df = weights_df[weights_df["factor"] == factor]
-			weights_df = weights_df[weights_df["view"] == view]
-
-			#get first 10 (and the others which have the same value as the 10th)
-			weights_df["abs_value"] = weights_df["value"].abs()
-			weights_df = weights_df.sort_values(by=["abs_value"], ascending=False)
-			#get top 10 df
-			top_10_df = weights_df.head(10)
-			#find lower value of top 10
-			top_10_last_value = top_10_df["abs_value"].unique().tolist()
-			top_10_last_value = min(top_10_last_value)
-			#get all features with the lower value
-			features_with_top_10_last_value = weights_df[weights_df["abs_value"] == top_10_last_value]
-			features_with_top_10_last_value = features_with_top_10_last_value["feature"].tolist()
-			#concat if there are multiple features with the same lower value
-			if len(features_with_top_10_last_value) > 1:
-				weights_df = weights_df[weights_df["feature"].isin(features_with_top_10_last_value)]
-				weights_df = pd.concat(top_10_df, weights_df)
-			else:
-				weights_df = top_10_df
-
-			#sort by value so that positive numbers will be on the top
-			weights_df = weights_df.sort_values(by=["value"], ascending=True)
-
-			#clean features
-			clean_features = []
-			for index, row in weights_df.iterrows():
-				view = row["view"]
-				feature = row["feature"]
-				if view in feature:
-					feature = feature.split("_")[0]
-				feature = feature.replace("[", "").replace("]", "")
-				clean_features.append(feature)
-			weights_df["feature"] = clean_features
-
-			#create figure with dots
-			fig = go.Figure(go.Scatter(x=weights_df["value"], y=weights_df["feature"], marker_color="#02818a", marker_size=8, showlegend=False, mode="markers", hovertemplate="Feature: %{y}<br>Weight: %{x:.1f}<extra></extra>"))
-			
-			#add lines
-			weights_df = weights_df.reset_index()
-			for i in range(0, len(weights_df)):
-				fig.add_shape(type='line', x0=0, y0=i, x1=weights_df["value"][i], y1=i, line=dict(color="#02818a", width=3))
-
-			#update layout
-			view = view.replace("_", " ")
-			fig.update_layout(title={"text": f"Top features per {factor} in {view}", "font_size": 16, "x": 0.5, "xanchor": "center"}, xaxis_title_text="Weight", yaxis_title_text="Feature", margin_t=40)
-			fig.update_xaxes(zeroline=True)
-			fig.update_yaxes(showline=False)
-
-			#config
-			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mofa_factor"}, "edits": {"titleText": True, "annotationText": True}}
-
-			return fig, config
-
-		#all factors plot
-		@app.callback(
-			Output("mofa_all_factors_values", "figure"),
-			Output("mofa_all_factors_values", "config"),
-			Input("contrast_dropdown", "value"),
-			Input("group_condition_switch_mofa", "value")
-		)
-		def plot_all_factor_values(contrast, switch_value):
-			
-			#get which metadata variable to use for x axis
-			if len(switch_value) == 0:
-				metadata_column = "group"
-			else:
-				metadata_column = "condition"
-
-			#open metadata
-			metadata = functions.download_from_github("metadata.tsv")
-			metadata = pd.read_csv(metadata, sep = "\t")
-
-			#get group contrast from main contrast
-			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
-
-			#open weights df
-			factors_df = functions.download_from_github(f"mofa/{group_contrast}/factors.tsv")
-			factors_df = pd.read_csv(factors_df, sep = "\t")
-			factors_df = factors_df.replace("_", " ", regex=True)
-
-			#get all factors
-			factors = factors_df["factor"].unique().tolist()
-			factors.sort()
-
-			#create figure
-			fig = make_subplots(rows=1, cols=len(factors), subplot_titles=factors, horizontal_spacing=0.4/len(factors))
-
-			#populate subplots
-			col = 1
-			for factor in factors:
-				filtered_factor_df = factors_df[factors_df["factor"] == factor]
-				
-				#get groups
-				groups = filtered_factor_df[metadata_column].unique().tolist()
-				groups.sort(reverse=True)
-
-				#add groups violins
-				for group in groups:
-					group_df = filtered_factor_df[filtered_factor_df[metadata_column] == group]
-					x_values = group_df[metadata_column].tolist()
-					y_values = group_df["value"].tolist()
-					marker_color = functions.get_color(metadata_column, group)
-
-					#create hovertext
-					group_df["hovertext"] = ""
-					for column in group_df.columns:
-						if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-							group_df["hovertext"] = group_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + group_df[column].astype(str) + "<br>"
-					hovertext = group_df["hovertext"].tolist()
-
-					fig.add_trace(go.Violin(x=x_values, y=y_values, name=group, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all", showlegend=False), row=1, col=col)
-					if col == 1:
-						fig.update_yaxes(title_text="Factor score", title_standoff=5, row=1, col=col)
-
-				#new subplot
-				col += 1
-			
-			#update layout
-			fig.update_layout(margin_l=10, margin_r=0, margin_t=40, height=225)
-			fig.update_annotations(font_size=14)
-
-			#config
-			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "factor_score_distribution"}}
-
-			return fig, config
-
-		#feature expression or abundance
-		@app.callback(
-			Output("mofa_factor_expression_abundance", "figure"),
-			Output("mofa_factor_expression_abundance", "config"),
-			Input("mofa_factor_plot", "figure"),
-			Input("mofa_factor_plot", "clickData"),
-			Input("group_condition_switch_mofa", "value"),
-			State("contrast_dropdown", "value")
-		)
-		def plot_factor_feature(factor_figure, click_data, switch_value, contrast):
-			#define contexts
-			ctx = dash.callback_context
-			trigger_id = ctx.triggered[0]["prop_id"]
-
-			#get which metadata variable to use for x axis
-			if len(switch_value) == 0:
-				metadata_column = "group"
-			else:
-				metadata_column = "condition"
-
-			#get mofa level to understand which feature list to use for searching
-			level = factor_figure["layout"]["title"]["text"]
-			level = re.match(r"Top features per Factor\d in (Archaea|Bacteria|Fungi|Human|Mouse|Protozoa|Viral) \w+", level).group(1)
-			level = level.lower()
-			if level in ["human", "mouse"]:
-				features_df = "data/" + level + "/counts/genes_list.tsv"
-				log2_expression_or_abundance = "Log2 expression"
-			else:
-				level = level + "_species"
-				features_df = "data/" + level + "/counts/feature_list.tsv"
-				log2_expression_or_abundance = "Log2 abundance"
-
-			#get features and their clean version
-			features_df = functions.download_from_github(features_df)
-			features_df = pd.read_csv(features_df, sep = "\t", header=None, names=["feature"])
-			features_df["clean_feature"] = features_df["feature"].str.replace("_", " ", regex=False).str.replace("[", "", regex=False).str.replace("]", "", regex=False).str.replace("€", "/", regex=False)
-
-			#setup
-			if trigger_id in ["mofa_factor_plot.figure", "group_condition_switch_mofa.value"]:
-				df = pd.DataFrame({"feature": factor_figure["data"][0]["y"], "weight": factor_figure["data"][0]["x"]})
-				df["abs_weight"] = df["weight"].abs()
-				max_weight = df["abs_weight"].max()
-				df = df[df["abs_weight"] == max_weight]
-				clean_feature = df["feature"].tolist()
-				clean_feature = clean_feature[0]
-			#user click
-			else:
-				clean_feature = click_data["points"][0]["y"]
-
-			#search feature counts
-			feature = features_df[features_df["clean_feature"] == clean_feature]
-			feature = feature["feature"].tolist()
-			feature = feature[0]
-
-			counts = functions.download_from_github("data/" + level + "/counts/" + feature + ".tsv")
-			counts = pd.read_csv(counts, sep = "\t")
-			counts = counts.replace("_", " ", regex=True)
-			
-			#open metadata
-			metadata = functions.download_from_github("metadata.tsv")
-			metadata = pd.read_csv(metadata, sep = "\t")
-
-			#filter metadata, keep only conditions which contain the groups
-			group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast)
-			metadata = metadata[metadata["group"].isin(groups)]
-
-			#clean metadata
-			metadata = metadata.fillna("NA")
-			metadata = metadata.replace("_", " ", regex=True)
-
-			#merge and compute log2 and replace inf with 0
-			metadata = metadata.merge(counts, how="inner", on="sample")
-			metadata[log2_expression_or_abundance] = np.log2(metadata["counts"])
-			metadata[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
-
-			#plot per condition
-			conditions = metadata[metadata_column].unique().tolist()
-			conditions.sort()
-			
-			#setup plot
-			fig = go.Figure()
-			for condition in conditions:
-				filtered_df = metadata[metadata[metadata_column] == condition]
-
-				x_values = filtered_df[metadata_column].tolist()
-				y_values = filtered_df[log2_expression_or_abundance].tolist()
-				marker_color = functions.get_color(metadata_column, condition)
+				group_df = filtered_factor_df[filtered_factor_df[metadata_column] == group]
+				x_values = group_df[metadata_column].tolist()
+				y_values = group_df["value"].tolist()
+				marker_color = functions.get_color(color_mapping, metadata_column, group)
 
 				#create hovertext
-				filtered_df["hovertext"] = ""
-				for column in filtered_df.columns:
+				group_df["hovertext"] = ""
+				for column in group_df.columns:
 					if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-						filtered_df["hovertext"] = filtered_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_df[column].astype(str) + "<br>"
-				hovertext = filtered_df["hovertext"].tolist()
+						group_df["hovertext"] = group_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + group_df[column].astype(str) + "<br>"
+				hovertext = group_df["hovertext"].tolist()
 
-				#add trace
-				fig.add_trace(go.Violin(x=x_values, y=y_values, name=condition, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all"))
+				fig.add_trace(go.Violin(x=x_values, y=y_values, name=group, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all", showlegend=False), row=1, col=col)
+				if col == 1:
+					fig.update_yaxes(title_text="Factor score", title_standoff=5, row=1, col=col)
 
-			#update layout
-			fig.update_layout(title={"text": f"{clean_feature}", "font_size": 16, "x": 0.5, "xanchor": "center"}, yaxis_title=log2_expression_or_abundance, height=142, margin_t=30, margin_b=0, margin_l=0)
-			fig.update_xaxes(showticklabels=False)
+			#new subplot
+			col += 1
+		
+		#update layout
+		fig.update_layout(margin_l=10, margin_r=0, margin_t=40, height=225)
+		fig.update_annotations(font_size=14)
 
-			#general config for boxplots
-			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{clean_feature}_profiling"}, "edits": {"legendPosition": True, "titleText": True}}
+		#config
+		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "factor_score_distribution"}}
 
-			return fig, config
+		return fig, config
+
+	#feature expression or abundance
+	@app.callback(
+		Output("mofa_factor_expression_abundance", "figure"),
+		Output("mofa_factor_expression_abundance", "config"),
+		Input("mofa_factor_plot", "figure"),
+		Input("mofa_factor_plot", "clickData"),
+		Input("group_condition_switch_mofa", "value"),
+		State("contrast_dropdown", "value"),
+		State("analysis_dropdown", "value"),
+		State("color_mapping", "data")
+	)
+	def plot_factor_feature(factor_figure, click_data, switch_value, contrast, path, color_mapping):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		if trigger_id == ".":
+			raise PreventUpdate
+
+		#get which metadata variable to use for x axis
+		if len(switch_value) == 0:
+			metadata_column = "group"
+		else:
+			metadata_column = "condition"
+
+		#get mofa level to understand which feature list to use for searching
+		level = factor_figure["layout"]["title"]["text"]
+		level = re.match(r"Top features per Factor\d in (Archaea|Bacteria|Fungi|Human|Mouse|Protozoa|Viral) \w+", level).group(1)
+		level = level.lower()
+		if level in ["human", "mouse"]:
+			features_df = "data/" + level + "/counts/genes_list.tsv"
+			log2_expression_or_abundance = "Log2 expression"
+		else:
+			level = level + "_species"
+			features_df = "data/" + level + "/counts/feature_list.tsv"
+			log2_expression_or_abundance = "Log2 abundance"
+
+		#get features and their clean version
+		features_df = functions.download_from_github(path, features_df)
+		features_df = pd.read_csv(features_df, sep = "\t", header=None, names=["feature"])
+		features_df["clean_feature"] = features_df["feature"].str.replace("_", " ", regex=False).str.replace("[", "", regex=False).str.replace("]", "", regex=False).str.replace("€", "/", regex=False)
+
+		#setup
+		if trigger_id in ["mofa_factor_plot.figure", "group_condition_switch_mofa.value"]:
+			df = pd.DataFrame({"feature": factor_figure["data"][0]["y"], "weight": factor_figure["data"][0]["x"]})
+			df["abs_weight"] = df["weight"].abs()
+			max_weight = df["abs_weight"].max()
+			df = df[df["abs_weight"] == max_weight]
+			clean_feature = df["feature"].tolist()
+			clean_feature = clean_feature[0]
+		#user click
+		else:
+			clean_feature = click_data["points"][0]["y"]
+
+		#search feature counts
+		feature = features_df[features_df["clean_feature"] == clean_feature]
+		feature = feature["feature"].tolist()
+		feature = feature[0]
+
+		counts = functions.download_from_github(path, "data/" + level + "/counts/" + feature + ".tsv")
+		counts = pd.read_csv(counts, sep = "\t")
+		counts = counts.replace("_", " ", regex=True)
+		
+		#open metadata
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
+
+		#filter metadata, keep only conditions which contain the groups
+		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+		metadata = metadata[metadata["group"].isin(groups)]
+
+		#clean metadata
+		metadata = metadata.fillna("NA")
+		metadata = metadata.replace("_", " ", regex=True)
+
+		#merge and compute log2 and replace inf with 0
+		metadata = metadata.merge(counts, how="inner", on="sample")
+		metadata[log2_expression_or_abundance] = np.log2(metadata["counts"])
+		metadata[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
+
+		#plot per condition
+		conditions = metadata[metadata_column].unique().tolist()
+		conditions.sort()
+		
+		#setup plot
+		fig = go.Figure()
+		for condition in conditions:
+			filtered_df = metadata[metadata[metadata_column] == condition]
+
+			x_values = filtered_df[metadata_column].tolist()
+			y_values = filtered_df[log2_expression_or_abundance].tolist()
+			marker_color = functions.get_color(color_mapping, metadata_column, condition)
+
+			#create hovertext
+			filtered_df["hovertext"] = ""
+			for column in filtered_df.columns:
+				if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+					filtered_df["hovertext"] = filtered_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_df[column].astype(str) + "<br>"
+			hovertext = filtered_df["hovertext"].tolist()
+
+			#add trace
+			fig.add_trace(go.Violin(x=x_values, y=y_values, name=condition, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all"))
+
+		#update layout
+		fig.update_layout(title={"text": f"{clean_feature}", "font_size": 16, "x": 0.5, "xanchor": "center"}, yaxis_title=log2_expression_or_abundance, height=142, margin_t=30, margin_b=0, margin_l=0)
+		fig.update_xaxes(showticklabels=False)
+
+		#general config for boxplots
+		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{clean_feature}_profiling"}, "edits": {"legendPosition": True, "titleText": True}}
+
+		return fig, config

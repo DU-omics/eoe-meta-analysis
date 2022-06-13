@@ -1,33 +1,36 @@
-header:
-  logo: "assets/logo.png"
-  text: "EoE TaMMA"
-stringecy: "padj_1e-5"
+browser_tab_name: "EoE TaMMA"
+
+#github options
 github:
   private_repo: True
   username: "daneseomics"
-  token: "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"
-  repo_name: "DU-omics/eoe-meta-analysis_data"
+  token: "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"
+
+repos:
+  "EoE TaMMA":
+    analysis: "EoE TaMMA"
+    logo: "assets/eoe_tamma_logo.png"
+    path: "DU-omics/eoe-meta-analysis_data/master/"
+    stringency: "padj_1e-5"
+    default_comparison: "Esophagus_EoE-vs-Esophagus_Control"
+    sorted_conditions: False
+    condition_list: []
+
+#web app credentials
 credentials:
   use_credentials: True
   username: "ungaro"
   pass: "steams"
-default_comparison: "Esophagus_EoE-vs-Esophagus_Control"
-sorted_conditions: False
-condition_list:
-  - Healthy_GFP
-  - Healthy_MFSD2A_GFP
-  - Healthy_shCTRL
-  - Healthy_shMFSD2A
-  - CRC_GFP
-  - CRC_MFSD2A_GFP
-  - CRC_shCTRL
-  - CRC_shMFSD2A
+
+#external resources
 add_external_resources_to_dge_table: False
 external_resources:
   IBD exome browser:
     icon: "assets/icon_ibd_exome.png"
     link_root: https://ibd.broadinstitute.org/gene/
     column_to_use: "Gene ID"
+
+#opentargets
 opentargets: False
 
 palette:
