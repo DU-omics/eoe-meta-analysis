@@ -1,7 +1,7 @@
 header:
   logo: "assets/logo.png"
   text: "EoE TaMMA"
-stringecy: "padj_0.1"
+stringecy: "padj_1e-5"
 github:
   private_repo: True
   username: "daneseomics"
