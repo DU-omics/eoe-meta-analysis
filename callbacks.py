@@ -46,7 +46,7 @@ def define_callbacks(app):
 		#input
 		Input("analysis_dropdown", "value")
 	)
-	def update_metadata_related_data(path):
+	def update_analysis_related_data(path):
 		#metadata related elements
 		metadata = functions.download_from_github(path, "metadata.tsv")
 		metadata = pd.read_csv(metadata, sep = "\t")
@@ -621,7 +621,7 @@ def define_callbacks(app):
 		Output("mds_dataset", "value"),
 		Input("analysis_dropdown", "value")
 	)
-	def update_data_related_dropdowns(path):
+	def update_analysis_related_dropdowns(path):
 		#get all subdir to populate expression dataset
 		subdirs = functions.get_content_from_github(path, "data")
 		expression_datasets_options = []
@@ -766,10 +766,10 @@ def define_callbacks(app):
 		Output("dge_table_tab", "label"),
 		Output("go_table_tab", "label"),
 		Input("feature_dataset_dropdown", "value"),
-		Input("annotation_dropdown_options", "data"),
+		Input("discrete_metadata_options", "data"),
 		Input("continuous_metadata_options", "data"),
 		State("analysis_dropdown", "value"),
-		State("annotation_dropdown_options", "data"),
+		State("discrete_metadata_options", "data"),
 	)
 	def update_expression_abundance_profiling_tabs(expression_dataset, options_discrete, options_continue, path, annotation_dropdown_options):
 		
@@ -1034,91 +1034,112 @@ def define_callbacks(app):
 
 				#multiboxplots options and graph
 				html.Div([
-					#x dropdown
-					html.Label(["x",
-						dcc.Dropdown(
-						id="x_multiboxplots_dropdown",
-						clearable=False,
-						options=options_discrete,
-						value="condition"
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-					#y dropdown
-					html.Label(["y", 
-						dcc.Dropdown(
-							id="y_multiboxplots_dropdown",
-							clearable=False,
-							options=options_continue,
-							value="log2_expression",
-							className="dropdown-luigi"
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-					#group by dropdown
-					html.Label(["Group by", 
-						dcc.Dropdown(
-							id="group_by_multiboxplots_dropdown",
+					#dropdowns
+					html.Div([
+						#x dropdown
+						html.Label(["x",
+							dcc.Dropdown(
+							id="x_multiboxplots_dropdown",
 							clearable=False,
 							options=options_discrete,
 							value="condition"
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-					#plot per row
-					html.Label(["Plot per row", 
-						dcc.Dropdown(
-							id="plot_per_row_multiboxplots_dropdown",
-							clearable=False,
-							value=3,
-							options=[{"label": n, "value": n} for n in [1, 2, 3]]
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-					#comparison_only switch
+						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+						#y dropdown
+						html.Label(["y", 
+							dcc.Dropdown(
+								id="y_multiboxplots_dropdown",
+								clearable=False,
+								options=options_continue,
+								value="log2_expression",
+								className="dropdown-luigi"
+						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+						#group by dropdown
+						html.Label(["Group by", 
+							dcc.Dropdown(
+								id="group_by_multiboxplots_dropdown",
+								clearable=False,
+								options=options_discrete,
+								value="condition"
+						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+						#plot per row
+						html.Label(["Plot per row", 
+							dcc.Dropdown(
+								id="plot_per_row_multiboxplots_dropdown",
+								clearable=False,
+								value=3,
+								options=[{"label": n, "value": n} for n in [1, 2, 3]]
+						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					], style={"width": "100%", "display": "inline-block"}),
+					
+					#switches and sliders
 					html.Div([
-						html.Label(["Comparison only",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[1],
-								id="comparison_only_multiboxplots_switch",
-								switch=True
-							)
-						], style={"textAlign": "center"}),
-					], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-					#hide unselected switch
-					html.Div([
-						html.Label(["Hide unselected",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[],
-								id="hide_unselected_multiboxplots_switch",
-								switch=True
-							)
-						], style={"textAlign": "center"}),
-					], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-					#show as boxplot switch
-					html.Div([
-						html.Label(["Show as boxplots",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[],
-								id="show_as_multiboxplot_switch",
-								switch=True
-							)
-						], style={"textAlign": "center"}),
-					], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-					#custom hetmap dimension
-					html.Div([
-						#height slider
-						html.Label(["Height",
-							dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max = 2000)
-						], style={"width": "30%", "display": "inline-block"}),
-						#spacer
-						html.Div([], style={"width": "3%", "display": "inline-block"}),
-						#width slider
-						html.Label(["Width",
-							dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1)
-						], style={"width": "30%", "display": "inline-block"})
-					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+						#comparison_only switch
+						html.Div([
+							html.Label(["Comparison only",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[1],
+									id="comparison_only_multiboxplots_switch",
+									switch=True
+								)
+							], style={"textAlign": "center"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+						#best conditions switch
+						html.Div([
+							html.Label(["Best conditions",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[],
+									id="best_conditions_multiboxplots_switch",
+									switch=True
+								)
+							], style={"textAlign": "center"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+						#hide unselected switch
+						html.Div([
+							html.Label(["Hide unselected",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[],
+									id="hide_unselected_multiboxplots_switch",
+									switch=True
+								)
+							], style={"textAlign": "center"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+						#show as boxplot switch
+						html.Div([
+							html.Label(["Show as boxplots",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[],
+									id="show_as_multiboxplot_switch",
+									switch=True
+								)
+							], style={"textAlign": "center"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+						#custom hetmap dimension
+						html.Div([
+							#height slider
+							html.Label(["Height",
+								dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max=2000)
+							], style={"width": "49.5%", "display": "inline-block"}),
+							#spacer
+							html.Div([], style={"width": "1%", "display": "inline-block"}),
+							#width slider
+							html.Label(["Width",
+								dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1)
+							], style={"width": "49.5%", "display": "inline-block"})
+						], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
+					], style={"width": "100%", "display": "inline-block"}),
+
 					#x filter dropdown
 					html.Div(id="x_filter_dropdown_multiboxplots_div", hidden=True, children=[
 						html.Label(["x filter", 
@@ -3654,6 +3675,8 @@ def define_callbacks(app):
 		Output("multi_boxplots_div", "hidden"),
 		Output("multiboxplot_div", "style"),
 		Output("x_filter_dropdown_multiboxplots_div", "hidden"),
+		Output("comparison_only_multiboxplots_switch", "value"),
+		Output("best_conditions_multiboxplots_switch", "value"),
 		Output("hide_unselected_multiboxplots_switch", "value"),
 		Output("multiboxplots_height_slider", "value"),
 		Output("multiboxplots_width_slider", "value"),
@@ -3662,6 +3685,7 @@ def define_callbacks(app):
 		Input("group_by_multiboxplots_dropdown", "value"),
 		Input("y_multiboxplots_dropdown", "value"),
 		Input("comparison_only_multiboxplots_switch", "value"),
+		Input("best_conditions_multiboxplots_switch", "value"),
 		Input("hide_unselected_multiboxplots_switch", "value"),
 		Input("show_as_multiboxplot_switch", "value"),
 		Input("x_filter_multiboxplots_dropdown", "value"),
@@ -3677,7 +3701,7 @@ def define_callbacks(app):
 		State("analysis_dropdown", "value"),
 		State("color_mapping", "data")
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden, path, color_mapping):
+	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden, path, color_mapping):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
 		#define contexts
@@ -3686,6 +3710,7 @@ def define_callbacks(app):
 
 		#boolean swithces
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_best_conditions_switch = functions.boolean_switch(best_conditions_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		boolean_show_as_boxplot_switch = functions.boolean_switch(show_as_boxplot_switch)
 
@@ -3712,7 +3737,6 @@ def define_callbacks(app):
 		#empty dropdown
 		if selected_features is None or selected_features == []:
 			hidden_status = True
-			popover_status = False
 			x_filter_div_hidden = True
 		#filled dropdown
 		else:
@@ -3722,10 +3746,29 @@ def define_callbacks(app):
 				hide_unselected_switch = []
 				boolean_hide_unselected_switch = False
 
-				#filter samples for comparison
+				#comparison only and best conditions switches are mutually exclusive
+				if trigger_id == "comparison_only_multiboxplots_switch.value" and boolean_best_conditions_switch is True:
+					best_conditions_switch = []
+					boolean_best_conditions_switch = False
+				elif trigger_id == "best_conditions_multiboxplots_switch.value" and boolean_comparison_only_switch is True:
+					comparison_only_switch = []
+					boolean_comparison_only_switch = False
+
+				#filter samples for comparison or for best conditions
 				if boolean_comparison_only_switch:
 					contrast = contrast.replace("_", " ")
 					metadata_df_full = metadata_df_full[metadata_df_full["condition"].isin(contrast.split("-vs-"))]
+				elif boolean_best_conditions_switch:
+					repo = functions.get_repo_name_from_path(path, repos)
+					best_contrasts = config["repos"][repo]["best_comparisons"]
+					best_conditions = []
+					for best_contrast in best_contrasts:
+						best_contrast = best_contrast.replace("_", " ")
+						best_conditions_in_best_contrast = best_contrast.split("-vs-")
+						for best_condition in best_conditions_in_best_contrast:
+							if best_condition not in best_conditions:
+								best_conditions.append(best_condition)
+					metadata_df_full = metadata_df_full[metadata_df_full["condition"].isin(best_conditions)]
 
 				#create figure
 				box_fig = go.Figure()
@@ -3900,7 +3943,6 @@ def define_callbacks(app):
 						trace["visible"] = "legendonly"
 
 			#popover and div status
-			popover_status = False
 			hidden_status = False
 
 			#transparent figure
@@ -3912,7 +3954,7 @@ def define_callbacks(app):
 
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
 
-		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, hide_unselected_switch, height, width
+		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width
 	
 	#diversity plot
 	@app.callback(

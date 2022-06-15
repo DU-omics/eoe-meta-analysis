@@ -828,13 +828,17 @@ def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			#remove last ; if present
 			if genes[-1] == ";":
 				genes = genes[:-1]
+			#create a list of genes and add them to the multidropdown
+			genes = genes.split("; ")
+			new_genes = []
+			for gene in genes:
+				if gene not in selected_features:
+					selected_features.append(gene)
+					new_genes.append(gene)
 			#add genes to text area
 			if len(text) > 0:
 				text += "; "
-			text += genes
-			#create a list of genes and add them to the multidropdown
-			genes = genes.split("; ")
-			selected_features = selected_features + genes
+			text += new_genes
 		
 		#click on the enrichment legend should not trigger anything
 		else:
