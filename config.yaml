@@ -20,6 +20,8 @@ repos:
       - "Esophagus_EoE-vs-Esophagus_Control"
       - "Esophagus_EoE-vs-Esophagus_GERD"
       - "Esophagus_GERD-vs-Esophagus_Control"
+    sorted_conditions: False
+    condition_list: []
 
 #web app credentials
 credentials:
