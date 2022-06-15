@@ -9,12 +9,17 @@ github:
 repos:
   "EoE TaMMA":
     analysis: "EoE TaMMA"
-    logo: "assets/logo.png"
+    logo: "assets/eoe_tamma_logo.png"
     path: "DU-omics/eoe-meta-analysis_data/master/"
     stringency: "padj_1e-5"
     default_comparison: "Esophagus_EoE-vs-Esophagus_Control"
-    sorted_conditions: False
-    condition_list: []
+    best_comparisons:
+      - "Blood_EoE-vs-Blood_Control"
+      - "Blood_EoE-vs-Blood_GERD"
+      - "Blood_GERD-vs-Blood_Control"
+      - "Esophagus_EoE-vs-Esophagus_Control"
+      - "Esophagus_EoE-vs-Esophagus_GERD"
+      - "Esophagus_GERD-vs-Esophagus_Control"
 
 #web app credentials
 credentials:

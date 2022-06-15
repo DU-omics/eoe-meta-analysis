@@ -20,72 +20,91 @@ layout = html.Div([
 
 		#common options dropdown
 		html.Div([
-			#analysis dropdown
+			#first row
 			html.Div([
-				html.Label(["Analysis",
-					dcc.Dropdown(
-						id="analysis_dropdown",
-						clearable=False,
-						options=repos_options,
-						value=repos_options[0]["value"]
-				)], style={"width": "100%"}, className="dropdown-luigi")
-			], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left", "font-size": "12px"}, hidden=multiple_analysis),
+				#analysis dropdown
+				html.Div([
+					html.Label(["Analysis",
+						dcc.Dropdown(
+							id="analysis_dropdown",
+							clearable=False,
+							options=repos_options,
+							value=repos_options[0]["value"]
+					)], style={"width": "100%"}, className="dropdown-luigi")
+				], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left", "font-size": "12px"}, hidden=multiple_analysis),
 
-			#expression dataset dropdown
-			html.Div([
-				html.Label(["Expression/Abundance",
-					dcc.Dropdown(
-						id="feature_dataset_dropdown",
-						clearable=False,
-				)], style={"width": "100%"}, className="dropdown-luigi"),
-			], style={"width": "12.5%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				#expression dataset dropdown
+				html.Div([
+					html.Label(["Expression/Abundance",
+						dcc.Dropdown(
+							id="feature_dataset_dropdown",
+							clearable=False,
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 
-			#feature dropdown
-			html.Div([
-				html.Label(id = "feature_label", children = ["Loading...",
+				#feature dropdown
+				html.Div([
+					html.Label(id = "feature_label", children = ["Loading...",
+						dcc.Dropdown(
+							id="feature_dropdown",
+							clearable=False
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "40%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"})
+			], style={"width": "100%", "display": "inline-block"}),
+
+			#second row
+			html.Div([								
+				#comparison filter
+				html.Label(["Filter comparison by",
+					dbc.Input(id="comparison_filter_input", type="search", placeholder="Type here to filter comparisons", debounce=True, style={"font-family": "Arial", "font-size": 12, "height": 36}),
+				], style={"width": "20%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
+
+				#contrast dropdown
+				html.Label(["Comparison", 
 					dcc.Dropdown(
-						id="feature_dropdown",
+						id="contrast_dropdown",
 						clearable=False
-				)], style={"width": "100%"}, className="dropdown-luigi"),
-			], style={"width": "27.5%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				)], className="dropdown-luigi", style={"width": "35%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
 
-			#info comparison filter
-			html.Div([
-				html.Div(id="info_comparison_filter",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
-				dbc.Tooltip(
-					children=[dcc.Markdown(
-						"""
-						On the left, choose the __expression/abundance matrix__ and the __feature to plot__.
+				#info comparison filter
+				html.Div([
+					html.Div(id="info_comparison_filter",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+					dbc.Tooltip(
+						children=[dcc.Markdown(
+							"""
+							On the left, choose the __expression/abundance matrix__ and the __feature to plot__.
 
-						On the right, choose the __comparison__ between two conditions and the __stringency__ to be used for differential analyses.
+							On the right, choose the __comparison__ between two conditions and the __stringency__ to be used for differential analyses.
 
-						Use the __filter comparison__ form to restrict the possibilities in the comparison dropdown.
-						""")
-					],
-					target="info_comparison_filter",
-					style={"font-family": "arial", "font-size": 14}
-				),
-			], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"}),
-			
-			#comparison filter
-			html.Label(["Filter comparison by",
-				dbc.Input(id="comparison_filter_input", type="search", placeholder="Type here to filter comparisons", debounce=True, style={"font-family": "Arial", "font-size": 12, "height": 36}),
-			], style={"width": "17%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
-			
-			#contrast dropdown
-			html.Label(["Comparison", 
-				dcc.Dropdown(
-					id="contrast_dropdown",
-					clearable=False
-			)], className="dropdown-luigi", style={"width": "19%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"}),
+							Use the __filter comparison__ form to restrict the possibilities in the comparison dropdown.
+							""")
+						],
+						target="info_comparison_filter",
+						style={"font-family": "arial", "font-size": 14}
+					),
+				], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"}),
 
-			#stringecy dropdown
-			html.Label(["Stringency", 
-				dcc.Dropdown(
-					id="stringency_dropdown",
-					clearable=False
-			)], className="dropdown-luigi", style={"width": "9%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"})
+				#best comparisons switch
+				html.Div([
+					html.Label(["Best comparisons",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[1],
+							id="best_comparisons_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"})
+				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
 
+				#stringecy dropdown
+				html.Label(["Stringency", 
+					dcc.Dropdown(
+						id="stringency_dropdown",
+						clearable=False
+				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "margin-left": "auto", "margin-right": "auto", "vertical-align": "middle", "textAlign": "left"})
+			], style={"width": "100%", "display": "inline-block"}),
 		], style={"width": "100%", "font-size": "12px"}),
 		
 		html.Br(),
@@ -318,9 +337,9 @@ layout = html.Div([
 		html.Br(),
 		html.Br(),
 
-		#MA-plot + go plot + deconvolution
+		#MA-plot + go plot
 		html.Div([
-			#MA-plot + go plot
+			#MA-plot
 			html.Div([
 				#info MA-plot
 				html.Div([
@@ -350,7 +369,10 @@ layout = html.Div([
 						color = "lightgray"
 					)
 				], style={"width": "52%", "display": "inline-block"}),
+			], style={"width": "50%", "display": "inline-block", "font-size": "12px"}),
 
+			#go plot
+			html.Div([
 				#info and search bar go plot
 				html.Div([
 					#info
@@ -405,60 +427,7 @@ layout = html.Div([
 						color = "lightgray", 
 					),
 				], style={"width": "100%", "display": "inline-block"})
-				
-			], style={"width": "50%", "display": "inline-block", "font-size": "12px"}),
-
-			#deconvolution
-			html.Div(id="deconvolution_div", children=[
-				#info deconvolution
-				html.Div([
-					html.Div(id="info_deconvolution",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
-					dbc.Tooltip(
-						children=[dcc.Markdown(
-							"""
-							Coming soon...
-							""")
-						],
-						target="info_deconvolution",
-						style={"font-family": "arial", "font-size": 14}
-					),
-				], style={"width": "100%", "display": "inline-block"}),
-				
-				#split_by dropdown
-				html.Label(["Split by",
-					dcc.Dropdown(
-					id="split_by_1_deconvolution_dropdown",
-					clearable=False,
-					value="condition"
-				)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-				#second split_by dropdown
-				html.Label(["Split also by",
-					dcc.Dropdown(
-					id="split_by_2_deconvolution_dropdown",
-					clearable=False,
-					value="condition"
-				)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-				#plot per row dropdown
-				html.Label(["Plots per row",
-					dcc.Dropdown(
-					id="plots_per_row_deconvolution_dropdown",
-					clearable=False,
-					options=[{"label": "1", "value": 1}, {"label": "2", "value": 2}, {"label": "3", "value": 3}, {"label": "4", "value": 4}, {"label": "5", "value": 5}],
-					value=4
-				)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-				#deconvolution plot
-				html.Div([
-					dbc.Spinner(
-						id = "loading_deconvolution",
-						children = dcc.Graph(id="deconvolution_graph"),
-						size = "md",
-						color = "lightgray"
-					)
-				], style={"width": "100%", "display": "inline-block"})
-			], style={"width": "50%", "display": "inline-block", "vertical-align": "top", "font-size": "12px"})
+			], style={"width": "50%", "display": "inline-block", "font-size": "12px", "vertical-align": "top"})
 		], style = {"width": "100%", "display": "inline-block"}),
 
 		#tabs
@@ -466,7 +435,7 @@ layout = html.Div([
 		html.Br(),
 
 		html.Div(children=[
-			dcc.Tabs(id="site_tabs", value="metadata_tab", style= {"height": 40}),
+			dcc.Tabs(id="site_tabs", value="metadata_tab", style={"height": 40}),
 		], style = {"width": "100%", "display": "inline-block"})
 	], style={"width": 1200, "font-family": "Arial"})
 ], style={"width": "100%", "justify-content":"center", "display":"flex", "textAlign": "center"})

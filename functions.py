@@ -227,7 +227,7 @@ def plot_mds_discrete(color_mapping, mds_type, mds_dataset, selected_metadata, m
 	#plot
 	i = 0
 	if config["repos"][repo]["sorted_conditions"] and selected_metadata == "condition":
-		metadata_fields_ordered = config["condition_list"]
+		metadata_fields_ordered = config["repos"][repo]["condition_list"]
 		metadata_fields_ordered = [metadata_field.replace("_", " ") for metadata_field in metadata_fields_ordered]
 	else:
 		metadata_fields_ordered = mds_df[label_to_value[selected_metadata]].unique().tolist()

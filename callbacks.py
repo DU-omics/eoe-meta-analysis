@@ -30,6 +30,7 @@ def define_callbacks(app):
 		Output("label_to_value", "data"),
 		#tabs
 		Output("site_tabs", "children"),
+		Output("site_tabs", "value"),
 		#metadata table data
 		Output("metadata_table_store", "data"),
 		#metadata options
@@ -464,10 +465,11 @@ def define_callbacks(app):
 		], style=tab_style, selected_style=tab_selected_style)
 
 		#save main tabs in a list to use as children
-		all_tabs = [metadata_tab] + [expression_abundance_profiling_tab] + [differential_analysis_tab]
+		all_tabs = [metadata_tab, expression_abundance_profiling_tab, differential_analysis_tab]
 
 		## additional tabs ##
 		main_folders = functions.get_content_from_github(path, "./")
+		#mofa
 		if "mofa" in main_folders:
 			mofa_tab = dcc.Tab(label="Multi-omics signatures", value="mofa_tab", children=[
 				#mofa data overview
@@ -547,9 +549,69 @@ def define_callbacks(app):
 
 				html.Br()
 			], style=tab_style, selected_style=tab_selected_style)
-			all_tabs = [metadata_tab] + [mofa_tab] + [expression_abundance_profiling_tab] + [differential_analysis_tab]
+			all_tabs.append(mofa_tab)
 
-		return color_mapping, label_to_value, all_tabs, metadata_table_data, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, header_children
+		#deconvolution
+		if "deconvolution.tsv" in main_folders:
+			deconvolution_tab = dcc.Tab(label="Deconvolution", value="deconvolution_tab", children=[
+				html.Br(),
+
+				html.Div(id="deconvolution_div", children=[
+					#info deconvolution
+					html.Div([
+						html.Div(id="info_deconvolution",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+						dbc.Tooltip(
+							children=[dcc.Markdown(
+								"""
+								Coming soon...
+								""")
+							],
+							target="info_deconvolution",
+							style={"font-family": "arial", "font-size": 14}
+						),
+					], style={"width": "100%", "display": "inline-block"}),
+					
+					#split_by dropdown
+					html.Label(["Split by",
+						dcc.Dropdown(
+						id="split_by_1_deconvolution_dropdown",
+						clearable=False,
+						value="condition",
+						options=discrete_metadata_options,
+					)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+					#second split_by dropdown
+					html.Label(["Split also by",
+						dcc.Dropdown(
+						id="split_by_2_deconvolution_dropdown",
+						clearable=False,
+						value="condition",
+						options=discrete_metadata_options,
+					)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+					#plot per row dropdown
+					html.Label(["Plots per row",
+						dcc.Dropdown(
+						id="plots_per_row_deconvolution_dropdown",
+						clearable=False,
+						options=[{"label": "1", "value": 1}, {"label": "2", "value": 2}, {"label": "3", "value": 3}, {"label": "4", "value": 4}, {"label": "5", "value": 5}],
+						value=4
+					)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+					#deconvolution plot
+					html.Div([
+						dbc.Spinner(
+							id = "loading_deconvolution",
+							children = dcc.Graph(id="deconvolution_graph"),
+							size = "md",
+							color = "lightgray"
+						)
+					], style={"width": "100%", "display": "inline-block"})
+				], style={"width": "50%", "display": "inline-block", "font-size": "12px"})
+			], style=tab_style, selected_style=tab_selected_style)
+			all_tabs.append(deconvolution_tab)
+		
+		return color_mapping, label_to_value, all_tabs, "metadata_tab", metadata_table_data, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, header_children
 
 	#change analysis data callback
 	@app.callback(
@@ -589,12 +651,10 @@ def define_callbacks(app):
 	@app.callback(
 		Output("x_boxplot_dropdown", "options"),
 		Output("group_by_boxplot_dropdown", "options"),
-		Output("split_by_1_deconvolution_dropdown", "options"),
-		Output("split_by_2_deconvolution_dropdown", "options"),
 		Input("discrete_metadata_options", "data")
 	)
 	def discrete_metadata_options(options_discrete):
-		return options_discrete, options_discrete, options_discrete, options_discrete
+		return options_discrete, options_discrete
 
 	#add gsea switch
 	@app.callback(
@@ -1390,12 +1450,18 @@ def define_callbacks(app):
 		Output("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		Input("comparison_filter_input", "value"),
+		Input("best_comparisons_switch", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def get_contrasts(expression_dataset, input_value, path):
+	def get_contrasts(expression_dataset, input_value, best_comparisons_switch, path):
+		#trigger id
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
+		boolean_best_comparisons_switch = functions.boolean_switch(best_comparisons_switch)
 		
+		#get which repo has been selected
+		repo = functions.get_repo_name_from_path(path, repos)
+
 		dge_folder = "data/" + expression_dataset + "/dge"
 		dge_files = functions.get_content_from_github(path, dge_folder)
 		contrasts = []
@@ -1404,7 +1470,11 @@ def define_callbacks(app):
 		for dge_file in dge_files:
 			contrast = dge_file.split("/")[-1]
 			contrast = contrast.split(".")[0]
-			contrasts.append(contrast)
+			if boolean_best_comparisons_switch:
+				if contrast in config["repos"][repo]["best_comparisons"]:
+					contrasts.append(contrast)
+			else:
+				contrasts.append(contrast)
 			#if the input is the search bar, then try to filter
 			if trigger_id == "comparison_filter_input.value":
 				#get lower search values
@@ -1427,9 +1497,6 @@ def define_callbacks(app):
 		#if no filtered contrasts are present, use all the contrast
 		if len(filtered_contrasts) != 0:
 			contrasts = filtered_contrasts
-		
-		#get which repo has been selected
-		repo = functions.get_repo_name_from_path(path, repos)
 
 		#define options and default value
 		options = []
@@ -2565,11 +2632,10 @@ def define_callbacks(app):
 		Output("deconvolution_graph", "figure"),
 		Output("deconvolution_graph", "config"),
 		Output("plots_per_row_deconvolution_dropdown", "value"),
-		Output("deconvolution_div", "hidden"),
 		Input("split_by_1_deconvolution_dropdown", "value"),
 		Input("split_by_2_deconvolution_dropdown", "value"),
 		Input("plots_per_row_deconvolution_dropdown", "value"),
-		State("analysis_dropdown", "value")
+		Input("analysis_dropdown", "value")
 	)
 	def plot_deconvolution(split_by, split_by_2, plot_per_row, path):
 		#define contexts
@@ -2580,142 +2646,135 @@ def define_callbacks(app):
 		deconvolution_df = functions.download_from_github(path, "deconvolution.tsv")
 		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t")
 
+		#if there is no file, do not plot
 		if deconvolution_df.empty:
-			fig = go.Figure()
-			fig.add_annotation(text="Deconvolution not done yet.", showarrow=False)
-			fig.update_layout(xaxis_fixedrange=True, yaxis_fixedrange=True, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_linecolor="rgba(0,0,0,0)", yaxis_linecolor="rgba(0,0,0,0)", xaxis_showticklabels=False, yaxis_showticklabels=False, margin=dict(l=0, t=0, r=0, b=0), height=300)
-			fig.update_xaxes(range=[0, 4], ticks="")
-			fig.update_yaxes(range=[0, 4], ticks="")
-			title_text="missing_deconvolution"
-			hidden = True
+			raise PreventUpdate
+
+		#clean df
+		deconvolution_df[split_by] = deconvolution_df[split_by].str.replace("_", " ")
+		deconvolution_df = deconvolution_df.dropna(subset = [split_by])
+		
+		#get cell types
+		cell_types = deconvolution_df["Cell type"].unique().tolist()
+
+		#sum proportion for each selected value
+		if split_by == split_by_2:
+			#group by
+			grouped_df = deconvolution_df.groupby([split_by]).sum()
+			grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
+			grouped_df = grouped_df.reset_index()
+
+			#create x_values column
+			grouped_df["x_values"] = grouped_df[split_by]
+			deconvolution_df["x_values"] = deconvolution_df[split_by]
 		else:
-			hidden = False
-
-			#clean df
-			deconvolution_df[split_by] = deconvolution_df[split_by].str.replace("_", " ")
-			deconvolution_df = deconvolution_df.dropna(subset = [split_by])
+			if trigger_id == "split_by_2_deconvolution_dropdown.value":
+				plot_per_row = 3
 			
-			#get cell types
-			cell_types = deconvolution_df["Cell type"].unique().tolist()
+			#clean also the second column
+			deconvolution_df = deconvolution_df.dropna(subset = [split_by_2])
+			deconvolution_df[split_by_2] = deconvolution_df[split_by_2].str.replace("_", " ")
+			
+			#group by
+			grouped_df = deconvolution_df.groupby([split_by, split_by_2]).sum()
+			grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
+			grouped_df = grouped_df.reset_index()
 
-			#sum proportion for each selected value
-			if split_by == split_by_2:
-				#group by
-				grouped_df = deconvolution_df.groupby([split_by]).sum()
-				grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
-				grouped_df = grouped_df.reset_index()
+			#create x_values column with the two variables
+			grouped_df["x_values"] = grouped_df[split_by] + " " + grouped_df[split_by_2]
+			deconvolution_df["x_values"] = deconvolution_df[split_by] + " " + deconvolution_df[split_by_2]
 
-				#create x_values column
-				grouped_df["x_values"] = grouped_df[split_by]
-				deconvolution_df["x_values"] = deconvolution_df[split_by]
-			else:
-				if trigger_id == "split_by_2_deconvolution_dropdown.value":
-					plot_per_row = 3
-				
-				#clean also the second column
-				deconvolution_df = deconvolution_df.dropna(subset = [split_by_2])
-				deconvolution_df[split_by_2] = deconvolution_df[split_by_2].str.replace("_", " ")
-				
-				#group by
-				grouped_df = deconvolution_df.groupby([split_by, split_by_2]).sum()
-				grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
-				grouped_df = grouped_df.reset_index()
+		#get values that will be on the x axis of the subplots
+		x_values = deconvolution_df["x_values"].unique().tolist()
+		x_values.sort()
+		grouped_df = grouped_df.set_index("x_values")
 
-				#create x_values column with the two variables
-				grouped_df["x_values"] = grouped_df[split_by] + " " + grouped_df[split_by_2]
-				deconvolution_df["x_values"] = deconvolution_df[split_by] + " " + deconvolution_df[split_by_2]
+		#compute relative proportion by Cell type
+		filtered_df_list = []
+		for x_value in x_values:
+			#get value to compute relative proportion
+			sum_value = grouped_df.loc[x_value, "proportion_sum"]
+			#filter df for x value and compute his relative proportion
+			filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+			filtered_df["relative_proportion"] = filtered_df["Proportion"] / sum_value
+			#sum values of the same Cell type
+			filtered_df = filtered_df.groupby(["Cell type"]).sum()
+			#reconstruct df
+			filtered_df = pd.DataFrame({"relative_proportion": filtered_df["relative_proportion"]})
+			filtered_df["x_values"] = x_value
+			filtered_df = filtered_df.reset_index()
+			#append to list
+			filtered_df_list.append(filtered_df)
 
-			#get values that will be on the x axis of the subplots
-			x_values = deconvolution_df["x_values"].unique().tolist()
-			x_values.sort()
-			grouped_df = grouped_df.set_index("x_values")
+		#cat dfs
+		proportion_df = pd.concat(filtered_df_list)
+		proportion_df["percentage_relative_proportion"] = proportion_df["relative_proportion"] * 100
 
-			#compute relative proportion by Cell type
-			filtered_df_list = []
-			for x_value in x_values:
-				#get value to compute relative proportion
-				sum_value = grouped_df.loc[x_value, "proportion_sum"]
-				#filter df for x value and compute his relative proportion
-				filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
-				filtered_df["relative_proportion"] = filtered_df["Proportion"] / sum_value
-				#sum values of the same Cell type
-				filtered_df = filtered_df.groupby(["Cell type"]).sum()
-				#reconstruct df
-				filtered_df = pd.DataFrame({"relative_proportion": filtered_df["relative_proportion"]})
-				filtered_df["x_values"] = x_value
-				filtered_df = filtered_df.reset_index()
-				#append to list
-				filtered_df_list.append(filtered_df)
+		#setup deconvolution color dict
+		deconvolution_color_dict = {}
+		i = 0
+		for cell_type in cell_types:
+			deconvolution_color_dict[cell_type] = colors[i]
+			i += 1
 
-			#cat dfs
-			proportion_df = pd.concat(filtered_df_list)
-			proportion_df["percentage_relative_proportion"] = proportion_df["relative_proportion"] * 100
+		#create figure
+		fig = go.Figure()
 
-			#setup deconvolution color dict
-			deconvolution_color_dict = {}
-			i = 0
+		#define number of rows
+		if (len(x_values) % plot_per_row) == 0:
+			n_rows = len(x_values)/plot_per_row
+		else:
+			n_rows = len(x_values)/plot_per_row + 1
+		n_rows = int(n_rows)
+
+		#define specs for subplot starting from the space for the legend
+		specs = []
+
+		#define specs for each plot row
+		for i in range(0, n_rows):
+			specs.append([])
+			for y in range(0, plot_per_row):
+				specs[i].append({})
+		
+		#in case of odd number of selected elements, some plots in the grid are None
+		if (len(x_values) % plot_per_row) != 0:
+			odd_elements_to_plot = len(x_values) - plot_per_row * (n_rows - 1)
+			for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
+				specs[-1][-i] = None
+
+		#create subplot
+		fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion")
+
+		#get cell types and populate figure
+		working_row = 1
+		working_col = 1
+		showlegend = True
+		split_by_for_hover = split_by.capitalize().replace("_", " ")
+		split_by_2_for_hover = split_by_2.capitalize().replace("_", " ")
+		for x_value in x_values:
+			filtered_df = proportion_df[proportion_df["x_values"] == x_value]
+			filtered_df = filtered_df.set_index("Cell type")
 			for cell_type in cell_types:
-				deconvolution_color_dict[cell_type] = colors[i]
-				i += 1
-
-			#create figure
-			fig = go.Figure()
-
-			#define number of rows
-			if (len(x_values) % plot_per_row) == 0:
-				n_rows = len(x_values)/plot_per_row
-			else:
-				n_rows = len(x_values)/plot_per_row + 1
-			n_rows = int(n_rows)
-
-			#define specs for subplot starting from the space for the legend
-			specs = []
-
-			#define specs for each plot row
-			for i in range(0, n_rows):
-				specs.append([])
-				for y in range(0, plot_per_row):
-					specs[i].append({})
+				if split_by == split_by_2:
+					hovertemplate = f"{split_by_for_hover}: %{{x}}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
+				else:
+					filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+					x_1 = filtered_deconvolution_df[split_by].unique().tolist()
+					x_1 = x_1[0]
+					x_2 = filtered_deconvolution_df[split_by_2].unique().tolist()
+					x_2 = x_2[0]
+					hovertemplate = f"{split_by_for_hover}: {x_1}<br>{split_by_2_for_hover}: {x_2}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
+				fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate=hovertemplate), row=working_row, col=working_col)
 			
-			#in case of odd number of selected elements, some plots in the grid are None
-			if (len(x_values) % plot_per_row) != 0:
-				odd_elements_to_plot = len(x_values) - plot_per_row * (n_rows - 1)
-				for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
-					specs[-1][-i] = None
+			#adjust row and col counts
+			working_col += 1
+			if working_col == plot_per_row + 1:
+				working_row += 1
+				working_col = 1
 
-			#create subplot
-			fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion")
-
-			#get cell types and populate figure
-			working_row = 1
-			working_col = 1
-			showlegend = True
-			split_by_for_hover = split_by.capitalize().replace("_", " ")
-			split_by_2_for_hover = split_by_2.capitalize().replace("_", " ")
-			for x_value in x_values:
-				filtered_df = proportion_df[proportion_df["x_values"] == x_value]
-				filtered_df = filtered_df.set_index("Cell type")
-				for cell_type in cell_types:
-					if split_by == split_by_2:
-						hovertemplate = f"{split_by_for_hover}: %{{x}}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
-					else:
-						filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
-						x_1 = filtered_deconvolution_df[split_by].unique().tolist()
-						x_1 = x_1[0]
-						x_2 = filtered_deconvolution_df[split_by_2].unique().tolist()
-						x_2 = x_2[0]
-						hovertemplate = f"{split_by_for_hover}: {x_1}<br>{split_by_2_for_hover}: {x_2}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
-					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate=hovertemplate), row=working_row, col=working_col)
-				
-				#adjust row and col counts
-				working_col += 1
-				if working_col == plot_per_row + 1:
-					working_row += 1
-					working_col = 1
-
-				#showlegend only on the first tracw
-				if showlegend:
-					showlegend = False
+			#showlegend only on the first tracw
+			if showlegend:
+				showlegend = False
 
 			#update layout
 			height = (n_rows*100) + 200
@@ -2735,7 +2794,7 @@ def define_callbacks(app):
 
 		config_deconvolution = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": title_text}, "edits": {"titleText": True, "legendPosition": True}}
 
-		return fig, config_deconvolution, plot_per_row, hidden
+		return fig, config_deconvolution, plot_per_row
 
 	#GO-plot
 	@app.callback(
@@ -3054,7 +3113,7 @@ def define_callbacks(app):
 			else:
 				annotations.insert(0, "condition")
 
-			#plot only if at least one feature is present
+			#plot only if at least 2 features are present
 			if len(features) >= 2:
 				#get counts dfs
 				counts_df_list = []
@@ -3306,7 +3365,7 @@ def define_callbacks(app):
 				width_fig = width_multiplier*len(clustered_samples) + 75 + space_for_legend
 
 				#max height
-				max_height = dendro_top_height + 30*30 + heigth_multiplier*number_of_annotations + 50
+				max_height = dendro_top_height + 50*30 + heigth_multiplier*number_of_annotations + 50
 				if height_fig > max_height:
 					height_fig = max_height
 					max_height_flag = True
