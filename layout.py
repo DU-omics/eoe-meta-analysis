@@ -273,7 +273,20 @@ layout = html.Div([
 							switch=True
 						)
 					], style={"textAlign": "center"}),
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
+				#best conditions switch
+				html.Div([
+					html.Label(["Best conditions",
+						dbc.Checklist(
+							options=[
+								{"label": "", "value": 1},
+							],
+							value=[],
+							id="best_conditions_boxplots_switch",
+							switch=True
+						)
+					], style={"textAlign": "center"}),
+				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
 				#hide unselected switch
 				html.Div([
 					html.Label(["Hide unselected",
@@ -286,7 +299,7 @@ layout = html.Div([
 							switch=True
 						)
 					], style={"textAlign": "center"}),
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
 				#show as boxplot switch
 				html.Div([
 					html.Label(["Show as boxplots",
@@ -299,19 +312,19 @@ layout = html.Div([
 							switch=True
 						)
 					], style={"textAlign": "center"}),
-				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
 				#height slider
 				html.Div([
 					html.Label(["Height",
 						dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1)
 					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+				], style={"width": "14.5%", "display": "inline-block", "vertical-align": "middle"}),
 				#width slider
 				html.Div([
 					html.Label(["Width",
 						dcc.Slider(id="boxplots_width_slider", min=200, max=1000, step=1)
 					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "15%", "display": "inline-block", "vertical-align": "middle"}),
+				], style={"width": "14.5%", "display": "inline-block", "vertical-align": "middle"}),
 			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
 			
 			#x filter dropdown

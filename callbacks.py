@@ -768,10 +768,10 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value"),
 		Input("discrete_metadata_options", "data"),
 		Input("continuous_metadata_options", "data"),
-		State("analysis_dropdown", "value"),
-		State("discrete_metadata_options", "data"),
+		Input("annotation_dropdown_options", "data"),
+		State("analysis_dropdown", "value")
 	)
-	def update_expression_abundance_profiling_tabs(expression_dataset, options_discrete, options_continue, path, annotation_dropdown_options):
+	def update_expression_abundance_profiling_tabs(expression_dataset, options_discrete, options_continue, annotation_dropdown_options, path):
 		
 		#label for expression_abundance_profiling
 		if expression_dataset in ["human", "mouse"]:
@@ -847,48 +847,6 @@ def define_callbacks(app):
 					
 					html.Br(),
 
-					#cluster heatmap switch
-					html.Div([
-						html.Label(["Clustered samples",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[1],
-								id="clustered_heatmap_switch",
-								switch=True
-							)
-						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-					], style={"width": "34%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-
-					#comparison only heatmap switch
-					html.Div([
-						html.Label(["Comparison only",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[1],
-								id="comparison_only_heatmap_switch",
-								switch=True
-							)
-						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-					], style={"width": "33%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-
-					#hide unselected legend heatmap switch
-					html.Div([
-						html.Label(["Hide unselected",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[],
-								id="hide_unselected_heatmap_switch",
-								switch=True
-							)
-						], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-					], style={"width": "33%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-
 					#dropdowns
 					html.Label(["Annotations", 
 						dcc.Dropdown(id="annotation_dropdown", 
@@ -933,16 +891,70 @@ def define_callbacks(app):
 					
 					#custom hetmap dimension
 					html.Div([
+						#cluster heatmap switch
+						html.Div([
+							html.Label(["Clustered samples",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[1],
+									id="clustered_heatmap_switch",
+									switch=True
+								)
+							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+						], style={"width": "14%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+						#comparison only heatmap switch
+						html.Div([
+							html.Label(["Comparison only",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[1],
+									id="comparison_only_heatmap_switch",
+									switch=True
+								)
+							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+						#best conditions heatmap switch
+						html.Div([
+							html.Label(["Best conditions",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[],
+									id="best_conditions_heatmap_switch",
+									switch=True
+								)
+							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+
+						#hide unselected legend heatmap switch
+						html.Div([
+							html.Label(["Hide unselected",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[],
+									id="hide_unselected_heatmap_switch",
+									switch=True
+								)
+							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
+						
 						#height slider
 						html.Label(["Height",
 							dcc.Slider(id="hetamap_height_slider", min=200, step=1)
-						], style={"width": "30%", "display": "inline-block"}),
-						#spacer
-						html.Div([], style={"width": "3%", "display": "inline-block"}),
+						], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
 						#width slider
 						html.Label(["Width",
 							dcc.Slider(id="hetamap_width_slider", min=200, max=885, step=1)
-						], style={"width": "30%", "display": "inline-block"})
+						], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"})
 					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
 
 					#graph
@@ -1406,7 +1418,7 @@ def define_callbacks(app):
 		Input("ma_plot_graph", "clickData"),
 		Input("dge_table", "active_cell"),
 		Input("dge_table_filtered", "active_cell"),
-		State("analysis_dropdown", "value")
+		Input("analysis_dropdown", "value")
 	)
 	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, active_cell_full, active_cell_filtered, path):
 		#define contexts
@@ -1439,7 +1451,7 @@ def define_callbacks(app):
 				else:
 					value = active_cell["row_id"]
 		#change of dataset, setup search value with defaults
-		elif trigger_id in ["feature_dataset_dropdown.value", "."]:
+		elif trigger_id in ["feature_dataset_dropdown.value", ".", "analysis_dropdown.value"]:
 			if expression_dataset not in ["human", "mouse"]:
 				if "lipid" in expression_dataset:
 					if expression_dataset == "lipid":
@@ -2217,6 +2229,8 @@ def define_callbacks(app):
 		Output("boxplots_graph", "config"),
 		Output("x_filter_dropdown_div", "hidden"),
 		Output("hide_unselected_boxplot_switch", "value"),
+		Output("comparison_only_boxplots_switch", "value"),
+		Output("best_conditions_boxplots_switch", "value"),
 		Output("boxplots_width_slider", "value"),
 		Output("boxplots_height_slider", "value"),
 		Input("feature_dropdown", "value"),
@@ -2225,6 +2239,7 @@ def define_callbacks(app):
 		Input("group_by_boxplot_dropdown", "value"),
 		Input("y_boxplot_dropdown", "value"),
 		Input("comparison_only_boxplots_switch", "value"),
+		Input("best_conditions_boxplots_switch", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("hide_unselected_boxplot_switch", "value"),
 		Input("show_as_boxplot_switch", "value"),
@@ -2236,13 +2251,14 @@ def define_callbacks(app):
 		State("color_mapping", "data"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_boxplots(feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, expression_dataset, box_fig, hidden, color_mapping, path):
+	def plot_boxplots(feature, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, contrast, hide_unselected_switch, show_as_boxplot, width, height, expression_dataset, box_fig, hidden, color_mapping, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
 		#boolean switch
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_best_conditions_switch = functions.boolean_switch(best_conditions_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		boolean_show_as_boxplot = functions.boolean_switch(show_as_boxplot)
 
@@ -2290,10 +2306,29 @@ def define_callbacks(app):
 					width = 900
 					height = 375
 
+				#comparison only and best conditions switches are mutually exclusive
+				if trigger_id == "comparison_only_boxplots_switch.value" and boolean_best_conditions_switch is True:
+					best_conditions_switch = []
+					boolean_best_conditions_switch = False
+				elif trigger_id == "best_conditions_boxplots_switch.value" and boolean_comparison_only_switch is True:
+					comparison_only_switch = []
+					boolean_comparison_only_switch = False
+
 				#filter samples for comparison
+				repo = functions.get_repo_name_from_path(path, repos)
 				if boolean_comparison_only_switch:
 					contrast = contrast.replace("_", " ")
 					metadata_df = metadata_df[metadata_df["condition"].isin(contrast.split("-vs-"))]
+				elif boolean_best_conditions_switch:
+					best_contrasts = config["repos"][repo]["best_comparisons"]
+					best_conditions = []
+					for best_contrast in best_contrasts:
+						best_contrast = best_contrast.replace("_", " ")
+						best_conditions_in_best_contrast = best_contrast.split("-vs-")
+						for best_condition in best_conditions_in_best_contrast:
+							if best_condition not in best_conditions:
+								best_conditions.append(best_condition)
+					metadata_df = metadata_df[metadata_df["condition"].isin(best_conditions)]				
 
 				#counts as y need external file with count values
 				if y_metadata in ["log2_expression", "log2_abundance"]:
@@ -2308,9 +2343,6 @@ def define_callbacks(app):
 				#get trace names
 				if x_metadata == group_by_metadata:
 					column_for_filtering = x_metadata
-
-					#get repo used
-					repo = functions.get_repo_name_from_path(path, repos)
 
 					#user defined list of condition
 					if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]:
@@ -2425,7 +2457,7 @@ def define_callbacks(app):
 		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 		box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
-		return box_fig, config_boxplots, hidden, hide_unselected_switch, width, height
+		return box_fig, config_boxplots, hidden, hide_unselected_switch, comparison_only_switch, best_conditions_switch, width, height
 
 	#MA-plot
 	@app.callback(
@@ -3068,9 +3100,11 @@ def define_callbacks(app):
 		Output("hetamap_width_slider", "disabled"),
 		Output("hetamap_height_slider", "disabled"),
 		Output("comparison_only_heatmap_switch", "value"),
+		Output("best_conditions_heatmap_switch", "value"),
 		Input("update_heatmap_plot_button", "n_clicks"),
 		Input("clustered_heatmap_switch", "value"),
 		Input("comparison_only_heatmap_switch", "value"),
+		Input("best_conditions_heatmap_switch", "value"),
 		Input("hide_unselected_heatmap_switch", "value"),
 		Input("hetamap_height_slider", "value"),
 		Input("hetamap_width_slider", "value"),
@@ -3086,7 +3120,7 @@ def define_callbacks(app):
 		State("label_to_value", "data"),
 		State("color_mapping", "data")
 	)
-	def plot_heatmap(n_clicks, clustered_switch, comparison_only_switch, hide_unselected_switch, height, width, features, annotations, expression_dataset, old_figure, contrast, max_height, width_max, path, label_to_value, color_mapping):
+	def plot_heatmap(n_clicks, clustered_switch, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width, features, annotations, expression_dataset, old_figure, contrast, max_height, width_max, path, label_to_value, color_mapping):
 		# jak1 jak2 jak3 stat3 stat4 stat5a stat5b
 
 		#define contexts
@@ -3096,6 +3130,7 @@ def define_callbacks(app):
 		#transform switch to boolean switch
 		boolean_clustering_switch = functions.boolean_switch(clustered_switch)
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_best_conditions_switch = functions.boolean_switch(best_conditions_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 
 		#do not update the plot for change in contrast if the switch is off
@@ -3181,11 +3216,28 @@ def define_callbacks(app):
 					conditions = metadata["condition"].unique().tolist()
 					conditions.sort()
 
+				#comparison only and best conditions switches are mutually exclusive
+				if trigger_id == "comparison_only_heatmap_switch.value" and boolean_best_conditions_switch is True:
+					best_conditions_switch = []
+					boolean_best_conditions_switch = False
+				elif trigger_id == "best_conditions_heatmap_switch.value" and boolean_comparison_only_switch is True:
+					comparison_only_switch = []
+					boolean_comparison_only_switch = False
+
 				#parse old figure if present to get conditions to plot
 				if old_figure is None or len(old_figure["data"]) == 0:
 					if boolean_comparison_only_switch:
 						contrast = contrast.replace("_", " ")
 						conditions_to_keep = contrast.split("-vs-")
+					elif boolean_best_conditions_switch:
+						best_contrasts = config["repos"][repo]["best_comparisons"]
+						conditions_to_keep = []
+						for best_contrast in best_contrasts:
+							best_contrast = best_contrast.replace("_", " ")
+							best_conditions_in_best_contrast = best_contrast.split("-vs-")
+							for best_condition in best_conditions_in_best_contrast:
+								if best_condition not in conditions_to_keep:
+									conditions_to_keep.append(best_condition)
 					else:
 						conditions_to_keep = conditions
 				else:
@@ -3195,6 +3247,16 @@ def define_callbacks(app):
 					if boolean_comparison_only_switch:
 						contrast = contrast.replace("_", " ")
 						conditions_to_keep = contrast.split("-vs-")
+					#best conditions
+					elif boolean_best_conditions_switch:
+						best_contrasts = config["repos"][repo]["best_comparisons"]
+						conditions_to_keep = []
+						for best_contrast in best_contrasts:
+							best_contrast = best_contrast.replace("_", " ")
+							best_conditions_in_best_contrast = best_contrast.split("-vs-")
+							for best_condition in best_conditions_in_best_contrast:
+								if best_condition not in conditions_to_keep:
+									conditions_to_keep.append(best_condition)
 					else:
 						#find out if some conditions have to be removed
 						for trace in old_figure["data"]:
@@ -3494,7 +3556,7 @@ def define_callbacks(app):
 
 		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "width": width_fig, "height": height_fig, "scale": 5, "filename": config_filename_title}, "edits": {"colorbarPosition": True, "legendPosition": True, "titleText": True}}
 
-		return fig, config_fig, height_fig, max_height, width_fig, disabled, disabled, comparison_only_switch
+		return fig, config_fig, height_fig, max_height, width_fig, disabled, disabled, comparison_only_switch, best_conditions_switch
 
 	#heatmap annotation legend
 	@app.callback(
