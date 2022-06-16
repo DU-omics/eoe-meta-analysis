@@ -38,13 +38,11 @@ for repo in repos:
 
 #login to github
 github_session = requests.Session()
-if config["github"]["private_repo"]:
-	github_username = config["github"]["username"]
-	github_token = config["github"]["token"]
-	github_session.auth = (github_username, github_token)
-	session = Github(github_token)
-else:
-	session = Github()
+github_username = config["github"]["username"]
+github_token = config["github"]["token"]
+github_session.auth = (github_username, github_token)
+session = Github(github_token)
+
 
 #function for downloading files from GitHub
 def download_from_github(path, file_url):

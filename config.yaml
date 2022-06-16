@@ -1,8 +1,8 @@
+local: False
 browser_tab_name: "EoE TaMMA"
 
 #github options
 github:
-  private_repo: True
   username: "daneseomics"
   token: "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"
 
