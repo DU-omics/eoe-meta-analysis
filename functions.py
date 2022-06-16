@@ -836,7 +836,7 @@ def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			#add genes to text area
 			if len(text) > 0:
 				text += "; "
-			text += new_genes
+			text += "; ".join(new_genes)
 		
 		#click on the enrichment legend should not trigger anything
 		else:

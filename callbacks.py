@@ -2916,8 +2916,6 @@ def define_callbacks(app):
 		else:
 			#filter out useless columns
 			go_df = go_df[["DGE", "Process~name", "P-value", "percentage%"]]
-			#remove duplicate GO categories for up and down
-			#go_df.drop_duplicates(subset ="Process~name", keep = False, inplace = True)
 
 			#define search query if present
 			if search_value is not None and search_value != "":
@@ -3033,14 +3031,66 @@ def define_callbacks(app):
 		#legend colorbar trace
 		go_plot_fig.add_trace(go.Scatter(x=[None], y=[None], marker_showscale=True, marker_color = [0], marker_colorscale=["#737373", "#D9D9D9"], marker_cmax=0.05, marker_cmin=0, marker_sizemode="area", marker_colorbar=dict(thicknessmode="pixels", thickness=20, lenmode="pixels", len=(computed_height/5), y=0.68, x=0.8, xpad=0, ypad=0, xanchor="center", yanchor="middle")), row=2, col=3)
 
-		#size legend trace
-		if len(all_enrichments) > 0:
-			legend_sizes = [min(all_enrichments_interpolated), np.average([max(all_enrichments_interpolated), min(all_enrichments_interpolated)]), max(all_enrichments_interpolated)]
-			legend_sizes_text = [round(min(all_enrichments)), round(np.average([max(all_enrichments), min(all_enrichments)])), round(max(all_enrichments))]
+		#enrichment legend trace
+		if len(all_enrichments) >= 3:
+			#dimension
+			min_enrichment_interpolated = min(all_enrichments_interpolated)
+			max_enrichment_interpolated = max(all_enrichments_interpolated)
+			mid_enrichment_interpolated = np.average([min_enrichment_interpolated, max_enrichment_interpolated])
+			legend_sizes = [min_enrichment_interpolated, mid_enrichment_interpolated, max_enrichment_interpolated]
+
+			#text
+			min_enrichment = min(all_enrichments)
+			max_enrichment = max(all_enrichments)
+			mid_enrichment = np.average([min_enrichment, max_enrichment])
+			#check for small differences
+			if (mid_enrichment - min_enrichment) < 1 or (max_enrichment - mid_enrichment) < 1 or min_enrichment < 1 or mid_enrichment < 1 or max_enrichment < 1:
+				min_enrichment = round(min_enrichment, 2)
+				mid_enrichment = round(mid_enrichment, 2)
+				max_enrichment = round(max_enrichment, 2)
+			else:
+				min_enrichment = round(min_enrichment)
+				mid_enrichment = round(mid_enrichment)
+				max_enrichment = round(max_enrichment)
+			legend_sizes_text = [min_enrichment, mid_enrichment, max_enrichment]
+
+			#coordinates
+			enrichment_legend_x = [1, 1, 1]
+			enrichment_legend_y = [5, 40, 75]
+		elif len(all_enrichments) == 2:
+			#dimension
+			min_enrichment_interpolated = min(all_enrichments_interpolated)
+			max_enrichment_interpolated = max(all_enrichments_interpolated)
+			legend_sizes = [min_enrichment_interpolated, max_enrichment_interpolated]
+
+			#text
+			min_enrichment = min(all_enrichments)
+			max_enrichment = max(all_enrichments)
+			if (max_enrichment - min_enrichment) < 1 or min_enrichment < 1 or max_enrichment < 1:
+				min_enrichment = round(min_enrichment, 2)
+				max_enrichment = round(max_enrichment, 2)
+			else:
+				min_enrichment = round(min_enrichment)
+				max_enrichment = round(max_enrichment)
+			legend_sizes_text = [min_enrichment, max_enrichment]
+
+			#coordinates
+			enrichment_legend_x = [1, 1]
+			enrichment_legend_y = [20, 60]
+		elif len(all_enrichments) == 1:
+			legend_sizes = all_enrichments_interpolated
+			if all_enrichments[0] < 1:
+				legend_sizes_text = round(all_enrichments[0], 2)
+			else:
+				legend_sizes_text = round(all_enrichments[0])
+
+			#coordinates
+			enrichment_legend_x = [1]
+			enrichment_legend_y = [50]
 		else:
 			legend_sizes = [6, 10.5, 15]
 			legend_sizes_text = [33, 66, 99]
-		go_plot_fig.add_trace(go.Scatter(x=[1, 1, 1], y=[8, 43, 78], marker_size=legend_sizes, marker_color="#737373", mode="markers+text", text=legend_sizes_text, hoverinfo="text", hovertext=legend_sizes_text, textposition="top center"), row = 5, col = 3)
+		go_plot_fig.add_trace(go.Scatter(x=enrichment_legend_x, y=enrichment_legend_y, marker_size=legend_sizes, marker_color="#737373", mode="markers+text", text=legend_sizes_text, hoverinfo="text", hovertext=legend_sizes_text, textposition="top center"), row = 5, col = 3)
 
 		#figure layout
 		if expression_dataset in ["human", "mouse"]:
