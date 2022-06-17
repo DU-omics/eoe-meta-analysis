@@ -89,6 +89,7 @@ def define_callbacks(app):
 				color_mapping[column] = {}
 			metadata[column] = metadata[column].fillna("NA")
 			values = metadata[column].unique().tolist()
+			values = [str(value) for value in values]
 			values.sort()
 			for value in values:
 				if value == "NA":
@@ -1530,7 +1531,7 @@ def define_callbacks(app):
 		#if no filtered contrasts are present, use all the contrast
 		if len(filtered_contrasts) != 0:
 			contrasts = filtered_contrasts
-
+		
 		#define options and default value
 		options = []
 		possible_values = []
