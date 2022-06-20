@@ -2126,7 +2126,7 @@ def define_callbacks(app):
 			mds_metadata_div_style = {"width": "33.5%", "display": "inline-block"}
 
 		##### CONFIG OPTIONS ####
-		config_mds_metadata = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{metadata}".format(mds_metadata = mds_dataset, metadata = metadata_to_plot)}, "edits": {"legendPosition": True, "titleText": True}}
+		config_mds_metadata = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{metadata}".format(mds_metadata = mds_dataset, metadata = metadata_to_plot)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
 
 		mds_metadata_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 		mds_metadata_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
@@ -2452,7 +2452,7 @@ def define_callbacks(app):
 						trace["visible"] = "legendonly"
 
 		#general config for boxplots
-		config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
+		config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
 
 		box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
@@ -3605,7 +3605,7 @@ def define_callbacks(app):
 				fig.update_layout(xaxis_linecolor="rgb(255,255,255)", yaxis_linecolor="rgb(255,255,255)", xaxis_showticklabels=False, yaxis_showticklabels=False, xaxis_fixedrange=True, yaxis_fixedrange=True, xaxis_ticks="", yaxis_ticks="")
 				disabled = True
 
-		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "width": width_fig, "height": height_fig, "scale": 5, "filename": config_filename_title}, "edits": {"colorbarPosition": True, "legendPosition": True, "titleText": True}}
+		config_fig = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "width": width_fig, "height": height_fig, "scale": 5, "filename": config_filename_title}, "edits": {"colorbarPosition": True, "legendPosition": True, "titleText": True}}
 
 		return fig, config_fig, height_fig, max_height, width_fig, disabled, disabled, comparison_only_switch, best_conditions_switch
 
@@ -4063,7 +4063,7 @@ def define_callbacks(app):
 			box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 			box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
-		config_multi_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
+		config_multi_boxplots = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
 
@@ -4491,7 +4491,7 @@ def define_callbacks(app):
 		fig.update_annotations(font_size=14)
 
 		#config
-		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "factor_score_distribution"}}
+		config = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "factor_score_distribution"}}
 
 		return fig, config
 
@@ -4602,6 +4602,6 @@ def define_callbacks(app):
 		fig.update_xaxes(showticklabels=False)
 
 		#general config for boxplots
-		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{clean_feature}_profiling"}, "edits": {"legendPosition": True, "titleText": True}}
+		config = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{clean_feature}_profiling"}, "edits": {"legendPosition": True, "titleText": True}}
 
 		return fig, config

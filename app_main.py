@@ -29,7 +29,6 @@ define_callbacks(app)
 if __name__ == "__main__":
 
 	#run app
-	import os.path
 	if config["local"]:
 		app.run_server(debug=True, host = "172.21.17.26", port = "8052")
 	else:
