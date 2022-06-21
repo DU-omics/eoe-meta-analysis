@@ -553,7 +553,16 @@ def define_callbacks(app):
 			all_tabs.append(mofa_tab)
 
 		#deconvolution
-		if "deconvolution.tsv" in main_folders:
+		if "deconvolution" in main_folders:
+			deconvolution_datasets = functions.get_content_from_github(path, "deconvolution")
+			options_deconvolution_datasets = []
+
+			#deconvolution datasets
+			for deconvolution_dataset in deconvolution_datasets:
+				dataset_name = deconvolution_dataset.split(".")[0]
+				options_deconvolution_datasets.append({"label": dataset_name, "value": deconvolution_dataset})
+				
+			
 			deconvolution_tab = dcc.Tab(label="Deconvolution", value="deconvolution_tab", children=[
 				html.Br(),
 
@@ -564,7 +573,7 @@ def define_callbacks(app):
 						dbc.Tooltip(
 							children=[dcc.Markdown(
 								"""
-								Coming soon...
+								TODO
 								""")
 							],
 							target="info_deconvolution",
@@ -579,7 +588,7 @@ def define_callbacks(app):
 						clearable=False,
 						value="condition",
 						options=discrete_metadata_options,
-					)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 
 					#second split_by dropdown
 					html.Label(["Split also by",
@@ -588,7 +597,7 @@ def define_callbacks(app):
 						clearable=False,
 						value="condition",
 						options=discrete_metadata_options,
-					)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 
 					#plot per row dropdown
 					html.Label(["Plots per row",
@@ -597,7 +606,16 @@ def define_callbacks(app):
 						clearable=False,
 						options=[{"label": "1", "value": 1}, {"label": "2", "value": 2}, {"label": "3", "value": 3}, {"label": "4", "value": 4}, {"label": "5", "value": 5}],
 						value=4
-					)], className="dropdown-luigi", style={"width": "30%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+					#dataset dropdown
+					html.Label(["Data sets",
+						dcc.Dropdown(
+						id="data_sets_deconvolution_dropdown",
+						clearable=False,
+						options=options_deconvolution_datasets,
+						value=options_deconvolution_datasets[0]["value"]
+					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 
 					#deconvolution plot
 					html.Div([
@@ -607,8 +625,8 @@ def define_callbacks(app):
 							size = "md",
 							color = "lightgray"
 						)
-					], style={"width": "100%", "display": "inline-block"})
-				], style={"width": "50%", "display": "inline-block", "font-size": "12px"})
+					], style={"width": "50%", "display": "inline-block"})
+				], style={"width": "100%", "display": "inline-block", "font-size": "12px"})
 			], style=tab_style, selected_style=tab_selected_style)
 			all_tabs.append(deconvolution_tab)
 		
@@ -1531,7 +1549,7 @@ def define_callbacks(app):
 		#if no filtered contrasts are present, use all the contrast
 		if len(filtered_contrasts) != 0:
 			contrasts = filtered_contrasts
-		
+
 		#define options and default value
 		options = []
 		possible_values = []
@@ -2689,15 +2707,16 @@ def define_callbacks(app):
 		Input("split_by_1_deconvolution_dropdown", "value"),
 		Input("split_by_2_deconvolution_dropdown", "value"),
 		Input("plots_per_row_deconvolution_dropdown", "value"),
+		Input("data_sets_deconvolution_dropdown", "value"),
 		Input("analysis_dropdown", "value")
 	)
-	def plot_deconvolution(split_by, split_by_2, plot_per_row, path):
+	def plot_deconvolution(split_by, split_by_2, plot_per_row, deconvolution_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
 		#open deconvolution df
-		deconvolution_df = functions.download_from_github(path, "deconvolution.tsv")
+		deconvolution_df = functions.download_from_github(path, f"deconvolution/{deconvolution_dataset}")
 		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t")
 
 		#if there is no file, do not plot
