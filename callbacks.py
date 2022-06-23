@@ -1500,17 +1500,30 @@ def define_callbacks(app):
 	@app.callback(
 		Output("contrast_dropdown", "options"),
 		Output("contrast_dropdown", "value"),
+		Output("best_comparisons_switch", "value"),
+		Output("best_comparisons_switch", "options"),
 		Input("feature_dataset_dropdown", "value"),
 		Input("comparison_filter_input", "value"),
 		Input("best_comparisons_switch", "value"),
-		State("analysis_dropdown", "value")
+		State("analysis_dropdown", "value"),
+		State("best_comparisons_switch", "options")
 	)
-	def get_contrasts(expression_dataset, input_value, best_comparisons_switch, path):
+	def get_contrasts(expression_dataset, input_value, best_comparisons_switch, path, best_comparisons_switch_options):
 		#trigger id
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		boolean_best_comparisons_switch = functions.boolean_switch(best_comparisons_switch)
 		
+		#if best contrasts is true, in case these will not be present in this expression dataset then the switch should be disabled
+		if boolean_best_comparisons_switch:
+			tried_to_filter_best_contrasts = True
+		else:
+			tried_to_filter_best_contrasts = False
+		
+		#by changing expression dataset, assume that is possible to use best comparisons
+		if trigger_id == "feature_dataset_dropdown.value":
+			best_comparisons_switch_options = [{"label": "", "value": 1, "disabled": False}]
+
 		#get which repo has been selected
 		repo = functions.get_repo_name_from_path(path, repos)
 
@@ -1522,11 +1535,12 @@ def define_callbacks(app):
 		for dge_file in dge_files:
 			contrast = dge_file.split("/")[-1]
 			contrast = contrast.split(".")[0]
+			
+			#try to use the best contrasts in the config
 			if boolean_best_comparisons_switch:
 				if contrast in config["repos"][repo]["best_comparisons"]:
-					contrasts.append(contrast)
-			else:
-				contrasts.append(contrast)
+					filtered_contrasts.append(contrast)
+			
 			#if the input is the search bar, then try to filter
 			if trigger_id == "comparison_filter_input.value":
 				#get lower search values
@@ -1546,9 +1560,17 @@ def define_callbacks(app):
 				if matches == number_of_values:
 					filtered_contrasts.append(contrast)
 
-		#if no filtered contrasts are present, use all the contrast
+			#save anyway all contrasts in case there are no possibilities
+			contrasts.append(contrast)
+		
+		#if no filtered contrasts are present, use all the contrasts
 		if len(filtered_contrasts) != 0:
 			contrasts = filtered_contrasts
+		#turn off the switch if any of the best comparisons is in this new dataset and disable the switch
+		else:
+			if trigger_id == "feature_dataset_dropdown.value" and tried_to_filter_best_contrasts:
+				best_comparisons_switch = []
+				best_comparisons_switch_options = [{"label": "", "value": 1, "disabled": True}]
 
 		#define options and default value
 		options = []
@@ -1561,7 +1583,7 @@ def define_callbacks(app):
 		else:
 			value = options[0]["value"]
 
-		return options, value
+		return options, value, best_comparisons_switch, best_comparisons_switch_options
 
 	#stringency dropdown
 	@app.callback(
@@ -2885,7 +2907,9 @@ def define_callbacks(app):
 
 		#metatranscriptomics does not have go
 		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
-			raise PreventUpdate
+			expression_dataset = "human"
+			repo = functions.get_repo_name_from_path(path, repos)
+			stringency = config["repos"][repo]["stringency"]
 		
 		#boolean switch
 		boolean_add_gsea_switch = functions.boolean_switch(add_gsea_switch)
@@ -3108,8 +3132,13 @@ def define_callbacks(app):
 			enrichment_legend_x = [1]
 			enrichment_legend_y = [50]
 		else:
+			#dimension
 			legend_sizes = [6, 10.5, 15]
 			legend_sizes_text = [33, 66, 99]
+			
+			#coordinates
+			enrichment_legend_x = [1, 1, 1]
+			enrichment_legend_y = [5, 40, 75]
 		go_plot_fig.add_trace(go.Scatter(x=enrichment_legend_x, y=enrichment_legend_y, marker_size=legend_sizes, marker_color="#737373", mode="markers+text", text=legend_sizes_text, hoverinfo="text", hovertext=legend_sizes_text, textposition="top center"), row = 5, col = 3)
 
 		#figure layout
