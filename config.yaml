@@ -11,7 +11,7 @@ repos:
     analysis: "EoE TaMMA"
     logo: "assets/eoe_tamma_logo.png"
     path: "DU-omics/eoe-meta-analysis_data/master/"
-    stringency: "padj_1e-5"
+    stringency: "padj_1e-10"
     default_comparison: "Esophagus_EoE-vs-Esophagus_Control"
     best_comparisons:
       - "Blood_EoE-vs-Blood_Control"
