@@ -585,13 +585,17 @@ def dge_table_operations(table, dataset, stringency, target_prioritization, path
 			{"name": "P-value", "id":"P-value", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
 			{"name": "FDR", "id":"FDR", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
 			{"name": "External resources", "id":"External resources", "type": "text", "presentation": "markdown"}
-			]
+		]
 		#Gene ID column not useful for metatransciptomics data and lipid category
 		if dataset not in ["human", "mouse", "lipid"]:
 			del columns[1]
 			#lipid categories doesn't have any external resource
 			if dataset == "lipid_category":
 				del columns[-1]
+		
+		#add contrast column as first column if necessary
+		if "Contrast" in table.columns:
+			columns = [{"name": "Contrast", "id": "Contrast"}] + columns
 
 	#define data
 	data = table.to_dict("records")

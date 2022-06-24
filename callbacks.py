@@ -1,4 +1,5 @@
 #import packages
+from xml.dom.pulldom import START_ELEMENT
 import dash
 from dash import dcc, html
 from dash.exceptions import PreventUpdate
@@ -1156,6 +1157,19 @@ def define_callbacks(app):
 								)
 							], style={"textAlign": "center"}),
 						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+						#stats switch
+						html.Div([
+							html.Label(["Statistics",
+								dbc.Checklist(
+									options=[
+										{"label": "", "value": 1},
+									],
+									value=[],
+									id="stats_multiboxplots_switch",
+									switch=True
+								)
+							], style={"textAlign": "center"}),
+						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
 						#custom hetmap dimension
 						html.Div([
 							#height slider
@@ -1192,9 +1206,21 @@ def define_callbacks(app):
 									color = "lightgray")
 							], hidden=True)
 						])
-					], style={"height": 800, "width": "100%", "display": "inline-block", "vertical-align": "top"})
+					], style={"width": "100%", "display": "inline-block", "vertical-align": "top"}),
+
 				], style={"width": "75%", "font-size": "12px", "display": "inline-block"}),
-			], style={"width": "100%", "height": 800, "display": "inline-block"})
+			
+				#update stats button
+				html.Div([
+					dbc.Button("Update statistics", id="update_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})
+				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+				
+				#div that can contain statistics table
+				html.Br(),
+				html.Div(id="multiboxplot_stats_div", hidden=True, style={"width": "100%", "display": "inline-block"}, className="luigi-dash-table"),
+				html.Br()
+
+			], style={"width": "100%", "display": "inline-block"})
 		], style=tab_style, selected_style=tab_selected_style)
 
 		children = [heatmap_tab, multi_violin_tab]
@@ -2046,6 +2072,125 @@ def define_callbacks(app):
 		data = go_df.to_dict("records")
 
 		return columns, data
+
+	#multiboxplot statistics
+	@app.callback(
+		Output("stats_multiboxplots_switch", "options"),
+		Output("stats_multiboxplots_switch", "value"),
+		Output("multiboxplot_stats_div", "children"),
+		Output("multiboxplot_stats_div", "hidden"),
+		Input("stats_multiboxplots_switch", "value"),
+		Input("comparison_only_multiboxplots_switch", "value"),
+		Input("x_multiboxplots_dropdown", "value"),
+		Input("stringency_dropdown", "value"),
+		Input("update_multiboxplot_stats_button", "n_clicks"),
+		State("multi_boxplots_graph", "figure"),
+		State("feature_dataset_dropdown", "value"),
+		State("y_multiboxplots_dropdown", "options"),
+		State("stats_multiboxplots_switch", "options"),
+		State("analysis_dropdown", "value")
+	)
+	def display_multibox_stats(stats_switch, comparison_only_switch, x, stringency, update_statistics_button, multiboxplot_graph, expression_dataset, y_options, switch_options, path):
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		#statistics are only available for "condition" in x
+		if trigger_id == "x_multiboxplots_dropdown.value":
+			if x == "condition":
+				switch_options = [{"label": "", "value": 1}]
+				stats_switch = [1]
+			else:
+				switch_options = [{"label": "", "value": 1, "disabled": True}]
+				stats_switch = []
+		
+		boolean_stats_switch = functions.boolean_switch(stats_switch)
+
+		if boolean_stats_switch:
+			hidden = False
+			
+			#get possible values for y axis annotation
+			possible_y_titles = []
+			for option in y_options:
+				possible_y_titles.append(option["label"])
+
+			#get genes in plot
+			genes = []
+			for annotation in multiboxplot_graph["layout"]["annotations"]:
+				if annotation["text"] not in possible_y_titles:
+					genes.append(annotation["text"])
+
+			#get conditions in plot
+			conditions = []
+			for trace in multiboxplot_graph["data"]:
+				if trace["visible"] == True:
+					if trace["name"] not in conditions:
+						conditions.append(trace["name"])
+			
+			#get contrasts which have both conditions in the selected conditions in the plot
+			contrasts_df_list = []
+			dge_folder = "data/" + expression_dataset + "/dge"
+			dge_files = functions.get_content_from_github(path, dge_folder)
+			for dge_file in dge_files:
+				contrast = dge_file.split("/")[-1]
+				contrast = contrast.split(".")[0]
+				conditions_in_contrast = contrast.split("-vs-")
+				condition_1 = conditions_in_contrast[0]
+				condition_2 = conditions_in_contrast[1]
+				if condition_1.replace("_", " ") in conditions and condition_2.replace("_", " ") in conditions:
+					dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
+					dge_table = pd.read_csv(dge_table, sep = "\t")
+					dge_table = dge_table[dge_table["Gene"].isin(genes)]
+					dge_table["Contrast"] = contrast.replace("-", " ").replace("_", " ")
+					contrasts_df_list.append(dge_table)
+
+			#concat all dfs
+			if len(contrasts_df_list) > 1:
+				merged_df = pd.concat(contrasts_df_list)
+			else:
+				merged_df = dge_table
+
+			statistics_table_columns, statistics_table_data, style_data_conditional = functions.dge_table_operations(merged_df, expression_dataset, stringency, False, path)
+
+			#table
+			children = [
+				html.Br(),
+				dbc.Spinner(
+					size="md",
+					color="lightgray",
+					children=dash_table.DataTable(
+						id="metadata_table",
+						filter_action="native",
+						style_filter={
+							"text-align": "left"
+						},
+						style_table={
+							"text-align": "left"
+						},
+						style_cell={
+							"whiteSpace": "normal",
+							"height": "auto",
+							"fontSize": 12, 
+							"font-family": "arial",
+							"text-align": "left"
+						},
+						style_data_conditional=style_data_conditional,
+						page_size=25,
+						sort_action="native",
+						style_header={
+							"text-align": "left"
+						},
+						style_as_list_view=True,
+						data=statistics_table_data,
+						columns=statistics_table_columns
+					)
+				),
+				html.Br()
+			]
+		else:
+			hidden = True
+			children = []
+
+		return switch_options, stats_switch, children, hidden
 
 	##### plots #####
 
@@ -3841,6 +3986,7 @@ def define_callbacks(app):
 		Output("hide_unselected_multiboxplots_switch", "value"),
 		Output("multiboxplots_height_slider", "value"),
 		Output("multiboxplots_width_slider", "value"),
+		Output("update_multiboxplot_stats_button", "n_clicks"),
 		Input("update_multiboxplot_plot_button", "n_clicks"),
 		Input("x_multiboxplots_dropdown", "value"),
 		Input("group_by_multiboxplots_dropdown", "value"),
@@ -3860,9 +4006,10 @@ def define_callbacks(app):
 		State("multi_boxplots_div", "hidden"),
 		State("x_filter_dropdown_multiboxplots_div", "hidden"),
 		State("analysis_dropdown", "value"),
-		State("color_mapping", "data")
+		State("color_mapping", "data"),
+		State("update_multiboxplot_stats_button", "n_clicks"),
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden, path, color_mapping):
+	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden, path, color_mapping, n_clicks_update_multiboxplot_stats):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
 		#define contexts
@@ -4065,9 +4212,9 @@ def define_callbacks(app):
 						#create traces
 						marker_color = functions.get_color(color_mapping, column_for_filtering, metadata)
 						if boolean_show_as_boxplot_switch:
-							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
+							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True), row=working_row, col=working_col)
 						else:
-							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4), row=working_row, col=working_col)
+							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True), row=working_row, col=working_col)
 
 					#just one legend for trece showed is enough
 					if showlegend is True:
@@ -4115,7 +4262,7 @@ def define_callbacks(app):
 
 		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
 
-		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width
+		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width, n_clicks_update_multiboxplot_stats
 	
 	#diversity plot
 	@app.callback(
