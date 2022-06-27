@@ -1,4 +1,5 @@
 #import packages
+from cmath import e
 from xml.dom.pulldom import START_ELEMENT
 import dash
 from dash import dcc, html
@@ -184,7 +185,8 @@ def define_callbacks(app):
 						},
 						style_as_list_view=True,
 						data=metadata_table_data,
-						columns=metadata_table_columns
+						columns=metadata_table_columns,
+						filter_options={"case": "insensitive"}
 					)
 				)
 			], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
@@ -282,6 +284,7 @@ def define_callbacks(app):
 							color="lightgray",
 							children=dash_table.DataTable(
 								id="dge_table_filtered",
+								filter_action="native",
 								style_cell={
 									"whiteSpace": "normal",
 									"height": "auto",
@@ -301,7 +304,8 @@ def define_callbacks(app):
 									}
 								],
 								style_data_conditional=[],
-								style_as_list_view=True
+								style_as_list_view=True,
+								filter_options={"case": "insensitive"}
 							)
 						)
 					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}, hidden=True),
@@ -315,6 +319,7 @@ def define_callbacks(app):
 							color="lightgray",
 							children=dash_table.DataTable(
 								id="dge_table",
+								filter_action="native",
 								style_cell={
 									"whiteSpace": "normal",
 									"height": "auto",
@@ -334,7 +339,8 @@ def define_callbacks(app):
 									}
 								],
 								style_data_conditional=[],
-								style_as_list_view=True
+								style_as_list_view=True,
+								filter_options={"case": "insensitive"}
 							)
 						)
 					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
@@ -400,6 +406,7 @@ def define_callbacks(app):
 							color="lightgray",
 							children=dash_table.DataTable(
 								id="go_table",
+								filter_action="native",
 								style_cell={
 									"whiteSpace": "normal",
 									"height": "auto",
@@ -457,7 +464,8 @@ def define_callbacks(app):
 										"border": "1px solid #597ea2",
 									}
 								],
-								style_as_list_view=True
+								style_as_list_view=True,
+								filter_options={"case": "insensitive"}
 							)
 						)
 					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
@@ -1209,12 +1217,20 @@ def define_callbacks(app):
 					], style={"width": "100%", "display": "inline-block", "vertical-align": "top"}),
 
 				], style={"width": "75%", "font-size": "12px", "display": "inline-block"}),
-			
-				#update stats button
-				html.Div([
-					dbc.Button("Update statistics", id="update_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})
-				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
 				
+				html.Br(),
+				html.Br(),
+
+				#update and download stats buttons
+				html.Div(id="multibox_stats_buttons_div", hidden=True, children=[
+					dbc.Button("Update statistics", id="update_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+
+					html.Div(children=[], style={"width": "10%", "display": "inline-block"}),
+
+					dbc.Button("Download statistics", id="download_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+					dcc.Download(id="download_multiboxplot_stats")
+				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
+
 				#div that can contain statistics table
 				html.Br(),
 				html.Div(id="multiboxplot_stats_div", hidden=True, style={"width": "100%", "display": "inline-block"}, className="luigi-dash-table"),
@@ -1935,6 +1951,72 @@ def define_callbacks(app):
 
 		return functions.go_table_download_operations(go_df, expression_dataset, contrast, True)
 	
+	#download boxplot statisatics table
+	@app.callback(
+		Output("download_multiboxplot_stats", "data"),
+		Input("download_multiboxplot_stats_button", "n_clicks"),
+		State("stats_multixoplots_table", "data"),
+		State("feature_dataset_dropdown", "value"),
+		State("stringency_dropdown", "value"),
+		prevent_initial_call=True
+	)
+	def download_stats_multiboxplots(n_clicks, stats_table, expression_dataset, stringency):
+		#read data
+		stats_table = pd.DataFrame(stats_table)
+
+		#find out colors for rows
+		pvalue_type = stringency.split("_")[0]
+		if pvalue_type == "padj":
+			pvalue_type = "FDR"
+		else:
+			pvalue_type = "P-value"
+		pvalue_value = stringency.split("_")[1]
+		#not significant
+		stats_table.loc[(stats_table[pvalue_type] > float(pvalue_value)), "color"] = "white"
+		#up
+		stats_table.loc[(stats_table[pvalue_type] <= float(pvalue_value)) & (stats_table["log2 FC"] > 0), "color"] = "#FFE6E6"
+		#down
+		stats_table.loc[(stats_table[pvalue_type] <= float(pvalue_value)) & (stats_table["log2 FC"] < 0), "color"] = "#E6F0FF"
+		colors = stats_table["color"].tolist()
+
+		#reorder columns and remove external resources and id column
+		if expression_dataset in ["human", "mouse"]:
+			base_mean_label = "Average expression"
+			gene_column_name = "Gene"
+		else:
+			#base mean label
+			if "genes" in expression_dataset:
+				base_mean_label = "Average expression"
+			else:
+				base_mean_label = "Average abundance"
+			#all other variables
+			gene_column_name = expression_dataset.replace("_", " ").capitalize()
+		stats_table = stats_table[["Comparison", gene_column_name, base_mean_label, "log2 FC", "log2 FC SE", "stat", "P-value", "FDR"]]
+		
+		#formatting numbers
+		for column in stats_table.columns:
+			if column in ["P-value", "FDR"]:
+				stats_table[column] = stats_table[column].apply(lambda x: "%.2e" % x if not x.is_integer() else x).values.tolist()
+			elif column in [base_mean_label, "log2 FC", "log2 FC SE", "stat"]: 
+				stats_table[column] = stats_table[column].apply(lambda x: round(x, 1)).values.tolist()
+
+		#create figure
+		fig = go.Figure(data=[go.Table(
+			columnwidth=[0.3, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+			header=dict(values=list(stats_table.columns), align="left", font_family="Arial", fill_color="lightgray"),
+			cells=dict(values=[stats_table["Comparison"], stats_table[gene_column_name], stats_table[base_mean_label], stats_table["log2 FC"], stats_table["log2 FC SE"], stats_table["stat"], stats_table["P-value"], stats_table["FDR"]], align="left", font_family="Arial", fill_color=[colors]))
+		])
+
+		#update layout
+		height = 48 + (20 * len(stats_table.index))
+		fig.update_layout(margin_b=0, margin_t=0, margin_l=0, margin_r=0, width=1000, height=height)
+
+		with tempfile.TemporaryDirectory() as tmpdir:
+			fig.write_image(f"{tmpdir}/stats.png", scale=5)
+			png = f"{tmpdir}/stats.png"
+
+			return dcc.send_file(png)
+
 	### TABLES ###
 
 	#dge table filtered by multidropdown
@@ -2079,6 +2161,7 @@ def define_callbacks(app):
 		Output("stats_multiboxplots_switch", "value"),
 		Output("multiboxplot_stats_div", "children"),
 		Output("multiboxplot_stats_div", "hidden"),
+		Output("multibox_stats_buttons_div", "hidden"),
 		Input("stats_multiboxplots_switch", "value"),
 		Input("comparison_only_multiboxplots_switch", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
@@ -2140,7 +2223,7 @@ def define_callbacks(app):
 					dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
 					dge_table = pd.read_csv(dge_table, sep = "\t")
 					dge_table = dge_table[dge_table["Gene"].isin(genes)]
-					dge_table["Contrast"] = contrast.replace("-", " ").replace("_", " ")
+					dge_table["Comparison"] = contrast.replace("-", " ").replace("_", " ")
 					contrasts_df_list.append(dge_table)
 
 			#concat all dfs
@@ -2153,12 +2236,14 @@ def define_callbacks(app):
 
 			#table
 			children = [
+				
 				html.Br(),
+				
 				dbc.Spinner(
 					size="md",
 					color="lightgray",
 					children=dash_table.DataTable(
-						id="metadata_table",
+						id="stats_multixoplots_table",
 						filter_action="native",
 						style_filter={
 							"text-align": "left"
@@ -2181,7 +2266,8 @@ def define_callbacks(app):
 						},
 						style_as_list_view=True,
 						data=statistics_table_data,
-						columns=statistics_table_columns
+						columns=statistics_table_columns,
+						filter_options={"case": "insensitive"}
 					)
 				),
 				html.Br()
@@ -2190,7 +2276,7 @@ def define_callbacks(app):
 			hidden = True
 			children = []
 
-		return switch_options, stats_switch, children, hidden
+		return switch_options, stats_switch, children, hidden, hidden
 
 	##### plots #####
 

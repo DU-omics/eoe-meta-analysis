@@ -538,7 +538,7 @@ def dge_table_operations(table, dataset, stringency, target_prioritization, path
 		else:
 			#base mean label
 			if "genes" in dataset:
-				base_mean_label = "Average expression"	
+				base_mean_label = "Average expression"
 			else:
 				base_mean_label = "Average abundance"
 			#all other variables
@@ -594,8 +594,8 @@ def dge_table_operations(table, dataset, stringency, target_prioritization, path
 				del columns[-1]
 		
 		#add contrast column as first column if necessary
-		if "Contrast" in table.columns:
-			columns = [{"name": "Contrast", "id": "Contrast"}] + columns
+		if "Comparison" in table.columns:
+			columns = [{"name": "Comparison", "id": "Comparison"}] + columns
 
 	#define data
 	data = table.to_dict("records")
