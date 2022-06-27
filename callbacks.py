@@ -1678,7 +1678,7 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		if trigger_id == "continuous_metadata_options.data":
+		if trigger_id == "continuous_metadata_options.data" or y_boxplots_dropdown is None:
 			y_boxplots_dropdown = continuous_metadata_options_data
 		
 		if feature_dataset_dropdown in ["human", "mouse"] or "genes" in feature_dataset_dropdown:
