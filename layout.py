@@ -18,7 +18,7 @@ layout = html.Div([
 		dcc.Store(id="discrete_metadata_options"),
 		dcc.Store(id="continuous_metadata_options"),
 
-		#common options dropdown
+		#common options dropdowns
 		html.Div([
 			#first row
 			html.Div([

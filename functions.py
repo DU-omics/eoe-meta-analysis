@@ -88,26 +88,6 @@ tab_selected_style = {
 	"border-top": "3px solid #597ea2"
 }
 
-#function to get mofa group contrast from main contrast
-def get_group_contrast_from_condition_contrast(metadata, contrast, path):
-	groups = []
-	for condition in contrast.split("-vs-"):
-		metadata_filtered = metadata[metadata["condition"] == condition]
-		if "group" in metadata_filtered.columns:
-			group = metadata_filtered["group"].unique().tolist()
-		else:
-			group = metadata_filtered["condition"].unique().tolist()
-		group = group[0]
-		groups.append(group)
-
-	#open data overview
-	group_contrast = "-vs-".join(groups)
-	mofa_contrasts = get_content_from_github(path, "mofa")
-	if not group_contrast in mofa_contrasts:
-		group_contrast = groups[1] + "-vs-" + groups[0]
-
-	return group_contrast, groups
-
 #dbc switch as boolean switch
 def boolean_switch(switch_value):
 	if len(switch_value) == 1:

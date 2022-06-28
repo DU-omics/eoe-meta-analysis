@@ -1,6 +1,4 @@
 #import packages
-from cmath import e
-from xml.dom.pulldom import START_ELEMENT
 import dash
 from dash import dcc, html
 from dash.exceptions import PreventUpdate
@@ -14,6 +12,7 @@ import re
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
 from functools import reduce
 from sklearn.preprocessing import scale
 import tempfile
@@ -481,81 +480,101 @@ def define_callbacks(app):
 		main_folders = functions.get_content_from_github(path, "./")
 		#mofa
 		if "mofa" in main_folders:
+			mofa_contrasts = functions.get_content_from_github(path, "mofa")
+			mofa_contrasts_options = []
+			for mofa_contrast in mofa_contrasts:
+				mofa_contrasts_options.append({"label": mofa_contrast.replace("-", " ").replace("_", " "), "value": mofa_contrast})
+
 			mofa_tab = dcc.Tab(label="Multi-omics signatures", value="mofa_tab", children=[
-				#mofa data overview
+				html.Br(),
+				
+				#mofa contrast dropdown
 				html.Div([
-					dbc.Spinner(
-						children = dcc.Graph(id="mofa_data_overview"),
-						size = "md",
-						color = "lightgray"
-					)
-				], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
-				#heatmap and factor plot
+					html.Label(["MOFA comparison",
+						dcc.Dropdown(
+							id="mofa_comparison_dropdown",
+							clearable=False,
+							options=mofa_contrasts_options
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left", "font-size": "12px"}),
+				
+				#plots
 				html.Div([
-					#heatmap
+					#mofa data overview
 					html.Div([
 						dbc.Spinner(
-							children = dcc.Graph(id="mofa_variance_heatmap"),
+							children = dcc.Graph(id="mofa_data_overview"),
 							size = "md",
 							color = "lightgray"
 						)
-					], style={"width": "100%", "display": "inline-block"}),
-					#factor + factor values + feature expression/abundance
+					], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
+					#heatmap and factor plot
 					html.Div([
-						#factor
+						#heatmap
 						html.Div([
 							dbc.Spinner(
-								children = dcc.Graph(id="mofa_factor_plot"),
+								children = dcc.Graph(id="mofa_variance_heatmap"),
 								size = "md",
 								color = "lightgray"
 							)
-						], style={"width": "50%", "display": "inline-block", "vertical-align": "top"}),
-						#factor values and feature expression/abundance
+						], style={"width": "100%", "display": "inline-block"}),
+						#factor + factor values + feature expression/abundance
 						html.Div([
-							#group/condition switch
-							html.Div([
-								#left description
-								html.Div([
-									"Groups"
-								], style={"width": "15%", "display": "inline-block", "text-align": "left"}),
-								html.Div([], style={"width": "5%", "display": "inline-block"}),
-								#switch
-								html.Div([
-									dbc.Checklist(
-										options=[
-											{"label": "", "value": 1},
-										],
-										value=[],
-										id="group_condition_switch_mofa",
-										switch=True
-									)
-								], style={"width": "1%", "display": "inline-block"}),
-								#right description
-								html.Div([], style={"width": "5%", "display": "inline-block"}),
-								html.Div([
-									"Conditions"
-								], style={"width": "15%", "display": "inline-block", "text-align": "right"})
-							], style={"width": "100%", "display": "inline-block"}),
-							
-							#all factors values
+							#factor
 							html.Div([
 								dbc.Spinner(
-									children = dcc.Graph(id="mofa_all_factors_values"),
-									size = "md",
-									color = "lightgray"
-								),
-							], style={"width": "100%", "display": "inline-block"}),
-							#feature expression or abundance
-							html.Div([
-								dbc.Spinner(
-									children = dcc.Graph(id="mofa_factor_expression_abundance"),
+									children = dcc.Graph(id="mofa_factor_plot"),
 									size = "md",
 									color = "lightgray"
 								)
-							], style={"width": "100%", "display": "inline-block"})
-						], style={"width": "50%", "display": "inline-block", "vertical-align": "top"})
-					], style={"width": "100%", "display": "inline-block", "vertical-align": "top"})
-				], style={"width": "65%", "display": "inline-block", "vertical-align": "top"}),
+							], style={"width": "50%", "display": "inline-block", "vertical-align": "top"}),
+							#factor values and feature expression/abundance
+							html.Div([
+								#group/condition switch
+								html.Div([
+									#left description
+									html.Div([
+										"Groups"
+									], style={"width": "15%", "display": "inline-block", "text-align": "left"}),
+									html.Div([], style={"width": "5%", "display": "inline-block"}),
+									#switch
+									html.Div([
+										dbc.Checklist(
+											options=[
+												{"label": "", "value": 1},
+											],
+											value=[],
+											id="group_condition_switch_mofa",
+											switch=True
+										)
+									], style={"width": "1%", "display": "inline-block"}),
+									#right description
+									html.Div([], style={"width": "5%", "display": "inline-block"}),
+									html.Div([
+										"Conditions"
+									], style={"width": "15%", "display": "inline-block", "text-align": "right"})
+								], style={"width": "100%", "display": "inline-block"}),
+								
+								#all factors values
+								html.Div([
+									dbc.Spinner(
+										children = dcc.Graph(id="mofa_all_factors_values"),
+										size = "md",
+										color = "lightgray"
+									),
+								], style={"width": "100%", "display": "inline-block"}),
+								#feature expression or abundance
+								html.Div([
+									dbc.Spinner(
+										children = dcc.Graph(id="mofa_factor_expression_abundance"),
+										size = "md",
+										color = "lightgray"
+									)
+								], style={"width": "100%", "display": "inline-block"})
+							], style={"width": "50%", "display": "inline-block", "vertical-align": "top"})
+						], style={"width": "100%", "display": "inline-block", "vertical-align": "top"})
+					], style={"width": "65%", "display": "inline-block", "vertical-align": "top"}),
+				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 
 				html.Br()
 			], style=tab_style, selected_style=tab_selected_style)
@@ -800,14 +819,14 @@ def define_callbacks(app):
 		State("analysis_dropdown", "value")
 	)
 	def update_expression_abundance_profiling_tabs(expression_dataset, options_discrete, options_continue, annotation_dropdown_options, path):
-		
+		if expression_dataset is None:
+			raise PreventUpdate
+
 		#label for expression_abundance_profiling
-		if expression_dataset in ["human", "mouse"]:
-			expression_abundance_profiling_label = "Gene expression profiling"
-		elif "genes" in expression_dataset:
-			expression_abundance_profiling_label = "{} expression profiling".format(expression_dataset.replace("_genes", " gene").capitalize())
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+			expression_abundance_profiling_label = "Expression profiling"
 		else:
-			expression_abundance_profiling_label = expression_dataset.replace("_", " ").capitalize() + " abundance profiling"
+			expression_abundance_profiling_label = "Abundance profiling"
 
 		#label for dge_table_tab and go_table_tab
 		if "lipid" in expression_dataset:
@@ -1720,6 +1739,46 @@ def define_callbacks(app):
 
 		return options, x_values
 
+	#mofa contrast dropdown
+	@app.callback(
+		Output("mofa_comparison_dropdown", "value"),
+		Input("contrast_dropdown", "value"),
+		State("mofa_comparison_dropdown", "options"),
+		State("analysis_dropdown", "value")
+	)
+	def set_mofa_contrast_dropdown_value(contrast, mofa_contrasts_options, path):
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		if trigger_id == ".":
+			raise PreventUpdate
+
+		#open metadata
+		metadata = functions.download_from_github(path, "metadata.tsv")
+		metadata = pd.read_csv(metadata, sep = "\t")
+
+		#get hypotetical mofa contrast value from constrast dropdown
+		groups = []
+		for condition in contrast.split("-vs-"):
+			metadata_filtered = metadata[metadata["condition"] == condition]
+			if "group" in metadata_filtered.columns:
+				group = metadata_filtered["group"].unique().tolist()
+			else:
+				group = metadata_filtered["condition"].unique().tolist()
+			group = group[0]
+			groups.append(group)
+
+		#search in github data the selected mofa contrast
+		group_contrast = "-vs-".join(groups)
+		mofa_contrasts = functions.get_content_from_github(path, "mofa")
+		#try the opposite contrast
+		if not group_contrast in mofa_contrasts:
+			group_contrast = groups[1] + "-vs-" + groups[0]
+			#any mofa contrast is linked to constrast, use the first value
+			if not group_contrast in mofa_contrasts:
+				group_contrast = mofa_contrasts_options[0]["value"]
+
+		return group_contrast
+
 	### DOWNLOAD CALLBACKS ###
 
 	#download metadata
@@ -1994,26 +2053,44 @@ def define_callbacks(app):
 		stats_table = stats_table[["Comparison", gene_column_name, base_mean_label, "log2 FC", "log2 FC SE", "stat", "P-value", "FDR"]]
 		
 		#formatting numbers
+		stats_table[["P-value", "FDR"]] = stats_table[["P-value", "FDR"]].replace("NA", np.nan)
 		for column in stats_table.columns:
 			if column in ["P-value", "FDR"]:
 				stats_table[column] = stats_table[column].apply(lambda x: "%.2e" % x if not x.is_integer() else x).values.tolist()
 			elif column in [base_mean_label, "log2 FC", "log2 FC SE", "stat"]: 
 				stats_table[column] = stats_table[column].apply(lambda x: round(x, 1)).values.tolist()
+		stats_table[["P-value", "FDR"]] = stats_table[["P-value", "FDR"]].replace("nan", "NA")
 
-		#create figure
-		fig = go.Figure(data=[go.Table(
-			columnwidth=[0.3, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-			header=dict(values=list(stats_table.columns), align="left", font_family="Arial", fill_color="lightgray"),
-			cells=dict(values=[stats_table["Comparison"], stats_table[gene_column_name], stats_table[base_mean_label], stats_table["log2 FC"], stats_table["log2 FC SE"], stats_table["stat"], stats_table["P-value"], stats_table["FDR"]], align="left", font_family="Arial", fill_color=[colors]))
-		])
+		#get colors for cells
+		cell_colors = []
+		for color in colors:
+			color_row = []
+			for col in range(0,len(stats_table.columns)):
+				color_row.append(color)
+			cell_colors.append(color_row)
 
-		#update layout
-		height = 48 + (20 * len(stats_table.index))
-		fig.update_layout(margin_b=0, margin_t=0, margin_l=0, margin_r=0, width=1000, height=height)
+		#hide axes
+		ax = plt.subplot(111, frame_on=False)
+		ax.xaxis.set_visible(False)
+		ax.yaxis.set_visible(False)
+
+		#creeate table
+		tab=ax.table(cellText=stats_table.values.tolist(), colLabels=stats_table.columns, cellColours=cell_colors, loc="center", cellLoc="left")
+		tab.auto_set_column_width(list(range(0,len(stats_table.columns))))
+		
+		#increase row height and set arial as font
+		for r in range(0, len(stats_table.columns)):
+			for i in range(0, len(stats_table.index)+1):
+				cell = tab[i, r]
+				cell.set_height(0.08)
 
 		with tempfile.TemporaryDirectory() as tmpdir:
-			fig.write_image(f"{tmpdir}/stats.png", scale=5)
+			#save file
 			png = f"{tmpdir}/stats.png"
+			plt.savefig(png, dpi=300, bbox_inches="tight")	
+
+			#remove plot form memory
+			plt.clf()
 
 			return dcc.send_file(png)
 
@@ -2229,8 +2306,23 @@ def define_callbacks(app):
 			#concat all dfs
 			if len(contrasts_df_list) > 1:
 				merged_df = pd.concat(contrasts_df_list)
-			else:
+			#no need to concat
+			elif len(contrasts_df_list) == 1:
 				merged_df = dge_table
+			#no any contrast for the selected conditions: create mock df
+			else:
+				if expression_dataset in ["human", "mouse"]:
+					base_mean_label = "Average expression"
+					gene_column_name = "Gene"
+				else:
+					#base mean label
+					if "genes" in expression_dataset:
+						base_mean_label = "Average expression"
+					else:
+						base_mean_label = "Average abundance"
+					#all other variables
+					gene_column_name = expression_dataset.replace("_", " ").capitalize()
+				merged_df = pd.DataFrame(columns=["Comparison", gene_column_name, "Geneid", base_mean_label, "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"])
 
 			statistics_table_columns, statistics_table_data, style_data_conditional = functions.dge_table_operations(merged_df, expression_dataset, stringency, False, path)
 
@@ -2617,7 +2709,7 @@ def define_callbacks(app):
 					column_for_filtering = x_metadata
 
 					#user defined list of condition
-					if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]:
+					if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]  and boolean_comparison_only_switch is False and boolean_best_conditions_switch is False:
 						metadata_fields_ordered = config["repos"][repo]["condition_list"]
 						metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
 					else:
@@ -4246,7 +4338,7 @@ def define_callbacks(app):
 						repo = functions.get_repo_name_from_path(path, repos)
 						
 						#user defined list of traces
-						if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]:
+						if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"] and boolean_comparison_only_switch is False and boolean_best_conditions_switch is False:
 							metadata_fields_ordered = config["repos"][repo]["condition_list"]
 							metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
 						else:
@@ -4336,7 +4428,7 @@ def define_callbacks(app):
 					if trace["visible"] is False :
 						trace["visible"] = "legendonly"
 
-			#popover and div status
+			#hidden div status
 			hidden_status = False
 
 			#transparent figure
@@ -4426,10 +4518,10 @@ def define_callbacks(app):
 	@app.callback(
 		Output("mofa_data_overview", "figure"),
 		Output("mofa_data_overview", "config"),
-		Input("contrast_dropdown", "value"),
+		Input("mofa_comparison_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_data_overview_mofa(contrast, path):
+	def plot_data_overview_mofa(group_contrast, path):
 		
 		#define contexts
 		ctx = dash.callback_context
@@ -4437,12 +4529,8 @@ def define_callbacks(app):
 		if trigger_id == ".":
 			raise PreventUpdate
 
-		#open metadata
-		metadata = functions.download_from_github(path, "metadata.tsv")
-		metadata = pd.read_csv(metadata, sep = "\t")
-
-		#get group contrast from main contrast
-		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+		#get groups from mofa contrast
+		groups = group_contrast.split("-vs-")
 
 		#open df
 		data_overview_df = functions.download_from_github(path, f"mofa/{group_contrast}/data_overview.tsv")
@@ -4460,7 +4548,7 @@ def define_callbacks(app):
 			subplot_titles.append(title)
 
 		#create figure
-		fig = make_subplots(rows=2, cols=1, subplot_titles=subplot_titles, vertical_spacing=0.07)
+		fig = make_subplots(rows=2, cols=1, subplot_titles=subplot_titles)
 
 		#define colorscale
 		colorscale = [[0, na_color], [1, "#02818a"]]
@@ -4496,9 +4584,14 @@ def define_callbacks(app):
 			#change row
 			row +=1
 
+		#compute height
+		height = 80+(35*len(levels)*2)
+		if height < 250:
+			height = 250
+
 		#update layout
 		fig.update_xaxes(visible=False)
-		fig.update_layout(height=80+(35*len(levels)*2), margin_t=80, margin_b=0, margin_r=0, title={"text": "Data overview", "font_size": 20, "x": 0.5, "xanchor": "center"})
+		fig.update_layout(height=height, margin_t=80, margin_b=0, margin_r=0, title={"text": "Data overview", "font_size": 20, "x": 0.5, "xanchor": "center"})
 
 		#config
 		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"data_overview_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
@@ -4509,26 +4602,18 @@ def define_callbacks(app):
 	@app.callback(
 		Output("mofa_variance_heatmap", "figure"),
 		Output("mofa_variance_heatmap", "config"),
-		Input("contrast_dropdown", "value"),
+		Input("mofa_comparison_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_variance_heatmap(contrast, path):
+	def plot_variance_heatmap(group_contrast, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		if trigger_id == ".":
 			raise PreventUpdate
 		
-		#open metadata
-		metadata = functions.download_from_github(path, "metadata.tsv")
-		metadata = pd.read_csv(metadata, sep = "\t")
-
-		#get group contrast from main contrast
-		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
-
-		#clean variables
-		metadata = metadata.replace("_", " ", regex=True)
-		contrast = contrast.replace("_", " ")
+		#get groups from mofa contrast
+		groups = group_contrast.split("-vs-")
 		groups = [group.replace("_", " ") for group in groups]
 
 		#open df
@@ -4595,26 +4680,19 @@ def define_callbacks(app):
 	@app.callback(
 		Output("mofa_factor_plot", "figure"),
 		Output("mofa_factor_plot", "config"),
-		Input("contrast_dropdown", "value"),
+		Input("mofa_comparison_dropdown", "value"),
 		Input("mofa_variance_heatmap", "clickData"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_factor_plot(contrast, click_data, path):
+	def plot_factor_plot(group_contrast, click_data, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		if trigger_id == ".":
 			raise PreventUpdate
 
-		#open metadata
-		metadata = functions.download_from_github(path, "metadata.tsv")
-		metadata = pd.read_csv(metadata, sep = "\t")
-
-		#get group contrast from main contrast
-		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
-
 		#default plot is the one which explain more variance
-		if trigger_id == "contrast_dropdown.value":
+		if trigger_id == "mofa_comparison_dropdown.value":
 			variance_heatmap_df = functions.download_from_github(path, f"mofa/{group_contrast}/variance_explained_heatmap.tsv")
 			variance_heatmap_df = pd.read_csv(variance_heatmap_df, sep = "\t")
 			
@@ -4700,12 +4778,12 @@ def define_callbacks(app):
 	@app.callback(
 		Output("mofa_all_factors_values", "figure"),
 		Output("mofa_all_factors_values", "config"),
-		Input("contrast_dropdown", "value"),
+		Input("mofa_comparison_dropdown", "value"),
 		Input("group_condition_switch_mofa", "value"),
 		State("analysis_dropdown", "value"),
 		State("color_mapping", "data")
 	)
-	def plot_all_factor_values(contrast, switch_value, path, color_mapping):
+	def plot_all_factor_values(group_contrast, switch_value, path, color_mapping):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -4718,12 +4796,8 @@ def define_callbacks(app):
 		else:
 			metadata_column = "condition"
 
-		#open metadata
-		metadata = functions.download_from_github(path, "metadata.tsv")
-		metadata = pd.read_csv(metadata, sep = "\t")
-
-		#get group contrast from main contrast
-		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+		#get groups from mofa contrast
+		groups = group_contrast.split("-vs-")
 
 		#open weights df
 		factors_df = functions.download_from_github(path, f"mofa/{group_contrast}/factors.tsv")
@@ -4783,11 +4857,11 @@ def define_callbacks(app):
 		Input("mofa_factor_plot", "figure"),
 		Input("mofa_factor_plot", "clickData"),
 		Input("group_condition_switch_mofa", "value"),
-		State("contrast_dropdown", "value"),
+		State("mofa_comparison_dropdown", "value"),
 		State("analysis_dropdown", "value"),
 		State("color_mapping", "data")
 	)
-	def plot_factor_feature(factor_figure, click_data, switch_value, contrast, path, color_mapping):
+	def plot_factor_feature(factor_figure, click_data, switch_value, group_contrast, path, color_mapping):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -4843,7 +4917,7 @@ def define_callbacks(app):
 		metadata = pd.read_csv(metadata, sep = "\t")
 
 		#filter metadata, keep only conditions which contain the groups
-		group_contrast, groups = functions.get_group_contrast_from_condition_contrast(metadata, contrast, path)
+		groups = group_contrast.split("-vs-")
 		metadata = metadata[metadata["group"].isin(groups)]
 
 		#clean metadata
