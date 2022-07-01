@@ -43,7 +43,6 @@ github_token = config["github"]["token"]
 github_session.auth = (github_username, github_token)
 session = Github(github_token)
 
-
 #function for downloading files from GitHub
 def download_from_github(path, file_url):
 	file_url = "https://raw.githubusercontent.com/" + path + file_url
@@ -254,6 +253,7 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 		marker_size = 6
 	else:
 		marker_size = 8
+
 	mds_df = mds_df.rename(columns=label_to_value)
 	mds_df = mds_df.replace("_", " ", regex=True)
 

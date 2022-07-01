@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import re
 import plotly.graph_objects as go
+import plotly.express as px
 import plotly.figure_factory as ff
 from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
@@ -660,6 +661,12 @@ def define_callbacks(app):
 		
 		return color_mapping, label_to_value, all_tabs, "metadata_tab", metadata_table_data, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, header_children
 
+	#display selected tab content
+	#@app.callback(
+		#Output("tab_content_div", "children")
+		#Input()
+	#)
+
 	#change analysis data callback
 	@app.callback(
 		Output("feature_dataset_dropdown", "options"),
@@ -793,7 +800,7 @@ def define_callbacks(app):
 		
 		return selected_features, log_div, log_hidden_status, text, update_multiboxplot_plot_button
 
-	#target prioritization switch
+	#target prio0ritization switch
 	@app.callback(
 		Output("target_prioritization_switch_div", "hidden"),
 		Input("feature_dataset_dropdown", "value")
@@ -816,9 +823,10 @@ def define_callbacks(app):
 		Input("discrete_metadata_options", "data"),
 		Input("continuous_metadata_options", "data"),
 		Input("annotation_dropdown_options", "data"),
+		State("feature_dataset_dropdown", "options"),
 		State("analysis_dropdown", "value")
 	)
-	def update_expression_abundance_profiling_tabs(expression_dataset, options_discrete, options_continue, annotation_dropdown_options, path):
+	def update_profiling_tabs(expression_dataset, options_discrete, options_continue, annotation_dropdown_options, feature_dataset_options, path):
 		if expression_dataset is None:
 			raise PreventUpdate
 
@@ -1257,8 +1265,131 @@ def define_callbacks(app):
 
 			], style={"width": "100%", "display": "inline-block"})
 		], style=tab_style, selected_style=tab_selected_style)
+		#correlation tab
+		possible_dataset_values = []
+		for dataset_option in feature_dataset_options:
+			possible_dataset_values.append(dataset_option["value"])
+		if "human" in possible_dataset_values:
+			dataset_value = "human"
+		else:
+			dataset_value = possible_dataset_values[0]
+		correlation_tab = dcc.Tab(label="Feature correlation", value="feature_correlation", children=[
+			dcc.Store(id="correletion_stats"),
+			html.Br(),
+			
+			#dropdowns and switches
+			html.Div([
+				#x dataset correlation dropdown
+				html.Div([
+					html.Label(["x dataset",
+						dcc.Dropdown(
+							id="x_dataset_correlation_dropdown",
+							clearable=False,
+							value=dataset_value,
+							options=feature_dataset_options
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				#x correlation dropdown
+				html.Div([
+					html.Label(["x",
+						dcc.Dropdown(
+							id="x_correlation_dropdown",
+							placeholder="Search a feature"
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				#y dataset correlation dropdown
+				html.Div([
+					html.Label(["y dataset",
+						dcc.Dropdown(
+							id="y_dataset_correlation_dropdown",
+							clearable=False,
+							value=dataset_value,
+							options=feature_dataset_options
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				#y correlation dropdown
+				html.Div([
+					html.Label(["y",
+						dcc.Dropdown(
+							id="y_correlation_dropdown",
+							placeholder="Search a feature"
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				#group by correlation dropdown
+				html.Div([
+					html.Label(["Group by",
+						dcc.Dropdown(
+							id="group_by_correlation_dropdown",
+							options=options_discrete
+					)], style={"width": "100%"}, className="dropdown-luigi"),
+				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+				#switches
+				html.Div([
+					#comparison_only switch
+					html.Div([
+						html.Label(["Comparison only",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[1],
+								id="comparison_only_correlation_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"})
+					], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"}),
 
-		children = [heatmap_tab, multi_violin_tab]
+					#hide unselected switch
+					html.Div([
+						html.Label(["Hide unselected",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1, "disabled": True},
+								],
+								value=[],
+								id="hide_unselected_correlation_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"})
+			], style={"width": "50%", "display": "inline-block"}),
+				#width slider
+				html.Div([
+					html.Label(["Width",
+						dcc.Slider(id="correlation_width_slider", min=300, max=600, step=1)
+					], style={"width": "100%", "height": "30px", "display": "inline-block"})
+				], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
+				#height slider
+				html.Div([
+					html.Label(["Height",
+						dcc.Slider(id="correlation_height_slider", min=300, max=1000, step=1)
+					], style={"width": "100%", "height": "30px", "display": "inline-block"})
+				], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"})
+			],  style={"width": "40%", "display": "inline-block", "font-size": "12px", "vertical-align": "top"}),
+
+			#statistics plot
+			html.Div(id="statistics_feature_correlation_plot_div", hidden=True, children=[
+				dbc.Spinner(
+					children = dcc.Graph(id="statistics_feature_correlation_plot"),
+					size = "md",
+					color = "lightgray"
+				)
+			], style={"width": "10%", "display": "inline-block", "vertical-align": "top"}),
+
+			#main plot
+			html.Div([
+				dbc.Spinner(
+					children = dcc.Graph(id="feature_correlation_plot"),
+					size = "md",
+					color = "lightgray"
+				)
+			], style={"width": "50%", "display": "inline-block"}),
+
+			html.Br()
+		], style=tab_style, selected_style=tab_selected_style)
+
+		#build default children
+		children = [heatmap_tab, multi_violin_tab, correlation_tab]
 
 		#add diversity tab when some species expression dataset is selected
 		main_folders = functions.get_content_from_github(path, "./")
@@ -1444,7 +1575,7 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset, path):
+	def get_options_multibox_feature_dropdown(search_value, current_value, expression_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1465,6 +1596,74 @@ def define_callbacks(app):
 
 		return options, placeholder
 
+	#features x correlation dropdown options
+	@app.callback(
+		Output("x_correlation_dropdown", "options"),
+		Output("x_correlation_dropdown", "value"),
+		Input("x_correlation_dropdown", "search_value"),
+		Input("x_dataset_correlation_dropdown", "value"),
+		State("x_correlation_dropdown", "value"),
+		State("analysis_dropdown", "value")
+	)
+	def get_options_x_correlation_feature_dropdown(search_value, expression_dataset, current_value, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		#reset the feature if the dataset is changed
+		if trigger_id == "x_dataset_correlation_dropdown.value":
+			options = []
+			value = None
+		#change of search value
+		else:
+			value = current_value
+
+			#don't change the options when the search value or the selected value are empty
+			if not search_value:
+				raise PreventUpdate
+
+			#get feature list and label
+			features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
+
+			#populate options based on user search
+			options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
+
+		return options, value
+
+	#features y correlation dropdown options
+	@app.callback(
+		Output("y_correlation_dropdown", "options"),
+		Output("y_correlation_dropdown", "value"),
+		Input("y_correlation_dropdown", "search_value"),
+		Input("y_dataset_correlation_dropdown", "value"),
+		State("y_correlation_dropdown", "value"),
+		State("analysis_dropdown", "value")
+	)
+	def get_options_x_correlation_feature_dropdown(search_value, expression_dataset, current_value, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		#reset the feature if the dataset is changed
+		if trigger_id == "x_dataset_correlation_dropdown.value":
+			options = []
+			value = None
+		#change of search value
+		else:
+			value = current_value
+
+			#don't change the options when the search value or the selected value are empty
+			if not search_value:
+				raise PreventUpdate
+
+			#get feature list and label
+			features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
+
+			#populate options based on user search
+			options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
+
+		return options, value
+
 	#features dge table dropdown options
 	@app.callback(
 		Output("multi_gene_dge_table_selection_dropdown", "options"),
@@ -1474,7 +1673,7 @@ def define_callbacks(app):
 		Input("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def get_options_heatmap_feature_dropdown(search_value, current_value, expression_dataset, path):
+	def get_options_dge_table_feature_dropdown(search_value, current_value, expression_dataset, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1623,7 +1822,7 @@ def define_callbacks(app):
 
 			#save anyway all contrasts in case there are no possibilities
 			contrasts.append(contrast)
-		
+
 		#if no filtered contrasts are present, use all the contrasts
 		if len(filtered_contrasts) != 0:
 			contrasts = filtered_contrasts
@@ -2299,7 +2498,26 @@ def define_callbacks(app):
 				if condition_1.replace("_", " ") in conditions and condition_2.replace("_", " ") in conditions:
 					dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
 					dge_table = pd.read_csv(dge_table, sep = "\t")
-					dge_table = dge_table[dge_table["Gene"].isin(genes)]
+					
+					#since feature names are clean, to filter the dge table we need to clean it
+					if expression_dataset in ["human", "mouse"]:
+						dge_table["clean_feature"] = [x.replace("€", "/") for x in dge_table["Gene"]]
+					else:
+						if "lipid" in expression_dataset:
+							dge_table["clean_feature"] = dge_table["Gene"]
+						elif "genes" in expression_dataset:
+							clean_gen_column_name = []
+							for x in dge_table["Gene"]:
+								gene_x = x.split("@")[0]
+								beast_x = x.split("@")[1]
+								beast_x = beast_x.replace("_", " ")
+								x = gene_x + " - " + beast_x
+								clean_gen_column_name.append(x)
+							dge_table["clean_feature"] = clean_gen_column_name.copy()
+						else:
+							dge_table["clean_feature"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in dge_table["Gene"]]
+
+					dge_table = dge_table[dge_table["clean_feature"].isin(genes)]
 					dge_table["Comparison"] = contrast.replace("-", " ").replace("_", " ")
 					contrasts_df_list.append(dge_table)
 
@@ -3062,7 +3280,7 @@ def define_callbacks(app):
 
 		#open deconvolution df
 		deconvolution_df = functions.download_from_github(path, f"deconvolution/{deconvolution_dataset}")
-		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t")
+		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t", low_memory=False)
 
 		#if there is no file, do not plot
 		if deconvolution_df.empty:
@@ -4442,6 +4660,239 @@ def define_callbacks(app):
 
 		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width, n_clicks_update_multiboxplot_stats
 	
+	#correlation plot
+	@app.callback(
+		Output("feature_correlation_plot", "figure"),
+		Output("feature_correlation_plot", "config"),
+		Output("correletion_stats", "data"),
+		Output("hide_unselected_correlation_switch", "options"),
+		Output("correlation_width_slider", "value"),
+		Output("correlation_height_slider", "value"),
+		Input("x_correlation_dropdown", "value"),
+		Input("y_correlation_dropdown", "value"),
+		Input("group_by_correlation_dropdown", "value"),
+		Input("comparison_only_correlation_switch", "value"),
+		Input("contrast_dropdown", "value"),
+		Input("hide_unselected_correlation_switch", "value"),
+		Input("correlation_width_slider", "value"),
+		Input("correlation_height_slider", "value"),
+		State("x_dataset_correlation_dropdown", "value"),
+		State("y_dataset_correlation_dropdown", "value"),
+		State("color_mapping", "data"),
+		State("feature_correlation_plot", "figure"),
+		State("hide_unselected_correlation_switch", "options"),
+		State("correletion_stats", "data"),
+		State("analysis_dropdown", "value")
+	)
+	def plot_feature_correlation(x, y, group_by_column, comparison_only_switch, contrast, hide_unselected_switch, width_fig, height_fig, dataset_x, dataset_y, color_mapping, fig, hide_unselected_switch_options, statistics_data, path):
+		#x = "TNF"
+		#y = "ALOX5"
+		#group_by_column = "condition"
+		
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		
+		#boolean switches
+		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
+		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
+
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
+			raise PreventUpdate
+		
+		#size changes
+		if trigger_id in ["correlation_width_slider.value", "correlation_height_slider.value"]:
+			fig["layout"]["height"] = height_fig
+			fig["layout"]["width"] = width_fig
+		#new plot
+		else:
+			#open metadata
+			metadata_df = functions.download_from_github(path, "metadata.tsv")
+			metadata_df = pd.read_csv(metadata_df, sep = "\t")
+			#comparison only will filter the samples
+			if boolean_comparison_only_switch:
+				metadata_df = metadata_df[metadata_df["condition"].isin(contrast.split("-vs-"))]
+			metadata_df = metadata_df.replace("_", " ", regex=True)
+			
+			#empty plot
+			if x is None or y is None:
+				fig = go.Figure()
+				fig.add_annotation(text="Please select x and y", showarrow=False, font_size=16)
+				width_fig = 600
+				height_fig = 450
+				config_filename_title = "empty_correlation"
+				fig.update_layout(xaxis_linecolor="rgb(255,255,255)", yaxis_linecolor="rgb(255,255,255)", xaxis_showticklabels=False, yaxis_showticklabels=False, xaxis_fixedrange=True, yaxis_fixedrange=True, xaxis_ticks="", yaxis_ticks="")
+			#plot
+			else:
+				#get counts
+				counts_x = functions.download_from_github(path, "data/" + dataset_x + "/counts/" + x + ".tsv")
+				counts_x = pd.read_csv(counts_x, sep = "\t")
+				#expression or abundance for x
+				if dataset_x in ["human", "mouse"] or "genes" in dataset_x:
+					expression_or_abundance = "expression"
+				else:
+					expression_or_abundance = "abundance"
+				expression_or_abundance_x = f"Log2 {expression_or_abundance} {x}"
+				#log2
+				counts_x[expression_or_abundance_x] = np.log2(counts_x["counts"])
+				counts_x = counts_x.rename(columns={"Gene": f"{x}"})
+
+				counts_y = functions.download_from_github(path, "data/" + dataset_y + "/counts/" + y + ".tsv")
+				counts_y = pd.read_csv(counts_y, sep = "\t")
+				#expression or abundance for y
+				if dataset_y in ["human", "mouse"] or "genes" in dataset_y:
+					expression_or_abundance = "expression"
+				else:
+					expression_or_abundance = "abundance"
+				expression_or_abundance_y = f"Log2 {expression_or_abundance} {y}"
+				#log2
+				counts_y[expression_or_abundance_y] = np.log2(counts_y["counts"])
+				counts_y = counts_y.rename(columns={"Gene": f"{y}"})
+
+				#merge counts
+				merged_df = counts_x.merge(counts_y, how="inner", on="sample")
+
+				#merge with metadata
+				merged_df = merged_df.merge(metadata_df, how="inner", on="sample")
+				
+				#plot figure without group by
+				if group_by_column is None:
+					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, trendline="ols", trendline_color_override="black")
+					fig.update_traces(marker_color="darkgray")
+
+					#get statistics
+					statistics_results = px.get_trendline_results(fig)
+					#format scientific notation
+					pvalue_f = f"{statistics_results.px_fit_results.iloc[0].f_pvalue:.1e}".replace("e-0", "e-")
+
+					#add annotation
+					fig.add_annotation(text=f"R<sup>2</sup>={round(statistics_results.px_fit_results.iloc[0].rsquared, 1)} p={pvalue_f}", showarrow=False, font=dict(family="Arial", size=12, color="black"), xref="paper", yref="paper", x=0.1, y=0.1)
+				#plot figure with group by
+				else:
+					#find out if some of the groups have only 1 sample, which make it impossible to compute correlation
+					group_count = merged_df[group_by_column].value_counts()
+					group_count = pd.DataFrame(group_count)
+					group_count = group_count[group_count[group_by_column] != 1]
+					#filter keep good groups
+					merged_df = merged_df[merged_df[group_by_column].isin(list(group_count.index))]
+					
+					#sort metadata by group column
+					merged_df = merged_df.sort_values(by=[group_by_column])
+					
+					#get colors from metadata
+					groups = merged_df[group_by_column].unique().tolist()
+					group_colors = []
+					for group in groups:
+						group_colors.append(functions.get_color(color_mapping, group_by_column, group))
+					
+					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, color=group_by_column, color_discrete_sequence=group_colors, trendline="ols")
+					fig.update_traces(visible=True)
+					fig.update_layout(legend_title=group_by_column.capitalize(), legend_orientation="h", legend_yanchor="top", legend_y=-0.2)
+
+					#add statistics to plot
+					statistics_results = px.get_trendline_results(fig)
+
+					#save correlation statistics
+					statistics_data = {}
+					for group in groups:
+						group_results = statistics_results.query(f"{group_by_column} == '{group}'").px_fit_results.iloc[0]
+						#format scientific notation
+						pvalue_f = f"{group_results.f_pvalue:.1e}".replace("e-0", "e-")
+
+						#save annotation text so that it can be used again later on legend update
+						annotation_text = f"R<sup>2</sup>={round(group_results.rsquared, 1)} p={pvalue_f}"
+						statistics_data[group] = annotation_text
+
+				#update layout and config variables
+				width_fig = 400
+				height_fig = 450
+				fig.update_layout(font_family="Arial", title_text="Pearson correlation", title_xanchor="center", title_x=0.5, width=width_fig, height=height_fig, margin_r=0)
+
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+
+		#config
+		config_filename_title = f"{x}_{y}_correlation"
+		config_fig = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": config_filename_title}, "edits": {"colorbarPosition": True, "legendPosition": True, "titleText": True, "annotationPosition": True}}
+
+		#hide unselected legend items
+		if group_by_column is None:
+			hide_unselected_switch_options = [{"label": "", "value": [], "disabled": True}]
+		else:
+			hide_unselected_switch_options = [{"label": "", "value": []}]
+			if boolean_hide_unselected_switch:
+				fig["layout"]["legend"]["itemclick"] = False
+				fig["layout"]["legend"]["itemdoubleclick"] = False
+				for trace in fig["data"]:
+					if trace["visible"] == "legendonly":
+						trace["visible"] = False
+			else:
+				fig["layout"]["legend"]["itemclick"] = "toggle"
+				fig["layout"]["legend"]["itemdoubleclick"] = "toggleothers"
+				for trace in fig["data"]:
+					if trace["visible"] is False :
+						trace["visible"] = "legendonly"
+
+		return fig, config_fig, statistics_data, hide_unselected_switch_options, width_fig, height_fig
+
+	#statistics correlation plot
+	@app.callback(
+		Output("statistics_feature_correlation_plot", "figure"),
+		Output("statistics_feature_correlation_plot", "config"),
+		Output("statistics_feature_correlation_plot_div", "hidden"),
+		Input("correletion_stats", "data"),
+		Input("feature_correlation_plot", "figure"),
+		Input("feature_correlation_plot", "restyleData"),
+		State("group_by_correlation_dropdown", "value"),
+		State("color_mapping", "data"),
+	)
+	def update_statistics_correlation(statistics_data, correlation_fig, legend_click, group_by_column, color_mapping):
+
+		#hide div if any group by column is specified
+		if group_by_column is None:
+			hidden = True
+			fig = go.Figure()
+		else:
+			hidden = False
+			
+			#get visible groups from trace visibility status
+			visible_groups = []
+			i = 0
+			for trace in correlation_fig["data"]:
+				#count only markers and not lines
+				if trace["mode"] == "markers":
+					if trace["visible"] == True:
+						visible_groups.append(trace["name"])
+					i += 1
+			
+			#create fig
+			fig = go.Figure()
+			fig.update_layout(xaxis_linecolor="rgb(255,255,255)", yaxis_linecolor="rgb(255,255,255)", xaxis_showticklabels=False, yaxis_showticklabels=False, xaxis_fixedrange=True, yaxis_fixedrange=True, xaxis_ticks="", yaxis_ticks="", margin=dict(l=0, r=0, t=0, b=0))
+			
+			#setup loop and coordinates
+			annotation_x = 0.05
+			annotation_y = 1
+			for group in visible_groups:
+				#retrive statistics text from data
+				annotation_text = statistics_data[group]
+				
+				#add annotation
+				fig.add_annotation(text=annotation_text, showarrow=False, font=dict(family="Arial", size=12, color=functions.get_color(color_mapping, group_by_column, group)), xref="paper", yref="paper", xanchor="left", yanchor="top", x=annotation_x, y=annotation_y, name=group, hovertext=group.capitalize())
+
+				#move coordinates for the next annotation
+				annotation_y -= 0.05
+
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+
+		#config
+		config_fig = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "correlation_stats"}}
+
+		return fig, config_fig, hidden
+
 	#diversity plot
 	@app.callback(
 		Output("diversity_graph", "figure"),

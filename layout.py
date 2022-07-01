@@ -18,7 +18,7 @@ layout = html.Div([
 		dcc.Store(id="discrete_metadata_options"),
 		dcc.Store(id="continuous_metadata_options"),
 
-		#common options dropdowns
+		#main options dropdowns
 		html.Div([
 			#first row
 			html.Div([
@@ -449,6 +449,9 @@ layout = html.Div([
 
 		html.Div(children=[
 			dcc.Tabs(id="site_tabs", value="metadata_tab", style={"height": 40}),
-		], style = {"width": "100%", "display": "inline-block"})
+		], style = {"width": "100%", "display": "inline-block"}),
+
+		#tab content
+		html.Div(id="tab_content_div", style={"width": "100%", "display": "inline-block"})
 	], style={"width": 1200, "font-family": "Arial"})
 ], style={"width": "100%", "justify-content":"center", "display":"flex", "textAlign": "center"})

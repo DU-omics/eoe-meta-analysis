@@ -16,3 +16,4 @@ sklearn
 Werkzeug==2.0.3
 kaleido
 matplotlib
+statsmodels
