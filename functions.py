@@ -139,7 +139,7 @@ def get_list_label_placeholder_feature_dropdown(path, expression_dataset):
 #get options based on user search features dropdown
 def get_options_feature_dropdown(expression_dataset, features, search_value, current_value, dropdown_type):
 	options = []
-	if not search_value is None:
+	if search_value is not None:
 		for feature in features:
 			#get feature label
 			if expression_dataset in ["human", "mouse"]:
@@ -827,7 +827,7 @@ def search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stri
 			raise PreventUpdate
 
 	#reset text area if you change the input dropdowns
-	elif trigger_id in ["contrast_dropdown.value", "stringency_dropdown.value", "analysis_dropdown.value", "."]:
+	elif trigger_id in ["contrast_dropdown.value", "stringency_dropdown.value", "analysis_dropdown.value", "feature_dataset_dropdown.value", "."]:
 		#reset log div
 		log_div = []
 		log_hidden_status = True

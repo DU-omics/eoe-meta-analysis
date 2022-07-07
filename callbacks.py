@@ -3,7 +3,7 @@ import dash
 from dash import dcc, html
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output, State, ALL
 from dash import dash_table
 from dash.dash_table.Format import Format, Scheme
 import pandas as pd
@@ -21,9 +21,11 @@ import tempfile
 import functions
 from functions import config, colors, gender_colors, na_color, repos, tab_style, tab_selected_style
 
+from layout import metadata_tab_layout, heatmap_tab_layout, multi_violin_tab_layout, correlation_tab_layout, diversity_tab_layout, dge_tab_layout, go_tab_layout, mofa_tab_layout, deconvolution_tab_layout
+
 def define_callbacks(app):
 
-	##### VARIOUS ELEMENTS ######
+	##### START-UP ######
 
 	#change analysis metadata callback
 	@app.callback(
@@ -31,18 +33,23 @@ def define_callbacks(app):
 		Output("color_mapping", "data"),
 		Output("label_to_value", "data"),
 		#tabs
-		Output("site_tabs", "children"),
-		Output("site_tabs", "value"),
+		Output({"type": "tabs", "id": "main_tabs"}, "children"),
+		Output({"type": "tabs", "id": "main_tabs"}, "value"),
 		#metadata table data
 		Output("metadata_table_store", "data"),
+		Output("metadata_columns_store", "data"),
 		#metadata options
 		Output("metadata_dropdown", "options"),
 		#heatmap annotation options
-		Output("annotation_dropdown_options", "data"),
+		Output("heatmap_annotation_dropdown_options", "data"),
 		#discrete metadata options
 		Output("discrete_metadata_options", "data"),
 		#continuous metadata options
 		Output("continuous_metadata_options", "data"),
+		#mofa contrasts options
+		Output("mofa_contrasts_options", "data"),
+		#deconvolution datasets options
+		Output("deconvolution_datasets_options", "data"),
 		#header
 		Output("header_div", "children"),
 		#input
@@ -133,582 +140,43 @@ def define_callbacks(app):
 
 		#tabs
 		#metadata tab
-		metadata_tab = dcc.Tab(label="Metadata", value="metadata_tab", children=[
-
-			html.Br(),
-
-			#download metadata button
-			html.Div([
-				dbc.Spinner(
-					size = "md",
-					color = "lightgray",
-					children=[
-						dbc.Button("Download metadata", id="download_metadata_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
-						dcc.Download(id="download_metadata")
-					]
-				)
-			], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
-			
-			#table
-			html.Div([
-				html.Br(),
-				dbc.Spinner(
-					size="md",
-					color="lightgray",
-					children=dash_table.DataTable(
-						id="metadata_table",
-						filter_action="native",
-						style_filter={
-							"text-align": "left"
-						},
-						style_table={
-							"text-align": "left"
-						},
-						style_cell={
-							"whiteSpace": "normal",
-							"height": "auto",
-							"fontSize": 12, 
-							"font-family": "arial",
-							"text-align": "left"
-						},
-						style_data_conditional=[
-							{
-								"if": {"state": "selected"},
-								"backgroundColor": "rgba(44, 62, 80, 0.2)",
-								"border": "1px solid #597ea2",
-							},
-						],
-						page_size=25,
-						sort_action="native",
-						style_header={
-							"text-align": "left"
-						},
-						style_as_list_view=True,
-						data=metadata_table_data,
-						columns=metadata_table_columns,
-						filter_options={"case": "insensitive"}
-					)
-				)
-			], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
-			html.Br(),
-			html.Br()
-		], style=tab_style, selected_style=tab_selected_style)
+		metadata_tab = dcc.Tab(id="metadata_tab", label="Metadata", value="metadata_tab", style=tab_style, selected_style=tab_selected_style)
 		#expression/abundance profiling
-		expression_abundance_profiling_tab = dcc.Tab(id="expression_abundance_profiling", value="expression_abundance", children=[
-			dcc.Tabs(id="expression_abundance_profiling_tabs", value="heatmap", style= {"height": 40})
-		], style=tab_style, selected_style=tab_selected_style)
+		profiling_tab = dcc.Tab(id="profiling_tab", value="profiling_tab", style=tab_style, selected_style=tab_selected_style)
 		#differential analysis tab
-		differential_analysis_tab = dcc.Tab(label="Differential analysis", value="differential_analysis", children=[
-			dcc.Tabs(id="differential_analysis_tabs", value="dge_tab", children=[
-				#dge table tab
-				dcc.Tab(id="dge_table_tab", label="DGE table", value="dge_tab", children=[
-					
-					html.Br(),
-					#title dge table
-					html.Div(id="dge_table_title", children=[], style={"width": "100%", "display": "inline-block", "textAlign": "center", "font-size": "14px"}),
-					html.Br(),
-					html.Br(),
-
-					#info dge table
-					html.Div([
-						html.Div(id="info_dge_table",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
-						dbc.Tooltip(
-							children=[dcc.Markdown(
-								"""
-								##### Table showing the differential analysis statistics for the comparison chosen in the __comparison__ dropdown (uppermost menù)
-								
-								Use the __search bar__ to display a filtered table with the selected features.
-								
-								Click a __feature name__ (first column) within the table to highlight it in the MA plot.
-								
-								Use the __icons__ in the last column to access external resources.
-								""")
-							],
-							target="info_dge_table",
-							style={"font-family": "arial", "font-size": 14}
-						),
-					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "textAlign": "center"}),
-
-					#download full table button diffexp
-					html.Div([
-						dbc.Spinner(
-							size = "md",
-							color = "lightgray",
-							children=[
-								dbc.Button("Download full table", id="download_diffexp_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
-								dcc.Download(id="download_diffexp")
-							]
-						)
-					], style={"width": "15%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
-
-					#download partial button diffexp
-					html.Div([
-						dbc.Spinner(
-							size = "md",
-							color = "lightgray",
-							children=[
-								dbc.Button("Download filtered table", id="download_diffexp_partial_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
-								dcc.Download(id="download_diffexp_partial")
-							]
-						)
-					], style={"width": "25%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
-
-					#dropdown
-					html.Div([
-						dcc.Dropdown(id="multi_gene_dge_table_selection_dropdown", 
-							multi=True, 
-							placeholder="", 
-							style={"textAlign": "left", "font-size": "12px"})
-					], className="dropdown-luigi", style={"width": "25%", "display": "inline-block", "font-size": "12px", "vertical-align": "middle"}),
-
-					#target priorization switch
-					html.Div(id = "target_prioritization_switch_div", hidden = True, children = [
-						html.Label(["Target prioritization",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[],
-								id="target_prioritization_switch",
-								switch=True
-							)
-						], style={"textAlign": "center"})
-					], style={"width": "16%", "display": "inline-block", "vertical-align": "middle"}),
-
-					#filtered dge table
-					html.Div(id="filtered_dge_table_div", children=[
-						html.Br(),
-						dbc.Spinner(
-							id="loading_dge_table_filtered",
-							size="md",
-							color="lightgray",
-							children=dash_table.DataTable(
-								id="dge_table_filtered",
-								filter_action="native",
-								style_cell={
-									"whiteSpace": "normal",
-									"height": "auto",
-									"fontSize": 12, 
-									"font-family": "arial",
-									"textAlign": "center"
-								},
-								page_size=25,
-								sort_action="native",
-								style_header={
-									"textAlign": "center"
-								},
-								style_cell_conditional=[
-									{
-										"if": {"column_id": "External resources"},
-										"width": "12%"
-									}
-								],
-								style_data_conditional=[],
-								style_as_list_view=True,
-								filter_options={"case": "insensitive"}
-							)
-						)
-					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}, hidden=True),
-
-					#full dge table
-					html.Div([
-						html.Br(),
-						dbc.Spinner(
-							id="loading_dge_table",
-							size="md",
-							color="lightgray",
-							children=dash_table.DataTable(
-								id="dge_table",
-								filter_action="native",
-								style_cell={
-									"whiteSpace": "normal",
-									"height": "auto",
-									"fontSize": 12, 
-									"font-family": "arial",
-									"textAlign": "center"
-								},
-								page_size=25,
-								sort_action="native",
-								style_header={
-									"textAlign": "center"
-								},
-								style_cell_conditional=[
-									{
-										"if": {"column_id": "External resources"},
-										"width": "12%"
-									}
-								],
-								style_data_conditional=[],
-								style_as_list_view=True,
-								filter_options={"case": "insensitive"}
-							)
-						)
-					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
-					html.Br()
-				], style=tab_style, selected_style=tab_selected_style),
-				#go table tab
-				dcc.Tab(id="go_table_tab", label="GO table", value="go_table_tab", children=[
-					
-					html.Br(),
-					#title go table
-					html.Div(id="go_table_title", children=[], style={"width": "100%", "display": "inline-block", "textAlign": "center", "font-size": "14px"}),
-					html.Br(),
-					html.Br(),
-
-					#info go table
-					html.Div([
-						html.Div(id="info_go_table",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
-						dbc.Tooltip(
-							children=[dcc.Markdown(
-								"""
-								##### Table showing the functional enrichment statistics for the comparison chosen in the __comparison__ dropdown (uppermost menù)
-								
-								Use the GO plot __search bar__ to display a filtered table with the selected gene sets.
-								
-								Click a __gene set name__ to see its specifications within the AmiGO 2 database.
-								""")
-							],
-							target="info_go_table",
-							style={"font-family": "arial", "font-size": 14}
-						),
-					], style={"width": "12%", "display": "inline-block", "vertical-align": "middle", "textAlign": "center"}),
-
-					#download go button
-					html.Div([
-						dbc.Spinner(
-							size = "md",
-							color = "lightgray",
-							children=[
-								dbc.Button("Download full table", id="download_go_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
-								dcc.Download(id="download_go")
-							]
-						)
-					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
-
-					#download button partial
-					html.Div([
-						dbc.Spinner(
-							size = "md",
-							color = "lightgray",
-							children=[
-								dbc.Button("Download filtered table", id="download_go_button_partial", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'}),
-								dcc.Download(id="download_go_partial")
-							]
-						)
-					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
-
-					#go table
-					html.Div([
-						html.Br(),
-						dbc.Spinner(
-							id="loading_go_table",
-							size="md",
-							color="lightgray",
-							children=dash_table.DataTable(
-								id="go_table",
-								filter_action="native",
-								style_cell={
-									"whiteSpace": "normal",
-									"height": "auto",
-									"fontSize": 12, 
-									"font-family": "arial",
-									"textAlign": "center"
-								},
-								page_size=10,
-								sort_action="native",
-								style_header={
-									"textAlign": "center"
-								},
-								style_cell_conditional=[
-									{
-										"if": {"column_id": "Genes"},
-										"textAlign": "left",
-										"width": "50%"
-									},
-									{
-										"if": {"column_id": "Lipids"},
-										"textAlign": "left",
-										"width": "50%"
-									},
-									{
-										"if": {"column_id": "GO biological process"},
-										"textAlign": "left",
-										"width": "15%"
-									},
-									{
-										"if": {"column_id": "Functional category"},
-										"textAlign": "left",
-										"width": "15%"
-									}
-								],
-								style_data_conditional=[
-									{
-										"if": {"filter_query": "{{DGE}} = {}".format("up")},
-										"backgroundColor": "#FFE6E6"
-									},
-									{
-										"if": {"filter_query": "{{DGE}} = {}".format("down")},
-										"backgroundColor": "#E6F0FF"
-									},
-									{
-										"if": {	"filter_query": "{{DLE}} = {}".format("up")},
-										"backgroundColor": "#FFE6E6"
-									},
-									{
-										"if": {"filter_query": "{{DLE}} = {}".format("down")},
-										"backgroundColor": "#E6F0FF"
-									},
-									{
-										"if": {"state": "selected"},
-										"backgroundColor": "rgba(44, 62, 80, 0.2)",
-										"border": "1px solid #597ea2",
-									}
-								],
-								style_as_list_view=True,
-								filter_options={"case": "insensitive"}
-							)
-						)
-					], className="luigi-dash-table", style={"width": "100%", "font-family": "arial"}),
-					html.Br()
-				], style=tab_style, selected_style=tab_selected_style)
-			], style= {"height": 40})
-		], style=tab_style, selected_style=tab_selected_style)
+		differential_analysis_tab = dcc.Tab(id="differential_analysis_tab", label="Differential analysis", value="differential_analysis_tab", style=tab_style, selected_style=tab_selected_style)
 
 		#save main tabs in a list to use as children
-		all_tabs = [metadata_tab, expression_abundance_profiling_tab, differential_analysis_tab]
+		all_tabs = [metadata_tab, profiling_tab, differential_analysis_tab]
 
 		## additional tabs ##
 		main_folders = functions.get_content_from_github(path, "./")
 		#mofa
+		mofa_contrasts_options = []
 		if "mofa" in main_folders:
 			mofa_contrasts = functions.get_content_from_github(path, "mofa")
-			mofa_contrasts_options = []
 			for mofa_contrast in mofa_contrasts:
 				mofa_contrasts_options.append({"label": mofa_contrast.replace("-", " ").replace("_", " "), "value": mofa_contrast})
 
-			mofa_tab = dcc.Tab(label="Multi-omics signatures", value="mofa_tab", children=[
-				html.Br(),
-				
-				#mofa contrast dropdown
-				html.Div([
-					html.Label(["MOFA comparison",
-						dcc.Dropdown(
-							id="mofa_comparison_dropdown",
-							clearable=False,
-							options=mofa_contrasts_options
-					)], style={"width": "100%"}, className="dropdown-luigi"),
-				], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left", "font-size": "12px"}),
-				
-				#plots
-				html.Div([
-					#mofa data overview
-					html.Div([
-						dbc.Spinner(
-							children = dcc.Graph(id="mofa_data_overview"),
-							size = "md",
-							color = "lightgray"
-						)
-					], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
-					#heatmap and factor plot
-					html.Div([
-						#heatmap
-						html.Div([
-							dbc.Spinner(
-								children = dcc.Graph(id="mofa_variance_heatmap"),
-								size = "md",
-								color = "lightgray"
-							)
-						], style={"width": "100%", "display": "inline-block"}),
-						#factor + factor values + feature expression/abundance
-						html.Div([
-							#factor
-							html.Div([
-								dbc.Spinner(
-									children = dcc.Graph(id="mofa_factor_plot"),
-									size = "md",
-									color = "lightgray"
-								)
-							], style={"width": "50%", "display": "inline-block", "vertical-align": "top"}),
-							#factor values and feature expression/abundance
-							html.Div([
-								#group/condition switch
-								html.Div([
-									#left description
-									html.Div([
-										"Groups"
-									], style={"width": "15%", "display": "inline-block", "text-align": "left"}),
-									html.Div([], style={"width": "5%", "display": "inline-block"}),
-									#switch
-									html.Div([
-										dbc.Checklist(
-											options=[
-												{"label": "", "value": 1},
-											],
-											value=[],
-											id="group_condition_switch_mofa",
-											switch=True
-										)
-									], style={"width": "1%", "display": "inline-block"}),
-									#right description
-									html.Div([], style={"width": "5%", "display": "inline-block"}),
-									html.Div([
-										"Conditions"
-									], style={"width": "15%", "display": "inline-block", "text-align": "right"})
-								], style={"width": "100%", "display": "inline-block"}),
-								
-								#all factors values
-								html.Div([
-									dbc.Spinner(
-										children = dcc.Graph(id="mofa_all_factors_values"),
-										size = "md",
-										color = "lightgray"
-									),
-								], style={"width": "100%", "display": "inline-block"}),
-								#feature expression or abundance
-								html.Div([
-									dbc.Spinner(
-										children = dcc.Graph(id="mofa_factor_expression_abundance"),
-										size = "md",
-										color = "lightgray"
-									)
-								], style={"width": "100%", "display": "inline-block"})
-							], style={"width": "50%", "display": "inline-block", "vertical-align": "top"})
-						], style={"width": "100%", "display": "inline-block", "vertical-align": "top"})
-					], style={"width": "65%", "display": "inline-block", "vertical-align": "top"}),
-				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
-
-				html.Br()
-			], style=tab_style, selected_style=tab_selected_style)
+			mofa_tab = dcc.Tab(id="mofa_tab", label="Multi-omics signatures", value="mofa_tab", style=tab_style, selected_style=tab_selected_style)
 			all_tabs.append(mofa_tab)
 
 		#deconvolution
+		deconvolution_datasets_options = []
 		if "deconvolution" in main_folders:
 			deconvolution_datasets = functions.get_content_from_github(path, "deconvolution")
-			options_deconvolution_datasets = []
 
 			#deconvolution datasets
 			for deconvolution_dataset in deconvolution_datasets:
 				dataset_name = deconvolution_dataset.split(".")[0]
-				options_deconvolution_datasets.append({"label": dataset_name, "value": deconvolution_dataset})
+				deconvolution_datasets_options.append({"label": dataset_name, "value": deconvolution_dataset})
 				
 			
-			deconvolution_tab = dcc.Tab(label="Deconvolution", value="deconvolution_tab", children=[
-				html.Br(),
-
-				html.Div(id="deconvolution_div", children=[
-					#info deconvolution
-					html.Div([
-						html.Div(id="info_deconvolution",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
-						dbc.Tooltip(
-							children=[dcc.Markdown(
-								"""
-								TODO
-								""")
-							],
-							target="info_deconvolution",
-							style={"font-family": "arial", "font-size": 14}
-						),
-					], style={"width": "100%", "display": "inline-block"}),
-					
-					#split_by dropdown
-					html.Label(["Split by",
-						dcc.Dropdown(
-						id="split_by_1_deconvolution_dropdown",
-						clearable=False,
-						value="condition",
-						options=discrete_metadata_options,
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-					#second split_by dropdown
-					html.Label(["Split also by",
-						dcc.Dropdown(
-						id="split_by_2_deconvolution_dropdown",
-						clearable=False,
-						value="condition",
-						options=discrete_metadata_options,
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-					#plot per row dropdown
-					html.Label(["Plots per row",
-						dcc.Dropdown(
-						id="plots_per_row_deconvolution_dropdown",
-						clearable=False,
-						options=[{"label": "1", "value": 1}, {"label": "2", "value": 2}, {"label": "3", "value": 3}, {"label": "4", "value": 4}, {"label": "5", "value": 5}],
-						value=4
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-					#dataset dropdown
-					html.Label(["Data sets",
-						dcc.Dropdown(
-						id="data_sets_deconvolution_dropdown",
-						clearable=False,
-						options=options_deconvolution_datasets,
-						value=options_deconvolution_datasets[0]["value"]
-					)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-
-					#deconvolution plot
-					html.Div([
-						dbc.Spinner(
-							id = "loading_deconvolution",
-							children = dcc.Graph(id="deconvolution_graph"),
-							size = "md",
-							color = "lightgray"
-						)
-					], style={"width": "50%", "display": "inline-block"})
-				], style={"width": "100%", "display": "inline-block", "font-size": "12px"})
-			], style=tab_style, selected_style=tab_selected_style)
+			deconvolution_tab = dcc.Tab(id="deconvolution_tab", label="Deconvolution", value="deconvolution_tab", children=[
+				], style=tab_style, selected_style=tab_selected_style)
 			all_tabs.append(deconvolution_tab)
 		
-		return color_mapping, label_to_value, all_tabs, "metadata_tab", metadata_table_data, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, header_children
-
-	#display selected tab content
-	#@app.callback(
-		#Output("tab_content_div", "children")
-		#Input()
-	#)
-
-	#change analysis data callback
-	@app.callback(
-		Output("feature_dataset_dropdown", "options"),
-		Output("feature_dataset_dropdown", "value"),
-		Output("mds_dataset", "options"),
-		Output("mds_dataset", "value"),
-		Input("analysis_dropdown", "value")
-	)
-	def update_analysis_related_dropdowns(path):
-		#get all subdir to populate expression dataset
-		subdirs = functions.get_content_from_github(path, "data")
-		expression_datasets_options = []
-		mds_dataset_options = []
-		for dir in subdirs:
-			if dir in ["human", "mouse"]:
-				organism = dir
-				expression_datasets_options.append({"label": dir.capitalize(), "value": dir})
-				mds_dataset_options.append({"label": dir.capitalize(), "value": dir})
-			else:
-				non_host_content = functions.get_content_from_github(path, "data/" + dir)
-				if "lipid" in dir:
-					expression_datasets_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
-					if "mds" in non_host_content:
-						mds_dataset_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
-				else:
-					kingdom = dir.split("_")[0]
-					lineage = dir.split("_")[1]
-					expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
-					#check if there is mds for each metatranscriptomics
-					if "mds" in non_host_content:
-						mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
-
-		return expression_datasets_options, organism, mds_dataset_options, organism
-
-	#get discrete and continuous variable dropdowns
-	@app.callback(
-		Output("x_boxplot_dropdown", "options"),
-		Output("group_by_boxplot_dropdown", "options"),
-		Input("discrete_metadata_options", "data")
-	)
-	def discrete_metadata_options(options_discrete):
-		return options_discrete, options_discrete
+		return color_mapping, label_to_value, all_tabs, "metadata_tab", metadata_table_data, metadata_table_columns, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, mofa_contrasts_options, deconvolution_datasets_options, header_children
 
 	#add gsea switch
 	@app.callback(
@@ -730,6 +198,119 @@ def define_callbacks(app):
 		
 		return hidden, value
 
+	##### TAB-DIV ELEMENTS #####
+
+	#display tab content
+	@app.callback(
+		Output("tab_content_div", "children"),
+		Input({"type": "tabs", "id": ALL}, "value"),
+		State("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value"),
+		prevent_initial_call=True
+	)
+	def update_tab_div_layout(main_tab_value, expression_dataset, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["value"]
+		
+		#metadata
+		if trigger_id == "metadata_tab":
+			children = [metadata_tab_layout]
+		elif trigger_id in ["profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab"]:
+			#heatmap or default
+			if trigger_id in ["profiling_tab", "heatmap_tab"]:
+				profiling_tab_value = "heatmap_tab"
+				tab_layout = heatmap_tab_layout
+			#multi violin
+			elif trigger_id == "multi_violin_tab":
+				profiling_tab_value = "multi_violin_tab"
+				tab_layout = multi_violin_tab_layout
+			#correlation
+			elif trigger_id == "feature_correlation_tab":
+				profiling_tab_value = "feature_correlation_tab"
+				tab_layout = correlation_tab_layout
+			#diversity
+			else:
+				profiling_tab_value = "diversity_tab"
+				tab_layout = diversity_tab_layout
+
+			#constant tab
+			tabs_children = [
+				dcc.Tab(id="heatmap_tab", label="Heatmap", value="heatmap_tab", style=tab_style, selected_style=tab_selected_style),
+				dcc.Tab(id="multi_violin_tab", label="Multi-violin", value="multi_violin_tab", style=tab_style, selected_style=tab_selected_style),
+				dcc.Tab(id="feature_correlation_tab", label="Feature correlation", value="feature_correlation_tab", style=tab_style, selected_style=tab_selected_style)
+			]
+
+			#add diversity tab when some species expression dataset is selected
+			main_folders = functions.get_content_from_github(path, "./")
+			if "species" in expression_dataset and "diversity" in main_folders:
+				tabs_children.append(dcc.Tab(id="diversity_tab", label="Species diversity", value="diversity_tab", style=tab_style, selected_style=tab_selected_style))
+			
+			#put all tab components in tabs
+			children = [dcc.Tabs(id={"type": "tabs", "id": "profiling_tabs"}, value=profiling_tab_value, style= {"height": 40}, children=tabs_children)]			
+			children = children + [tab_layout]
+		elif trigger_id in ["differential_analysis_tab", "dge_tab", "go_tab"]:
+			#dge or default
+			if trigger_id in ["differential_analysis_tab", "dge_tab"]:
+				differential_analysis_tab_value = "dge_tab"
+				tab_layout = dge_tab_layout
+			#go
+			else:
+				differential_analysis_tab_value = "go_tab"
+				tab_layout = go_tab_layout
+
+			#populate children
+			children = [
+				dcc.Tabs(id={"type": "tabs", "id": "differential_analysis_tabs"}, value=differential_analysis_tab_value, style= {"height": 40}, children=[
+					dcc.Tab(id="dge_tab", value="dge_tab", style=tab_style, selected_style=tab_selected_style),
+					dcc.Tab(id="go_tab", value="go_tab", style=tab_style, selected_style=tab_selected_style),
+				])]
+			children = children + [tab_layout]
+		elif trigger_id == "mofa_tab":
+			children = mofa_tab_layout
+		elif trigger_id == "deconvolution_tab":
+			children = deconvolution_tab_layout
+		
+		return children
+
+	### metadata tab ###
+
+	#update metadata tab content
+	@app.callback(
+		Output("metadata_table", "data"),
+		Output("metadata_table", "columns"),
+		Input("metadata_table_store", "data"),
+		Input("metadata_columns_store", "data"),
+	)
+	def update_metadata_tab_content(metadata_table_data, metadata_table_columns):
+		return metadata_table_data, metadata_table_columns
+
+	### profiling tab ##
+
+	#save profiling tab labels data
+	@app.callback(
+		Output("profiling_tab_label_data", "data"),
+		Input("feature_dataset_dropdown", "value")
+	)
+	def save_profiling_tabs_labels_data(expression_dataset):
+		#label for profiling tab
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+			profiling_tab_label = "Expression profiling"
+		else:
+			profiling_tab_label = "Abundance profiling"
+		
+		return profiling_tab_label
+
+	#update profiling tab label
+	@app.callback(
+		Output("profiling_tab", "label"),
+		Input("profiling_tab_label_data", "data")
+	)
+	def update_profiling_tabs_label(profiling_tab_label):
+		return profiling_tab_label
+
+	## heatmap ##
+
 	#placeholder for heatmap_text_area
 	@app.callback(
 		Output("heatmap_text_area", "placeholder"),
@@ -743,64 +324,47 @@ def define_callbacks(app):
 
 		return placeholder
 
-	#search genes for heatmap
+	### differential analysis tab ###
+
+	#save differential analysis tab labels
 	@app.callback(
-		Output("feature_heatmap_dropdown", "value"),
-		Output("genes_not_found_heatmap_div", "children"),
-		Output("genes_not_found_heatmap_div", "hidden"),
-		Output("heatmap_text_area", "value"),
-		Output("update_heatmap_plot_button", "n_clicks"),
-		Input("heatmap_search_button", "n_clicks"),
-		Input("go_plot_graph", "clickData"),
-		Input("contrast_dropdown", "value"),
-		Input("stringency_dropdown", "value"),
-		Input("analysis_dropdown", "value"),
-		State("heatmap_text_area", "value"),
-		State("feature_dataset_dropdown", "value"),
-		State("feature_heatmap_dropdown", "value"),
-		State("genes_not_found_heatmap_div", "hidden"),
-		State("genes_not_found_heatmap_div", "children"),
-		State("update_heatmap_plot_button", "n_clicks"),
-		State("add_gsea_switch", "value"),
+		Output("differential_analysis_tab_label_data", "data"),
+		Input("feature_dataset_dropdown", "value"),
+		Input({"type": "tabs", "id": "main_tabs"}, "value")
 	)
-	def serach_genes_in_text_area_heatmap(n_clicks_search, go_plot_click, contrast, stringency_info, path, text, expression_dataset, selected_features, log_hidden_status, log_div, n_clicks_update_plot, add_gsea_switch):
-		#define contexts
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-
-		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15, path)
-
-		return selected_features, log_div, log_hidden_status, text, n_clicks_update_plot
-
-	#search genes for multiboxplots
-	@app.callback(
-		Output("feature_multi_boxplots_dropdown", "value"),
-		Output("genes_not_found_multi_boxplots_div", "children"),
-		Output("genes_not_found_multi_boxplots_div", "hidden"),
-		Output("multi_boxplots_text_area", "value"),
-		Output("update_multiboxplot_plot_button", "n_clicks"),
-		Input("multi_boxplots_search_button", "n_clicks"),
-		Input("go_plot_graph", "clickData"),
-		Input("contrast_dropdown", "value"),
-		Input("stringency_dropdown", "value"),
-		Input("analysis_dropdown", "value"),
-		State("feature_dataset_dropdown", "value"),
-		State("multi_boxplots_text_area", "value"),
-		State("feature_multi_boxplots_dropdown", "value"),
-		State("genes_not_found_multi_boxplots_div", "hidden"),
-		State("add_gsea_switch", "value"),
-		State("update_multiboxplot_plot_button", "n_clicks"),
-	)
-	def serach_genes_in_text_area_multiboxplots(n_clicks_search, go_plot_click, contrast, stringency_info, path, expression_dataset, text, selected_features, log_hidden_status, add_gsea_switch, update_multiboxplot_plot_button):
-		#define contexts
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-
-		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15, path)
+	def save_differential_analysis_tabs_labels(expression_dataset, selected_tab):
+		#no need to update the labels if the user has not selected the differential analysis tab
+		if selected_tab != "differential_analysis_tab":
+			raise PreventUpdate
 		
-		return selected_features, log_div, log_hidden_status, text, update_multiboxplot_plot_button
+		#label for dge_table_tab and go_table_tab
+		if "lipid" in expression_dataset:
+			dge_table_label = "DLE table"
+			go_table_label = "LO table"
+		else:
+			dge_table_label = "DGE table"
+			go_table_label = "GO table"
 
-	#target prio0ritization switch
+		data = {}
+		data["dge_tab_label"] = dge_table_label
+		data["go_tab_label"] = go_table_label
+
+		return data
+
+	#update differential analysis tab labels
+	@app.callback(
+		Output("dge_tab", "label"),
+		Output("go_tab", "label"),
+		Input("differential_analysis_tab_label_data", "data"),
+	)
+	def update_differential_analysis_tabs_labels(data):
+		#get labels
+		dge_table_label = data["dge_tab_label"]
+		go_table_label = data["go_tab_label"]
+
+		return dge_table_label, go_table_label
+
+	#target prioritization switch
 	@app.callback(
 		Output("target_prioritization_switch_div", "hidden"),
 		Input("feature_dataset_dropdown", "value")
@@ -813,620 +377,9 @@ def define_callbacks(app):
 		
 		return hidden
 
-	#expression_abundance_profiling_tabs content
-	@app.callback(
-		Output("expression_abundance_profiling_tabs", "children"),
-		Output("expression_abundance_profiling", "label"),
-		Output("dge_table_tab", "label"),
-		Output("go_table_tab", "label"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("discrete_metadata_options", "data"),
-		Input("continuous_metadata_options", "data"),
-		Input("annotation_dropdown_options", "data"),
-		State("feature_dataset_dropdown", "options"),
-		State("analysis_dropdown", "value")
-	)
-	def update_profiling_tabs(expression_dataset, options_discrete, options_continue, annotation_dropdown_options, feature_dataset_options, path):
-		if expression_dataset is None:
-			raise PreventUpdate
-
-		#label for expression_abundance_profiling
-		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-			expression_abundance_profiling_label = "Expression profiling"
-		else:
-			expression_abundance_profiling_label = "Abundance profiling"
-
-		#label for dge_table_tab and go_table_tab
-		if "lipid" in expression_dataset:
-			dge_table_label = "DLE table"
-			go_table_label = "LO table"
-		else:
-			dge_table_label = "DGE table"
-			go_table_label = "GO table"
-		
-		#heatmap tab
-		heatmap_tab = dcc.Tab(label="Heatmap", value="heatmap", children=[
-			html.Div([
-				html.Br(),
-				
-				#heatmap input
-				html.Div([
-					
-					#info + update plot button
-					html.Div([
-						
-						#info
-						html.Div([
-							html.Div(id="info_heatmap",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
-							dbc.Tooltip(
-								children=[dcc.Markdown(
-									"""
-									##### Heatmap showing row scaled log2 expression/abundance profiles
-									
-									Use the __feature__ dropdown and form to select the features to be displayed.
-									
-									Use the __annotations__ dropdown to decorate the heatmap with metadata.
-									
-									Click a GO plot __balloon__ to display in the heatmap the genes responsible for its enrichment.
-									
-									Use the __clustered samples__ switch to perform unsupervised hierarchical clustering along the x-axis.
-									
-									Use the __comparison only__ switch to display only the samples belonging to the two conditions of interest.
-									
-									Use the __legend__ to hide a group of samples. Use the __hide unselected__ switch to clear the legend from undisplayed samples.
-									
-									Use __height__ and __width__ sliders to resize the entire plot.
-									""")
-								],
-								target="info_heatmap",
-								style={"font-family": "arial", "font-size": 14}
-							),
-						], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
-
-						#update plot button
-						html.Div([
-							dbc.Button("Update plot", id="update_heatmap_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-							#warning popup
-							dbc.Popover(
-								children=[
-									dbc.PopoverHeader(children=["Warning!"], tag="div", style={"font-family": "arial", "font-size": 14}),
-									dbc.PopoverBody(children=["Plotting more than 10 features is not allowed."], style={"font-family": "arial", "font-size": 12})
-								],
-								id="popover_plot_heatmap",
-								target="update_heatmap_plot_button",
-								is_open=False,
-								style={"font-family": "arial"}
-							),
-						], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
-					]),
-					
-					html.Br(),
-
-					#dropdowns
-					html.Label(["Annotations", 
-						dcc.Dropdown(id="annotation_dropdown", 
-							multi=True,
-							options=annotation_dropdown_options,
-							value=[], 
-							style={"textAlign": "left", "font-size": "12px"})
-					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
-
-					html.Br(),
-
-					html.Label(["Features",
-						dcc.Dropdown(id="feature_heatmap_dropdown", 
-							multi=True, 
-							placeholder="Select features", 
-							style={"textAlign": "left", "font-size": "12px"})
-					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
-
-					html.Br(),
-
-					#text area
-					dbc.Textarea(id="heatmap_text_area", style={"height": 300, "resize": "none", "font-size": "12px"}),
-
-					html.Br(),
-
-					#search button
-					dbc.Button("Search", id="heatmap_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-
-					html.Br(),
-
-					#genes not found area
-					html.Div(id="genes_not_found_heatmap_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}), 
-
-					html.Br()
-				], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
-
-				#spacer
-				html.Div([], style={"width": "1%", "display": "inline-block"}),
-
-				#heatmap graph and legend
-				html.Div(children=[
-					
-					#custom hetmap dimension
-					html.Div([
-						#cluster heatmap switch
-						html.Div([
-							html.Label(["Clustered samples",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[1],
-									id="clustered_heatmap_switch",
-									switch=True
-								)
-							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-						], style={"width": "14%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-
-						#comparison only heatmap switch
-						html.Div([
-							html.Label(["Comparison only",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[1],
-									id="comparison_only_heatmap_switch",
-									switch=True
-								)
-							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-
-						#best conditions heatmap switch
-						html.Div([
-							html.Label(["Best conditions",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[],
-									id="best_conditions_heatmap_switch",
-									switch=True
-								)
-							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-
-						#hide unselected legend heatmap switch
-						html.Div([
-							html.Label(["Hide unselected",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[],
-									id="hide_unselected_heatmap_switch",
-									switch=True
-								)
-							], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
-						
-						#height slider
-						html.Label(["Height",
-							dcc.Slider(id="hetamap_height_slider", min=200, step=1)
-						], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
-						#width slider
-						html.Label(["Width",
-							dcc.Slider(id="hetamap_width_slider", min=200, max=885, step=1)
-						], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"})
-					], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-
-					#graph
-					dbc.Spinner(
-						children = [dcc.Graph(id="heatmap_graph")],
-						size = "md",
-						color = "lightgray"
-					),
-					#legend
-					html.Div(id="heatmap_legend_div", hidden=True)
-				], style = {"width": "74%", "display": "inline-block"})
-			], style = {"width": "100%", "height": 800, "display": "inline-block"})
-		], style=tab_style, selected_style=tab_selected_style)
-		#multiviolins tab
-		multi_violin_tab = dcc.Tab(label="Multi-violin", value="multi_violin", children=[
-			html.Div(id="multiboxplot_div", children=[
-				
-				html.Br(),
-				
-				#input section
-				html.Div([
-					
-					#info + update plot button
-					html.Div([
-						
-						#info
-						html.Div([
-							html.Div(id="info_multiboxplots",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto", "text-align": "center"}),
-							dbc.Tooltip(
-								children=[dcc.Markdown(
-									"""
-									Use the __features__ dropdown and form to select the features to be displayed.
-									
-									Use __x__ and __y__, or the __group by__ dropdowns to select the data or facet the plot, respectively.
-									
-									Use the __plot per row__ dropdown to choose how many features to be displayed per row.
-									
-									Use the __comparison only__ switch to display only the groups belonging to the two conditions of interest.
-									
-									Use the appropriate switch to __show as boxplots__.
-									
-									Use __height__ and __width__ sliders to resize the entire plot.
-									
-									Use the __legend__ to hide a group. Use the __hide unselected__ switch to clear the legend from undisplayed groups.
-									
-									A maximum of 20 features has been set.
-
-									""")
-								],
-								target="info_multiboxplots",
-								style={"font-family": "arial", "font-size": 14}
-							),
-						], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
-
-						#update plot button
-						html.Div([
-							dbc.Button("Update plot", id="update_multiboxplot_plot_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"})
-						], style={"width": "30%", "display": "inline-block", "vertical-align": "middle"}),
-					]),
-					
-					html.Br(),
-
-					#dropdown
-					html.Label(["Features",
-						dcc.Dropdown(id="feature_multi_boxplots_dropdown", 
-							multi=True, 
-							placeholder="Select features",
-							style={"textAlign": "left", "font-size": "12px"}
-						),
-					], className="dropdown-luigi", style={"width": "100%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
-
-					html.Br(),
-
-					#text area
-					dbc.Textarea(id="multi_boxplots_text_area", style={"width": "100%", "height": 300, "resize": "none", "font-size": "12px"}),
-
-					html.Br(),
-
-					#search button
-					dbc.Button("Search", id="multi_boxplots_search_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-
-					html.Br(),
-
-					#genes not found area
-					html.Div(id="genes_not_found_multi_boxplots_div", children=[], hidden=True, style={"font-size": "12px", "text-align": "center"}), 
-
-					html.Br()
-				], style={"width": "25%", "display": "inline-block", "vertical-align": "top"}),
-
-				#multiboxplots options and graph
-				html.Div([
-					#dropdowns
-					html.Div([
-						#x dropdown
-						html.Label(["x",
-							dcc.Dropdown(
-							id="x_multiboxplots_dropdown",
-							clearable=False,
-							options=options_discrete,
-							value="condition"
-						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-						#y dropdown
-						html.Label(["y", 
-							dcc.Dropdown(
-								id="y_multiboxplots_dropdown",
-								clearable=False,
-								options=options_continue,
-								value="log2_expression",
-								className="dropdown-luigi"
-						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-						#group by dropdown
-						html.Label(["Group by", 
-							dcc.Dropdown(
-								id="group_by_multiboxplots_dropdown",
-								clearable=False,
-								options=options_discrete,
-								value="condition"
-						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-						#plot per row
-						html.Label(["Plot per row", 
-							dcc.Dropdown(
-								id="plot_per_row_multiboxplots_dropdown",
-								clearable=False,
-								value=3,
-								options=[{"label": n, "value": n} for n in [1, 2, 3]]
-						)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-					], style={"width": "100%", "display": "inline-block"}),
-					
-					#switches and sliders
-					html.Div([
-						#comparison_only switch
-						html.Div([
-							html.Label(["Comparison only",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[1],
-									id="comparison_only_multiboxplots_switch",
-									switch=True
-								)
-							], style={"textAlign": "center"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-						#best conditions switch
-						html.Div([
-							html.Label(["Best conditions",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[],
-									id="best_conditions_multiboxplots_switch",
-									switch=True
-								)
-							], style={"textAlign": "center"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-						#hide unselected switch
-						html.Div([
-							html.Label(["Hide unselected",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[],
-									id="hide_unselected_multiboxplots_switch",
-									switch=True
-								)
-							], style={"textAlign": "center"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-						#show as boxplot switch
-						html.Div([
-							html.Label(["Show as boxplots",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[],
-									id="show_as_multiboxplot_switch",
-									switch=True
-								)
-							], style={"textAlign": "center"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-						#stats switch
-						html.Div([
-							html.Label(["Statistics",
-								dbc.Checklist(
-									options=[
-										{"label": "", "value": 1},
-									],
-									value=[],
-									id="stats_multiboxplots_switch",
-									switch=True
-								)
-							], style={"textAlign": "center"}),
-						], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
-						#custom hetmap dimension
-						html.Div([
-							#height slider
-							html.Label(["Height",
-								dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max=2000)
-							], style={"width": "49.5%", "display": "inline-block"}),
-							#spacer
-							html.Div([], style={"width": "1%", "display": "inline-block"}),
-							#width slider
-							html.Label(["Width",
-								dcc.Slider(id="multiboxplots_width_slider", min=200, max=900, value=900, step=1)
-							], style={"width": "49.5%", "display": "inline-block"})
-						], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
-					], style={"width": "100%", "display": "inline-block"}),
-
-					#x filter dropdown
-					html.Div(id="x_filter_dropdown_multiboxplots_div", hidden=True, children=[
-						html.Label(["x filter", 
-							dcc.Dropdown(
-								id="x_filter_multiboxplots_dropdown",
-								multi=True, 
-								className="dropdown-luigi"
-						)], style={"width": "100%", "textAlign": "left"}),
-					], style={"width": "90%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
-
-					#graph
-					html.Div(id="multiboxplot_graph_div", children=[
-						dbc.Spinner(size = "md", color = "lightgray", children=[
-							html.Div(
-								id="multi_boxplots_div",
-								children=[dbc.Spinner(
-									children = [dcc.Graph(id="multi_boxplots_graph", figure={})],
-									size = "md",
-									color = "lightgray")
-							], hidden=True)
-						])
-					], style={"width": "100%", "display": "inline-block", "vertical-align": "top"}),
-
-				], style={"width": "75%", "font-size": "12px", "display": "inline-block"}),
-				
-				html.Br(),
-				html.Br(),
-
-				#update and download stats buttons
-				html.Div(id="multibox_stats_buttons_div", hidden=True, children=[
-					dbc.Button("Update statistics", id="update_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-
-					html.Div(children=[], style={"width": "10%", "display": "inline-block"}),
-
-					dbc.Button("Download statistics", id="download_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-					dcc.Download(id="download_multiboxplot_stats")
-				], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-
-				#div that can contain statistics table
-				html.Br(),
-				html.Div(id="multiboxplot_stats_div", hidden=True, style={"width": "100%", "display": "inline-block"}, className="luigi-dash-table"),
-				html.Br()
-
-			], style={"width": "100%", "display": "inline-block"})
-		], style=tab_style, selected_style=tab_selected_style)
-		#correlation tab
-		possible_dataset_values = []
-		for dataset_option in feature_dataset_options:
-			possible_dataset_values.append(dataset_option["value"])
-		if "human" in possible_dataset_values:
-			dataset_value = "human"
-		else:
-			dataset_value = possible_dataset_values[0]
-		correlation_tab = dcc.Tab(label="Feature correlation", value="feature_correlation", children=[
-			dcc.Store(id="correletion_stats"),
-			html.Br(),
-			
-			#dropdowns and switches
-			html.Div([
-				#x dataset correlation dropdown
-				html.Div([
-					html.Label(["x dataset",
-						dcc.Dropdown(
-							id="x_dataset_correlation_dropdown",
-							clearable=False,
-							value=dataset_value,
-							options=feature_dataset_options
-					)], style={"width": "100%"}, className="dropdown-luigi"),
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
-				#x correlation dropdown
-				html.Div([
-					html.Label(["x",
-						dcc.Dropdown(
-							id="x_correlation_dropdown",
-							placeholder="Search a feature"
-					)], style={"width": "100%"}, className="dropdown-luigi"),
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
-				#y dataset correlation dropdown
-				html.Div([
-					html.Label(["y dataset",
-						dcc.Dropdown(
-							id="y_dataset_correlation_dropdown",
-							clearable=False,
-							value=dataset_value,
-							options=feature_dataset_options
-					)], style={"width": "100%"}, className="dropdown-luigi"),
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
-				#y correlation dropdown
-				html.Div([
-					html.Label(["y",
-						dcc.Dropdown(
-							id="y_correlation_dropdown",
-							placeholder="Search a feature"
-					)], style={"width": "100%"}, className="dropdown-luigi"),
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
-				#group by correlation dropdown
-				html.Div([
-					html.Label(["Group by",
-						dcc.Dropdown(
-							id="group_by_correlation_dropdown",
-							options=options_discrete
-					)], style={"width": "100%"}, className="dropdown-luigi"),
-				], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
-				#switches
-				html.Div([
-					#comparison_only switch
-					html.Div([
-						html.Label(["Comparison only",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1},
-								],
-								value=[1],
-								id="comparison_only_correlation_switch",
-								switch=True
-							)
-						], style={"textAlign": "center"})
-					], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"}),
-
-					#hide unselected switch
-					html.Div([
-						html.Label(["Hide unselected",
-							dbc.Checklist(
-								options=[
-									{"label": "", "value": 1, "disabled": True},
-								],
-								value=[],
-								id="hide_unselected_correlation_switch",
-								switch=True
-							)
-						], style={"textAlign": "center"}),
-					], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"})
-			], style={"width": "50%", "display": "inline-block"}),
-				#width slider
-				html.Div([
-					html.Label(["Width",
-						dcc.Slider(id="correlation_width_slider", min=300, max=600, step=1)
-					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"}),
-				#height slider
-				html.Div([
-					html.Label(["Height",
-						dcc.Slider(id="correlation_height_slider", min=300, max=1000, step=1)
-					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "40%", "display": "inline-block", "vertical-align": "middle"})
-			],  style={"width": "40%", "display": "inline-block", "font-size": "12px", "vertical-align": "top"}),
-
-			#statistics plot
-			html.Div(id="statistics_feature_correlation_plot_div", hidden=True, children=[
-				dbc.Spinner(
-					children = dcc.Graph(id="statistics_feature_correlation_plot"),
-					size = "md",
-					color = "lightgray"
-				)
-			], style={"width": "10%", "display": "inline-block", "vertical-align": "top"}),
-
-			#main plot
-			html.Div([
-				dbc.Spinner(
-					children = dcc.Graph(id="feature_correlation_plot"),
-					size = "md",
-					color = "lightgray"
-				)
-			], style={"width": "50%", "display": "inline-block"}),
-
-			html.Br()
-		], style=tab_style, selected_style=tab_selected_style)
-
-		#build default children
-		children = [heatmap_tab, multi_violin_tab, correlation_tab]
-
-		#add diversity tab when some species expression dataset is selected
-		main_folders = functions.get_content_from_github(path, "./")
-		if "species" in expression_dataset and "diversity" in main_folders:
-
-			#defrine layout for diversity tab
-			diversity_tab = dcc.Tab(label="Species diversity", value="diversity", children=[
-				html.Div([
-					html.Br(),
-
-					#dropdown and sliders
-					html.Div([
-						html.Label(["Group by",
-							dcc.Dropdown(
-								id="group_by_diversity_dropdown",
-								clearable=False,
-								options=options_discrete,
-								value="condition"
-						)], style={"width": "15%", "vertical-align": "middle", "textAlign": "left"}, className="dropdown-luigi"),
-					], style={"width": "100%", "display": "inline-block", "font-size": "12px"}),
-					
-					#graph
-					html.Div([
-						dbc.Spinner(
-							id = "loading_mds_metadata",
-							children = dcc.Graph(id="diversity_graph"),
-							size = "md",
-							color = "lightgray"
-						)
-					], style={"width": "100%", "display": "inline-block"})
-				], style={"width": "100%", "display": "inline-block"})
-			], style=tab_style, selected_style=tab_selected_style)
-			children.append(diversity_tab)
-		
-		return children, expression_abundance_profiling_label, dge_table_label, go_table_label
-
 	##### DROPDOWNS #####
+
+	### main dropdowns ###
 
 	#get mds datasets types
 	@app.callback(
@@ -1455,10 +408,9 @@ def define_callbacks(app):
 
 		return options, value
 
-	#change label and setup feature dropdown
+	#change label main feature dropdown
 	@app.callback(
 		Output("feature_label", "children"),
-		Output("multi_gene_dge_table_selection_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value"),
 		State("feature_dropdown", "value")
@@ -1505,8 +457,60 @@ def define_callbacks(app):
 			)
 		]
 
-		return children, None
+		return children
 
+	#set featuere value with automatic interactions
+	@app.callback(
+		Output("feature_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value"),
+		Input("ma_plot_graph", "clickData"),
+		Input("dge_table_click_data", "data"),
+		Input("analysis_dropdown", "value")
+	)
+	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, dge_table_cell_data, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		#if you click a feature on the ma-plot, set up the search value with that value
+		if trigger_id == "ma_plot_graph.clickData":
+			selected_element = selected_point_ma_plot["points"][0]["customdata"][0].replace(" ", "_")
+			if selected_element == "NA":
+				raise PreventUpdate
+			else:
+				if "genes" in expression_dataset:
+					selected_element = selected_element.replace("_-_", "@")
+				value = selected_element
+		#change of dataset, setup search value with defaults
+		elif trigger_id in ["feature_dataset_dropdown.value", ".", "analysis_dropdown.value"]:
+			if expression_dataset not in ["human", "mouse"]:
+				if "lipid" in expression_dataset:
+					if expression_dataset == "lipid":
+						value = "10-HDoHE"
+					else:
+						value = "DHA"
+				else:
+					if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+						value = "data/" + expression_dataset + "/counts/genes_list.tsv"
+					else:
+						if "lipid" in expression_dataset:
+							value = "data/" + expression_dataset + "/counts/lipid_list.tsv"
+						else:
+							value = "data/" + expression_dataset + "/counts/feature_list.tsv"
+					value = functions.download_from_github(path, value)
+					value = value.readline()
+					value = value.rstrip()
+			else:
+				if expression_dataset == "human":
+					value = "GAPDH"
+				elif expression_dataset == "mouse":
+					value = "Gapdh"
+		#dge table active cell data
+		else:
+			value = dge_table_cell_data
+
+		return value
+	
 	#feature dropdown options
 	@app.callback(
 		Output("feature_dropdown", "options"),
@@ -1535,6 +539,265 @@ def define_callbacks(app):
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "single")
 
 		return options
+
+	#feature and mds datasets dropdowns
+	@app.callback(
+		Output("feature_dataset_dropdown", "options"),
+		Output("feature_dataset_dropdown", "value"),
+		Output("mds_dataset", "options"),
+		Output("mds_dataset", "value"),
+		Input("analysis_dropdown", "value")
+	)
+	def update_feature_and_mds_datasets_dropdown(path):
+		#get all subdir to populate expression dataset
+		subdirs = functions.get_content_from_github(path, "data")
+		expression_datasets_options = []
+		mds_dataset_options = []
+		for dir in subdirs:
+			if dir in ["human", "mouse"]:
+				organism = dir
+				expression_datasets_options.append({"label": dir.capitalize(), "value": dir})
+				mds_dataset_options.append({"label": dir.capitalize(), "value": dir})
+			else:
+				non_host_content = functions.get_content_from_github(path, "data/" + dir)
+				if "lipid" in dir:
+					expression_datasets_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
+					if "mds" in non_host_content:
+						mds_dataset_options.append({"label": dir.capitalize().replace("_", " "), "value": dir})
+				else:
+					kingdom = dir.split("_")[0]
+					lineage = dir.split("_")[1]
+					expression_datasets_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+					#check if there is mds for each metatranscriptomics
+					if "mds" in non_host_content:
+						mds_dataset_options.append({"label": kingdom.capitalize() + " by " + lineage, "value": dir})
+
+		return expression_datasets_options, organism, mds_dataset_options, organism
+
+	#contrast dropdown
+	@app.callback(
+		Output("contrast_dropdown", "options"),
+		Output("contrast_dropdown", "value"),
+		Output("best_comparisons_switch", "value"),
+		Output("best_comparisons_switch", "options"),
+		Input("feature_dataset_dropdown", "value"),
+		Input("comparison_filter_input", "value"),
+		Input("best_comparisons_switch", "value"),
+		State("analysis_dropdown", "value"),
+		State("best_comparisons_switch", "options")
+	)
+	def get_contrasts(expression_dataset, input_value, best_comparisons_switch, path, best_comparisons_switch_options):
+		if expression_dataset is None:
+			raise PreventUpdate
+		
+		#trigger id
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+		boolean_best_comparisons_switch = functions.boolean_switch(best_comparisons_switch)
+		
+		#if best contrasts is true, in case these will not be present in this expression dataset then the switch should be disabled
+		if boolean_best_comparisons_switch:
+			tried_to_filter_best_contrasts = True
+		else:
+			tried_to_filter_best_contrasts = False
+		
+		#by changing expression dataset, assume that is possible to use best comparisons
+		if trigger_id == "feature_dataset_dropdown.value":
+			best_comparisons_switch_options = [{"label": "", "value": 1, "disabled": False}]
+
+		#get which repo has been selected
+		repo = functions.get_repo_name_from_path(path, repos)
+
+		dge_folder = "data/" + expression_dataset + "/dge"
+		dge_files = functions.get_content_from_github(path, dge_folder)
+		contrasts = []
+		filtered_contrasts = []
+		#get dge files for getting all the contrasts
+		for dge_file in dge_files:
+			contrast = dge_file.split("/")[-1]
+			contrast = contrast.split(".")[0]
+			
+			#try to use the best contrasts in the config
+			if boolean_best_comparisons_switch:
+				if contrast in config["repos"][repo]["best_comparisons"]:
+					filtered_contrasts.append(contrast)
+			
+			#if the input is the search bar, then try to filter
+			if trigger_id == "comparison_filter_input.value":
+				#get lower search values
+				input_value = input_value.lower()
+				search_values = input_value.split(" ")
+				#check search values into the contrast
+				number_of_values = len(search_values)
+				matches = 0
+				for search_value in search_values:
+					contrast_lower = contrast.lower()
+					condition_1 = contrast_lower.split("-vs-")[0]
+					condition_2 = contrast_lower.split("-vs-")[1]
+					#all keywords must be present in both conditions
+					if search_value in condition_1 and search_value in condition_2:
+						matches += 1
+				#if all the keyword are in both condition, the add this contrast to the filtered contrasts
+				if matches == number_of_values:
+					filtered_contrasts.append(contrast)
+
+			#save anyway all contrasts in case there are no possibilities
+			contrasts.append(contrast)
+		#if no filtered contrasts are present, use all the contrasts
+		if len(filtered_contrasts) != 0:
+			contrasts = filtered_contrasts
+		#turn off the switch if any of the best comparisons is in this new dataset and disable the switch
+		else:
+			if trigger_id == "feature_dataset_dropdown.value" and tried_to_filter_best_contrasts:
+				best_comparisons_switch = []
+				best_comparisons_switch_options = [{"label": "", "value": 1, "disabled": True}]
+
+		#define options and default value
+		options = []
+		possible_values = []
+		for contrast in contrasts:
+			options.append({"label": contrast.replace("-", " ").replace("_", " "), "value": contrast})
+			possible_values.append(contrast)
+		if config["repos"][repo]["default_comparison"] != "First" and config["repos"][repo]["default_comparison"] in possible_values:
+			value = config["repos"][repo]["default_comparison"]
+		else:
+			value = options[0]["value"]
+
+		return options, value, best_comparisons_switch, best_comparisons_switch_options
+
+	#stringency dropdown
+	@app.callback(
+		Output("stringency_dropdown", "value"),
+		Output("stringency_dropdown", "options"),
+		Input("feature_dataset_dropdown", "value"),
+		Input("analysis_dropdown", "value")
+	)
+	def get_stringency_value(expression_dataset, path):	
+		if expression_dataset in ["human", "mouse"]:
+			folders = functions.get_content_from_github(path, "data/{}".format(expression_dataset))
+			options = []
+			#get all dge analyisis performed
+			for folder in folders:
+				if folder not in ["counts", "dge", "mds", "gsea"]:
+					#label will be constructed
+					label = ""
+					#strincecy type
+					stringency_type = folder.split("_")[0]
+					if stringency_type == "pvalue":
+						label += "P-value "
+					else:
+						label += "FDR "
+					#stringency value
+					stringency_value = folder.split("_")[1]
+					label += stringency_value
+					
+					#populate options
+					options.append({"label": label, "value": folder})
+		
+			#default value defined in config file
+			repo = functions.get_repo_name_from_path(path, repos)
+			value = functions.config["repos"][repo]["stringency"]
+		else:
+			options = [{"label": "P-value 0.05", "value": "pvalue_0.05"}]
+			value = "pvalue_0.05"
+
+		return value, options
+
+	#x and group by dropdowns boxplots
+	@app.callback(
+		Output("x_boxplot_dropdown", "options"),
+		Output("group_by_boxplot_dropdown", "options"),
+		Input("discrete_metadata_options", "data")
+	)
+	def get_x_values_boxplot_dropdowns(options_discrete):
+		return options_discrete, options_discrete
+
+	#expression or abundance y dropdown
+	@app.callback(
+		Output("y_boxplot_dropdown", "options"),
+		Output("y_boxplot_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value"),
+		Input("continuous_metadata_options", "data"),
+		State("y_boxplot_dropdown", "options"),
+	)
+	def get_y_values_boxplot_dropdowns(feature_dataset_dropdown, continuous_metadata_options_data, y_boxplots_dropdown):
+		if feature_dataset_dropdown is None:
+			raise PreventUpdate
+		
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		if trigger_id == "continuous_metadata_options.data" or y_boxplots_dropdown is None:
+			y_boxplots_dropdown = continuous_metadata_options_data
+		
+		if feature_dataset_dropdown in ["human", "mouse"] or "genes" in feature_dataset_dropdown:
+			y_boxplots_dropdown[0] = {"label": "Log2 expression", "value": "log2_expression"}
+			value = "log2_expression"
+		else:
+			y_boxplots_dropdown[0] = {"label": "Log2 abundance", "value": "log2_abundance"}
+			value = "log2_abundance"
+
+		return y_boxplots_dropdown, value
+
+	#filter x axis boxplots
+	@app.callback(
+		Output("x_filter_boxplot_dropdown", "options"),
+		Output("x_filter_boxplot_dropdown", "value"),
+		Input("x_boxplot_dropdown", "value"),
+		Input("y_boxplot_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
+	)
+	def get_filter_x_values_boxplots_dropdowns(selected_x, selected_y, feature_dataset, path):
+		
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
+
+		return options, x_values
+
+	### profiling dropdowns ###
+
+	## heatmap ##
+
+	#get options heatmap annotations
+	@app.callback(
+		Output("heatmap_annotation_dropdown", "options"),
+		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
+		State("heatmap_annotation_dropdown_options", "data")
+	)
+	def get_options_heatmap_annotation(selected_tab, annotation_dropdown_options):
+		return annotation_dropdown_options
+
+	#search genes for heatmap
+	@app.callback(
+		Output("feature_heatmap_dropdown", "value"),
+		Output("genes_not_found_heatmap_div", "children"),
+		Output("genes_not_found_heatmap_div", "hidden"),
+		Output("heatmap_text_area", "value"),
+		Output("update_heatmap_plot_button", "n_clicks"),
+		Input("heatmap_search_button", "n_clicks"),
+		Input("go_plot_graph", "clickData"),
+		Input("contrast_dropdown", "value"),
+		Input("stringency_dropdown", "value"),
+		Input("analysis_dropdown", "value"),
+		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
+		State("heatmap_text_area", "value"),
+		State("feature_dataset_dropdown", "value"),
+		State("feature_heatmap_dropdown", "value"),
+		State("genes_not_found_heatmap_div", "hidden"),
+		State("genes_not_found_heatmap_div", "children"),
+		State("update_heatmap_plot_button", "n_clicks"),
+		State("add_gsea_switch", "value")
+	)
+	def serach_genes_in_text_area_heatmap(n_clicks_search, go_plot_click, contrast, stringency_info, path, tab_value, text, expression_dataset, selected_features, log_hidden_status, log_div, n_clicks_update_plot, add_gsea_switch):
+		
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15, path)
+
+		return selected_features, log_div, log_hidden_status, text, n_clicks_update_plot
 
 	#features heatmap dropdown options
 	@app.callback(
@@ -1566,6 +829,37 @@ def define_callbacks(app):
 
 		return options, placeholder
 
+	## multi-boxplots dropdowns ##
+
+	#search genes for multiboxplots
+	@app.callback(
+		Output("feature_multi_boxplots_dropdown", "value"),
+		Output("genes_not_found_multi_boxplots_div", "children"),
+		Output("genes_not_found_multi_boxplots_div", "hidden"),
+		Output("multi_boxplots_text_area", "value"),
+		Output("update_multiboxplot_plot_button", "n_clicks"),
+		Input("multi_boxplots_search_button", "n_clicks"),
+		Input("go_plot_graph", "clickData"),
+		Input("contrast_dropdown", "value"),
+		Input("stringency_dropdown", "value"),
+		Input("analysis_dropdown", "value"),
+		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
+		State("feature_dataset_dropdown", "value"),
+		State("multi_boxplots_text_area", "value"),
+		State("feature_multi_boxplots_dropdown", "value"),
+		State("genes_not_found_multi_boxplots_div", "hidden"),
+		State("add_gsea_switch", "value"),
+		State("update_multiboxplot_plot_button", "n_clicks"),
+	)
+	def serach_genes_in_text_area_multiboxplots(n_clicks_search, go_plot_click, contrast, stringency_info, path, tab_value, expression_dataset, text, selected_features, log_hidden_status, add_gsea_switch, update_multiboxplot_plot_button):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
+		selected_features, log_div, log_hidden_status, text = functions.search_genes_in_textarea(trigger_id, go_plot_click, expression_dataset, stringency_info, contrast, text, selected_features, add_gsea_switch, 15, path)
+		
+		return selected_features, log_div, log_hidden_status, text, update_multiboxplot_plot_button
+
 	#features multi-boxplots dropdown options
 	@app.callback(
 		Output("feature_multi_boxplots_dropdown", "options"),
@@ -1595,6 +889,64 @@ def define_callbacks(app):
 		options = functions.get_options_feature_dropdown(expression_dataset, features, search_value, current_value, "multi")
 
 		return options, placeholder
+
+	#get x and group by options multiboxplot dropdown
+	@app.callback(
+		Output("x_multiboxplots_dropdown", "options"),
+		Output("group_by_multiboxplots_dropdown", "options"),
+		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
+		State("discrete_metadata_options", "data")
+	)
+	def get_x_options_multiboxplots(selected_tab, discrete_options):
+		return discrete_options, discrete_options
+
+	#get y options multiboxplot dropdown
+	@app.callback(
+		Output("y_multiboxplots_dropdown", "options"),
+		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
+		State("continuous_metadata_options", "data")
+	)
+	def get_y_options_multiboxplots(selected_tab, continuous_options):
+		return continuous_options
+
+	#filter x axis multiboxplots
+	@app.callback(
+		Output("x_filter_multiboxplots_dropdown", "options"),
+		Output("x_filter_multiboxplots_dropdown", "value"),
+		Input("x_multiboxplots_dropdown", "value"),
+		Input("y_multiboxplots_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
+	)
+	def get_x_filter_values_multiboxplots(selected_x, selected_y, feature_dataset, path):
+
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
+
+		return options, x_values
+
+	## correlation dropdowns ##
+
+	#feature datasets and group by options and values
+	@app.callback(
+		Output("x_dataset_correlation_dropdown", "options"),
+		Output("x_dataset_correlation_dropdown", "value"),
+		Output("y_dataset_correlation_dropdown", "options"),
+		Output("y_dataset_correlation_dropdown", "value"),
+		Output("group_by_correlation_dropdown", "options"),
+		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
+		State("feature_dataset_dropdown", "options"),
+		State("discrete_metadata_options", "data")
+	)
+	def update_dataset_and_group_by_dropdowns_correlation(selected_tab, feature_dataset_options, discrete_options):
+		possible_dataset_values = []
+		for dataset_option in feature_dataset_options:
+			possible_dataset_values.append(dataset_option["value"])
+		if "human" in possible_dataset_values:
+			dataset_value = "human"
+		else:
+			dataset_value = possible_dataset_values[0]
+		
+		return feature_dataset_options, dataset_value, feature_dataset_options, dataset_value, discrete_options
 
 	#features x correlation dropdown options
 	@app.callback(
@@ -1664,12 +1016,25 @@ def define_callbacks(app):
 
 		return options, value
 
+	## diversity dropdowns ##
+
+	#group by diversity dropdown
+	@app.callback(
+		Output("group_by_diversity_dropdown", "options"),
+		Input({"type": "tabs", "id": "main_tabs"}, "value"),
+		State("discrete_metadata_options", "data")
+	)
+	def update_diversity_group_by_dropdown(tab_value, discrete_metadata_options):
+		return discrete_metadata_options
+
+	### differential analysis dropdowns ###
+
 	#features dge table dropdown options
 	@app.callback(
-		Output("multi_gene_dge_table_selection_dropdown", "options"),
-		Output("multi_gene_dge_table_selection_dropdown", "placeholder"),
-		Input("multi_gene_dge_table_selection_dropdown", "search_value"),
-		Input("multi_gene_dge_table_selection_dropdown", "value"),
+		Output("multi_gene_dge_table_dropdown", "options"),
+		Output("multi_gene_dge_table_dropdown", "placeholder"),
+		Input("multi_gene_dge_table_dropdown", "search_value"),
+		Input("multi_gene_dge_table_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
@@ -1679,7 +1044,7 @@ def define_callbacks(app):
 		trigger_id = ctx.triggered[0]["prop_id"]
 		
 		#don't change the options when the search value is empty
-		if not search_value and trigger_id == "multi_gene_dge_table_selection_dropdown.search_value":
+		if not search_value and trigger_id == "multi_gene_dge_table_dropdown.search_value":
 			raise PreventUpdate
 		
 		#get feature list and label
@@ -1690,266 +1055,56 @@ def define_callbacks(app):
 
 		return options, placeholder
 
-	#set featuere value with automatic interactions
+	#store dge tables values click
 	@app.callback(
-		Output("feature_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("ma_plot_graph", "clickData"),
+		Output("dge_table_click_data", "data"),
 		Input("dge_table", "active_cell"),
 		Input("dge_table_filtered", "active_cell"),
-		Input("analysis_dropdown", "value")
 	)
-	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, active_cell_full, active_cell_filtered, path):
+	def save_dge_table_data_click(active_cell_full, active_cell_filtered):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
-		#if you click a feature on the ma-plot, set up the search value with that value
-		if trigger_id == "ma_plot_graph.clickData":
-			selected_element = selected_point_ma_plot["points"][0]["customdata"][0].replace(" ", "_")
-			if selected_element == "NA":
+		#find out which active table to use
+		if trigger_id == "dge_table.active_cell":
+			active_cell = active_cell_full
+		else:
+			active_cell = active_cell_filtered
+		if active_cell is None:
+			raise PreventUpdate
+		else:
+			#prevent update for click on wrong column or empty gene
+			if active_cell["column_id"] not in ["Gene", "Family", "Order", "Species"] or active_cell["column_id"] == "Gene" and active_cell["row_id"] == "":
 				raise PreventUpdate
+			#return values
 			else:
-				if "genes" in expression_dataset:
-					selected_element = selected_element.replace("_-_", "@")
-				value = selected_element
-		#active cell in dge_table will set up that gene as search value
-		elif trigger_id in ["dge_table.active_cell", "dge_table_filtered.active_cell"]:
-			#find out which active table to use
-			if trigger_id == "dge_table.active_cell":
-				active_cell = active_cell_full
-			else:
-				active_cell = active_cell_filtered
-			if active_cell is None:
-				raise PreventUpdate
-			else:
-				#prevent update for click on wrong column or empty gene
-				if active_cell["column_id"] not in ["Gene", "Family", "Order", "Species"] or active_cell["column_id"] == "Gene" and active_cell["row_id"] == "":
-					raise PreventUpdate
-				#return values
-				else:
-					value = active_cell["row_id"]
-		#change of dataset, setup search value with defaults
-		elif trigger_id in ["feature_dataset_dropdown.value", ".", "analysis_dropdown.value"]:
-			if expression_dataset not in ["human", "mouse"]:
-				if "lipid" in expression_dataset:
-					if expression_dataset == "lipid":
-						value = "10-HDoHE"
-					else:
-						value = "DHA"
-				else:
-					if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-						value = "data/" + expression_dataset + "/counts/genes_list.tsv"
-					else:
-						if "lipid" in expression_dataset:
-							value = "data/" + expression_dataset + "/counts/lipid_list.tsv"
-						else:
-							value = "data/" + expression_dataset + "/counts/feature_list.tsv"
-					value = functions.download_from_github(path, value)
-					value = value.readline()
-					value = value.rstrip()
-			else:
-				if expression_dataset == "human":
-					value = "GAPDH"
-				elif expression_dataset == "mouse":
-					value = "Gapdh"
+				value = active_cell["row_id"]
 
 		return value
 
-	#contrast dropdown
+	### mofa dropdowns ###
+
+	#mofa contrast dropdown options
 	@app.callback(
-		Output("contrast_dropdown", "options"),
-		Output("contrast_dropdown", "value"),
-		Output("best_comparisons_switch", "value"),
-		Output("best_comparisons_switch", "options"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("comparison_filter_input", "value"),
-		Input("best_comparisons_switch", "value"),
-		State("analysis_dropdown", "value"),
-		State("best_comparisons_switch", "options")
+		Output("mofa_comparison_dropdown", "options"),
+		Input({"type": "tabs", "id": "main_tabs"}, "value"),
+		State("mofa_contrasts_options", "data"),
 	)
-	def get_contrasts(expression_dataset, input_value, best_comparisons_switch, path, best_comparisons_switch_options):
-		#trigger id
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-		boolean_best_comparisons_switch = functions.boolean_switch(best_comparisons_switch)
-		
-		#if best contrasts is true, in case these will not be present in this expression dataset then the switch should be disabled
-		if boolean_best_comparisons_switch:
-			tried_to_filter_best_contrasts = True
-		else:
-			tried_to_filter_best_contrasts = False
-		
-		#by changing expression dataset, assume that is possible to use best comparisons
-		if trigger_id == "feature_dataset_dropdown.value":
-			best_comparisons_switch_options = [{"label": "", "value": 1, "disabled": False}]
+	def update_mofa_contrasts_dropdown_options(tab_value, mofa_constrast_options):
+		return mofa_constrast_options
 
-		#get which repo has been selected
-		repo = functions.get_repo_name_from_path(path, repos)
-
-		dge_folder = "data/" + expression_dataset + "/dge"
-		dge_files = functions.get_content_from_github(path, dge_folder)
-		contrasts = []
-		filtered_contrasts = []
-		#get dge files for getting all the contrasts
-		for dge_file in dge_files:
-			contrast = dge_file.split("/")[-1]
-			contrast = contrast.split(".")[0]
-			
-			#try to use the best contrasts in the config
-			if boolean_best_comparisons_switch:
-				if contrast in config["repos"][repo]["best_comparisons"]:
-					filtered_contrasts.append(contrast)
-			
-			#if the input is the search bar, then try to filter
-			if trigger_id == "comparison_filter_input.value":
-				#get lower search values
-				input_value = input_value.lower()
-				search_values = input_value.split(" ")
-				#check search values into the contrast
-				number_of_values = len(search_values)
-				matches = 0
-				for search_value in search_values:
-					contrast_lower = contrast.lower()
-					condition_1 = contrast_lower.split("-vs-")[0]
-					condition_2 = contrast_lower.split("-vs-")[1]
-					#all keywords must be present in both conditions
-					if search_value in condition_1 and search_value in condition_2:
-						matches += 1
-				#if all the keyword are in both condition, the add this contrast to the filtered contrasts
-				if matches == number_of_values:
-					filtered_contrasts.append(contrast)
-
-			#save anyway all contrasts in case there are no possibilities
-			contrasts.append(contrast)
-
-		#if no filtered contrasts are present, use all the contrasts
-		if len(filtered_contrasts) != 0:
-			contrasts = filtered_contrasts
-		#turn off the switch if any of the best comparisons is in this new dataset and disable the switch
-		else:
-			if trigger_id == "feature_dataset_dropdown.value" and tried_to_filter_best_contrasts:
-				best_comparisons_switch = []
-				best_comparisons_switch_options = [{"label": "", "value": 1, "disabled": True}]
-
-		#define options and default value
-		options = []
-		possible_values = []
-		for contrast in contrasts:
-			options.append({"label": contrast.replace("-", " ").replace("_", " "), "value": contrast})
-			possible_values.append(contrast)
-		if config["repos"][repo]["default_comparison"] != "First" and config["repos"][repo]["default_comparison"] in possible_values:
-			value = config["repos"][repo]["default_comparison"]
-		else:
-			value = options[0]["value"]
-
-		return options, value, best_comparisons_switch, best_comparisons_switch_options
-
-	#stringency dropdown
-	@app.callback(
-		Output("stringency_dropdown", "value"),
-		Output("stringency_dropdown", "options"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("analysis_dropdown", "value")
-	)
-	def get_stringency_value(expression_dataset, path):	
-		if expression_dataset in ["human", "mouse"]:
-			folders = functions.get_content_from_github(path, "data/{}".format(expression_dataset))
-			options = []
-			#get all dge analyisis performed
-			for folder in folders:
-				if folder not in ["counts", "dge", "mds", "gsea"]:
-					#label will be constructed
-					label = ""
-					#strincecy type
-					stringency_type = folder.split("_")[0]
-					if stringency_type == "pvalue":
-						label += "P-value "
-					else:
-						label += "FDR "
-					#stringency value
-					stringency_value = folder.split("_")[1]
-					label += stringency_value
-					
-					#populate options
-					options.append({"label": label, "value": folder})
-		
-			#default value defined in config file
-			repo = functions.get_repo_name_from_path(path, repos)
-			value = functions.config["repos"][repo]["stringency"]
-		else:
-			options = [{"label": "P-value 0.05", "value": "pvalue_0.05"}]
-			value = "pvalue_0.05"
-
-		return value, options
-
-	#expression or abundance y dropdown
-	@app.callback(
-		Output("y_boxplot_dropdown", "options"),
-		Output("y_boxplot_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("continuous_metadata_options", "data"),
-		State("y_boxplot_dropdown", "options"),
-	)
-	def get_expression_or_abundance_dropdowns(feature_dataset_dropdown, continuous_metadata_options_data, y_boxplots_dropdown):
-		#define contexts
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-
-		if trigger_id == "continuous_metadata_options.data" or y_boxplots_dropdown is None:
-			y_boxplots_dropdown = continuous_metadata_options_data
-		
-		if feature_dataset_dropdown in ["human", "mouse"] or "genes" in feature_dataset_dropdown:
-			y_boxplots_dropdown[0] = {"label": "Log2 expression", "value": "log2_expression"}
-			value = "log2_expression"
-		else:
-			y_boxplots_dropdown[0] = {"label": "Log2 abundance", "value": "log2_abundance"}
-			value = "log2_abundance"
-
-		return y_boxplots_dropdown, value
-
-	#filter x axis boxplots
-	@app.callback(
-		Output("x_filter_boxplot_dropdown", "options"),
-		Output("x_filter_boxplot_dropdown", "value"),
-		Input("x_boxplot_dropdown", "value"),
-		Input("y_boxplot_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		State("analysis_dropdown", "value")
-	)
-	def get_x_values_boxplots(selected_x, selected_y, feature_dataset, path):
-		
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
-
-		return options, x_values
-
-	#filter x axis multiboxplots
-	@app.callback(
-		Output("x_filter_multiboxplots_dropdown", "options"),
-		Output("x_filter_multiboxplots_dropdown", "value"),
-		Input("x_multiboxplots_dropdown", "value"),
-		Input("y_multiboxplots_dropdown", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		State("analysis_dropdown", "value")
-	)
-	def get_x_values_multiboxplots(selected_x, selected_y, feature_dataset, path):
-
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
-
-		return options, x_values
-
-	#mofa contrast dropdown
+	#mofa contrast dropdown value
 	@app.callback(
 		Output("mofa_comparison_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
+		Input({"type": "tabs", "id": "main_tabs"}, "value"),
 		State("mofa_comparison_dropdown", "options"),
 		State("analysis_dropdown", "value")
 	)
-	def set_mofa_contrast_dropdown_value(contrast, mofa_contrasts_options, path):
+	def set_mofa_contrast_dropdown_value(contrast, tab_value, mofa_contrasts_options, path):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
-		if trigger_id == ".":
-			raise PreventUpdate
 
 		#open metadata
 		metadata = functions.download_from_github(path, "metadata.tsv")
@@ -1977,6 +1132,21 @@ def define_callbacks(app):
 				group_contrast = mofa_contrasts_options[0]["value"]
 
 		return group_contrast
+
+	## deconvolution dropdowns ##
+	@app.callback(
+		Output("split_by_1_deconvolution_dropdown", "options"),
+		Output("split_by_2_deconvolution_dropdown", "options"),
+		Output("data_sets_deconvolution_dropdown", "options"),
+		Output("data_sets_deconvolution_dropdown", "value"),
+		Input({"type": "tabs", "id": "main_tabs"}, "value"),
+		State("discrete_metadata_options", "data"),
+		State("deconvolution_datasets_options", "data")
+	)
+	def update_options_deconvolution_dropdowns(tab_value, options_discrete, deconvolution_datasets_options):
+		dataset_value = deconvolution_datasets_options[0]["value"]
+
+		return options_discrete, options_discrete, deconvolution_datasets_options, dataset_value
 
 	### DOWNLOAD CALLBACKS ###
 
@@ -2048,7 +1218,7 @@ def define_callbacks(app):
 	#disabled status for download filtered diffexp
 	@app.callback(
 		Output("download_diffexp_partial_button", "disabled"),
-		Input("multi_gene_dge_table_selection_dropdown", "value")
+		Input("multi_gene_dge_table_dropdown", "value")
 	)
 	def disable_status_download_filtered_diffexp_table(dropdown_values):
 		if dropdown_values is None or dropdown_values == []:
@@ -2066,7 +1236,7 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("contrast_dropdown", "value"),
 		State("stringency_dropdown", "value"),
-		State("multi_gene_dge_table_selection_dropdown", "value"),
+		State("multi_gene_dge_table_dropdown", "value"),
 		prevent_initial_call=True
 	)
 	def downlaod_diffexp_table_partial(button_click, path, dataset, contrast, stringency, dropdown_values):
@@ -2301,7 +1471,7 @@ def define_callbacks(app):
 		Output("dge_table_filtered", "data"),
 		Output("dge_table_filtered", "style_data_conditional"),
 		Output("filtered_dge_table_div", "hidden"),
-		Input("multi_gene_dge_table_selection_dropdown", "value"),
+		Input("multi_gene_dge_table_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
@@ -2498,6 +1668,7 @@ def define_callbacks(app):
 				if condition_1.replace("_", " ") in conditions and condition_2.replace("_", " ") in conditions:
 					dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
 					dge_table = pd.read_csv(dge_table, sep = "\t")
+					dge_table = dge_table.dropna(subset=["Gene"])
 					
 					#since feature names are clean, to filter the dge table we need to clean it
 					if expression_dataset in ["human", "mouse"]:
@@ -2738,6 +1909,10 @@ def define_callbacks(app):
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 		height = 400
+
+		#do not plot if there is no feature
+		if feature is None:
+			raise PreventUpdate
 
 		#change umap dataset, expression dataset or gene/species: create a new figure from tsv
 		if trigger_id in ["mds_type.value", "mds_dataset.value", "feature_dataset_dropdown.value", "feature_dropdown.value", "mds_metadata.figure", "mds_metadata.restyleData"] or mds_expression_fig is None:
@@ -3749,7 +2924,7 @@ def define_callbacks(app):
 		Input("hetamap_height_slider", "value"),
 		Input("hetamap_width_slider", "value"),
 		State("feature_heatmap_dropdown", "value"),
-		State("annotation_dropdown", "value"),
+		State("heatmap_annotation_dropdown", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("heatmap_graph", "figure"),
 		State("contrast_dropdown", "value"),
@@ -4203,7 +3378,7 @@ def define_callbacks(app):
 		Output("heatmap_legend_div", "children"),
 		Output("heatmap_legend_div", "hidden"),
 		Input("heatmap_graph", "figure"),
-		State("annotation_dropdown", "value"),
+		State("heatmap_annotation_dropdown", "value"),
 		State("color_mapping", "data"),
 		State("analysis_dropdown", "value")
 	)
@@ -4724,49 +3899,87 @@ def define_callbacks(app):
 				fig.update_layout(xaxis_linecolor="rgb(255,255,255)", yaxis_linecolor="rgb(255,255,255)", xaxis_showticklabels=False, yaxis_showticklabels=False, xaxis_fixedrange=True, yaxis_fixedrange=True, xaxis_ticks="", yaxis_ticks="")
 			#plot
 			else:
-				#get counts
-				counts_x = functions.download_from_github(path, "data/" + dataset_x + "/counts/" + x + ".tsv")
-				counts_x = pd.read_csv(counts_x, sep = "\t")
-				#expression or abundance for x
-				if dataset_x in ["human", "mouse"] or "genes" in dataset_x:
-					expression_or_abundance = "expression"
-				else:
-					expression_or_abundance = "abundance"
-				expression_or_abundance_x = f"Log2 {expression_or_abundance} {x}"
-				#log2
-				counts_x[expression_or_abundance_x] = np.log2(counts_x["counts"])
-				counts_x = counts_x.rename(columns={"Gene": f"{x}"})
+				#same feature on x an y
+				if x == y:
+					counts = functions.download_from_github(path, "data/" + dataset_x + "/counts/" + x + ".tsv")
+					counts = pd.read_csv(counts, sep = "\t")
+				
+					#expression or abundance for x
+					if dataset_x in ["human", "mouse"] or "genes" in dataset_x:
+						expression_or_abundance = "expression"
+					else:
+						expression_or_abundance = "abundance"
+					expression_or_abundance_x = f"Log2 {expression_or_abundance} {x}"
 
-				counts_y = functions.download_from_github(path, "data/" + dataset_y + "/counts/" + y + ".tsv")
-				counts_y = pd.read_csv(counts_y, sep = "\t")
-				#expression or abundance for y
-				if dataset_y in ["human", "mouse"] or "genes" in dataset_y:
-					expression_or_abundance = "expression"
-				else:
-					expression_or_abundance = "abundance"
-				expression_or_abundance_y = f"Log2 {expression_or_abundance} {y}"
-				#log2
-				counts_y[expression_or_abundance_y] = np.log2(counts_y["counts"])
-				counts_y = counts_y.rename(columns={"Gene": f"{y}"})
+					#log2
+					counts[expression_or_abundance_x] = np.log2(counts["counts"])
+					merged_df = counts.rename(columns={"Gene": f"{x}"})
 
-				#merge counts
-				merged_df = counts_x.merge(counts_y, how="inner", on="sample")
+					#x and y are the same
+					expression_or_abundance_y = expression_or_abundance_x
+
+				#different features on x and y
+				else:
+					#get counts
+					counts_x = functions.download_from_github(path, "data/" + dataset_x + "/counts/" + x + ".tsv")
+					counts_x = pd.read_csv(counts_x, sep = "\t")
+					#expression or abundance for x
+					if dataset_x in ["human", "mouse"] or "genes" in dataset_x:
+						expression_or_abundance = "expression"
+					else:
+						expression_or_abundance = "abundance"
+					expression_or_abundance_x = f"Log2 {expression_or_abundance} {x}"
+					#log2
+					counts_x[expression_or_abundance_x] = np.log2(counts_x["counts"])
+					counts_x = counts_x.rename(columns={"Gene": f"{x}"})
+
+					counts_y = functions.download_from_github(path, "data/" + dataset_y + "/counts/" + y + ".tsv")
+					counts_y = pd.read_csv(counts_y, sep = "\t")
+					#expression or abundance for y
+					if dataset_y in ["human", "mouse"] or "genes" in dataset_y:
+						expression_or_abundance = "expression"
+					else:
+						expression_or_abundance = "abundance"
+					expression_or_abundance_y = f"Log2 {expression_or_abundance} {y}"
+					#log2
+					counts_y[expression_or_abundance_y] = np.log2(counts_y["counts"])
+					counts_y = counts_y.rename(columns={"Gene": f"{y}"})
+
+					#merge counts
+					merged_df = counts_x.merge(counts_y, how="inner", on="sample")
 
 				#merge with metadata
 				merged_df = merged_df.merge(metadata_df, how="inner", on="sample")
 				
+				#get hover template and get columns to keep for customdata
+				metadata_columns = []
+				for column in merged_df:
+					if column not in ["fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+						metadata_columns.append(column)
+				custom_data = merged_df[metadata_columns].fillna("NA")
+
 				#plot figure without group by
 				if group_by_column is None:
-					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, trendline="ols", trendline_color_override="black")
+					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, hover_data=metadata_columns, trendline="ols", trendline_color_override="black")
 					fig.update_traces(marker_color="darkgray")
 
 					#get statistics
 					statistics_results = px.get_trendline_results(fig)
-					#format scientific notation
+					#format scientific notation for pvalue
 					pvalue_f = f"{statistics_results.px_fit_results.iloc[0].f_pvalue:.1e}".replace("e-0", "e-")
+					#get rsquared
+					r_squared = round(statistics_results.px_fit_results.iloc[0].rsquared, 1)
 
-					#add annotation
-					fig.add_annotation(text=f"R<sup>2</sup>={round(statistics_results.px_fit_results.iloc[0].rsquared, 1)} p={pvalue_f}", showarrow=False, font=dict(family="Arial", size=12, color="black"), xref="paper", yref="paper", x=0.1, y=0.1)
+					#check if the slope is negative
+					line_slope = re.match(r".+\s=\s(.+)\s\*", fig["data"][1]["hovertemplate"]).group(1)
+					if float(line_slope) < 0:
+						r_squared = -r_squared
+
+					#add annotation and change hovertemplate
+					correlation_statistics = f"R<sup>2</sup>={r_squared} p={pvalue_f}"
+					fig.add_annotation(text=correlation_statistics, showarrow=False, font=dict(family="Arial", size=12, color="black"), xref="paper", yref="paper", x=0.1, y=0.1)
+					fig["data"][1]["hovertemplate"] = correlation_statistics
+				
 				#plot figure with group by
 				else:
 					#find out if some of the groups have only 1 sample, which make it impossible to compute correlation
@@ -4785,29 +3998,45 @@ def define_callbacks(app):
 					for group in groups:
 						group_colors.append(functions.get_color(color_mapping, group_by_column, group))
 					
-					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, color=group_by_column, color_discrete_sequence=group_colors, trendline="ols")
+					#same feature on both axis
+					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, color=group_by_column, color_discrete_sequence=group_colors, trendline="ols", hover_data=metadata_columns,)
 					fig.update_traces(visible=True)
 					fig.update_layout(legend_title=group_by_column.capitalize(), legend_orientation="h", legend_yanchor="top", legend_y=-0.2)
 
 					#add statistics to plot
 					statistics_results = px.get_trendline_results(fig)
 
-					#save correlation statistics
+					#save correlation statistics, check slope and update line hovertemplate
 					statistics_data = {}
-					for group in groups:
-						group_results = statistics_results.query(f"{group_by_column} == '{group}'").px_fit_results.iloc[0]
-						#format scientific notation
-						pvalue_f = f"{group_results.f_pvalue:.1e}".replace("e-0", "e-")
+					for trace in fig["data"]:
+						if trace["mode"] == "lines":
+							#get group
+							group = trace["name"]
+							
+							#extract results
+							group_results = statistics_results.query(f"{group_by_column} == '{group}'").px_fit_results.iloc[0]
+							#format scientific notation for pvalue
+							pvalue_f = f"{group_results.f_pvalue:.1e}".replace("e-0", "e-")
+							#get rsquared
+							r_squared = round(group_results.rsquared, 1)
 
-						#save annotation text so that it can be used again later on legend update
-						annotation_text = f"R<sup>2</sup>={round(group_results.rsquared, 1)} p={pvalue_f}"
-						statistics_data[group] = annotation_text
+							#check if the slope is negative
+							line_slope = re.match(r".+\s=\s(.+)\s\*", trace["hovertemplate"]).group(1)
+							if float(line_slope) < 0:
+								r_squared = -r_squared
+
+							#save annotation text so that it can be used again later on legend update
+							annotation_text = f"R<sup>2</sup>={r_squared} p={pvalue_f}"
+							statistics_data[group] = annotation_text
+
+							#update hover template for line
+							trace["hovertemplate"] = statistics_data[group]
 
 				#update layout and config variables
 				width_fig = 400
 				height_fig = 450
 				fig.update_layout(font_family="Arial", title_text="Pearson correlation", title_xanchor="center", title_x=0.5, width=width_fig, height=height_fig, margin_r=0)
-
+		
 		#transparent background
 		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
