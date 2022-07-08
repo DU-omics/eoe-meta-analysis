@@ -1055,6 +1055,7 @@ correlation_tab_layout = html.Div([
 		)
 	], style={"width": "50%", "display": "inline-block"}),
 
+	html.Br(),
 	html.Br()
 ])
 

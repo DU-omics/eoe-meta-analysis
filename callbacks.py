@@ -142,7 +142,7 @@ def define_callbacks(app):
 		#metadata tab
 		metadata_tab = dcc.Tab(id="metadata_tab", label="Metadata", value="metadata_tab", style=tab_style, selected_style=tab_selected_style)
 		#expression/abundance profiling
-		profiling_tab = dcc.Tab(id="profiling_tab", value="profiling_tab", style=tab_style, selected_style=tab_selected_style)
+		profiling_tab = dcc.Tab(id="profiling_tab", label="Profiling", value="profiling_tab", style=tab_style, selected_style=tab_selected_style)
 		#differential analysis tab
 		differential_analysis_tab = dcc.Tab(id="differential_analysis_tab", label="Differential analysis", value="differential_analysis_tab", style=tab_style, selected_style=tab_selected_style)
 
@@ -204,7 +204,7 @@ def define_callbacks(app):
 	@app.callback(
 		Output("tab_content_div", "children"),
 		Input({"type": "tabs", "id": ALL}, "value"),
-		State("feature_dataset_dropdown", "value"),
+		Input("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value"),
 		prevent_initial_call=True
 	)
@@ -212,65 +212,88 @@ def define_callbacks(app):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["value"]
+
+		all_possible_tabs = ["metadata_tab", "profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab", "differential_analysis_tab", "dge_tab", "go_tab", "mofa_tab", "deconvolution_tab"]
 		
-		#metadata
-		if trigger_id == "metadata_tab":
-			children = [metadata_tab_layout]
-		elif trigger_id in ["profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab"]:
-			#heatmap or default
-			if trigger_id in ["profiling_tab", "heatmap_tab"]:
-				profiling_tab_value = "heatmap_tab"
-				tab_layout = heatmap_tab_layout
-			#multi violin
-			elif trigger_id == "multi_violin_tab":
-				profiling_tab_value = "multi_violin_tab"
-				tab_layout = multi_violin_tab_layout
-			#correlation
-			elif trigger_id == "feature_correlation_tab":
-				profiling_tab_value = "feature_correlation_tab"
-				tab_layout = correlation_tab_layout
-			#diversity
+		#add diversity tab only if the drodpown has been switched to metatrasncriptomics species and the profiling tab is selected
+		if "species" in trigger_id:
+			if "profiling_tab" in main_tab_value:
+				main_tab_value.remove("profiling_tab")
+				trigger_id = main_tab_value[0]
 			else:
-				profiling_tab_value = "diversity_tab"
-				tab_layout = diversity_tab_layout
+				raise PreventUpdate
+		#if you selected something that is not a species dataset and you are in the divrsity tab, return to heatmap tab
+		else:
+			if "diversity_tab" in main_tab_value and trigger_id not in all_possible_tabs:
+				trigger_id = "profiling_tab"
 
-			#constant tab
-			tabs_children = [
-				dcc.Tab(id="heatmap_tab", label="Heatmap", value="heatmap_tab", style=tab_style, selected_style=tab_selected_style),
-				dcc.Tab(id="multi_violin_tab", label="Multi-violin", value="multi_violin_tab", style=tab_style, selected_style=tab_selected_style),
-				dcc.Tab(id="feature_correlation_tab", label="Feature correlation", value="feature_correlation_tab", style=tab_style, selected_style=tab_selected_style)
-			]
+		#click on any main tab
+		if trigger_id in all_possible_tabs:
 
-			#add diversity tab when some species expression dataset is selected
-			main_folders = functions.get_content_from_github(path, "./")
-			if "species" in expression_dataset and "diversity" in main_folders:
-				tabs_children.append(dcc.Tab(id="diversity_tab", label="Species diversity", value="diversity_tab", style=tab_style, selected_style=tab_selected_style))
+			#metadata
+			if trigger_id == "metadata_tab":
+				children = [metadata_tab_layout]
+			#profiling
+			elif trigger_id in ["profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab"]:
+				#heatmap or default
+				if trigger_id in ["profiling_tab", "heatmap_tab"]:
+					profiling_tab_value = "heatmap_tab"
+					tab_layout = heatmap_tab_layout
+				#multi violin
+				elif trigger_id == "multi_violin_tab":
+					profiling_tab_value = "multi_violin_tab"
+					tab_layout = multi_violin_tab_layout
+				#correlation
+				elif trigger_id == "feature_correlation_tab":
+					profiling_tab_value = "feature_correlation_tab"
+					tab_layout = correlation_tab_layout
+				#diversity
+				else:
+					profiling_tab_value = "diversity_tab"
+					tab_layout = diversity_tab_layout
+
+				#constant tab
+				tabs_children = [
+					dcc.Tab(id="heatmap_tab", label="Heatmap", value="heatmap_tab", style=tab_style, selected_style=tab_selected_style),
+					dcc.Tab(id="multi_violin_tab", label="Multi-violin", value="multi_violin_tab", style=tab_style, selected_style=tab_selected_style),
+					dcc.Tab(id="feature_correlation_tab", label="Feature correlation", value="feature_correlation_tab", style=tab_style, selected_style=tab_selected_style)
+				]
+
+				#add diversity tab when some species expression dataset is selected
+				main_folders = functions.get_content_from_github(path, "./")
+				if "species" in expression_dataset and "diversity" in main_folders:
+					tabs_children.append(dcc.Tab(id="diversity_tab", label="Species diversity", value="diversity_tab", style=tab_style, selected_style=tab_selected_style))
+				
+				#put all tab components in tabs
+				children = [dcc.Tabs(id={"type": "tabs", "id": "profiling_tabs"}, value=profiling_tab_value, style= {"height": 40}, children=tabs_children)]			
+				children = children + [tab_layout]
+			#differential analysis
+			elif trigger_id in ["differential_analysis_tab", "dge_tab", "go_tab"]:
+				#dge or default
+				if trigger_id in ["differential_analysis_tab", "dge_tab"]:
+					differential_analysis_tab_value = "dge_tab"
+					tab_layout = dge_tab_layout
+				#go
+				else:
+					differential_analysis_tab_value = "go_tab"
+					tab_layout = go_tab_layout
+
+				#populate children
+				children = [
+					dcc.Tabs(id={"type": "tabs", "id": "differential_analysis_tabs"}, value=differential_analysis_tab_value, style= {"height": 40}, children=[
+						dcc.Tab(id="dge_tab", value="dge_tab", style=tab_style, selected_style=tab_selected_style),
+						dcc.Tab(id="go_tab", value="go_tab", style=tab_style, selected_style=tab_selected_style),
+					])]
+				children = children + [tab_layout]
+			#mofa
+			elif trigger_id == "mofa_tab":
+				children = mofa_tab_layout
+			#deconvolution
+			elif trigger_id == "deconvolution_tab":
+				children = deconvolution_tab_layout
+		else:
+			raise PreventUpdate
 			
-			#put all tab components in tabs
-			children = [dcc.Tabs(id={"type": "tabs", "id": "profiling_tabs"}, value=profiling_tab_value, style= {"height": 40}, children=tabs_children)]			
-			children = children + [tab_layout]
-		elif trigger_id in ["differential_analysis_tab", "dge_tab", "go_tab"]:
-			#dge or default
-			if trigger_id in ["differential_analysis_tab", "dge_tab"]:
-				differential_analysis_tab_value = "dge_tab"
-				tab_layout = dge_tab_layout
-			#go
-			else:
-				differential_analysis_tab_value = "go_tab"
-				tab_layout = go_tab_layout
-
-			#populate children
-			children = [
-				dcc.Tabs(id={"type": "tabs", "id": "differential_analysis_tabs"}, value=differential_analysis_tab_value, style= {"height": 40}, children=[
-					dcc.Tab(id="dge_tab", value="dge_tab", style=tab_style, selected_style=tab_selected_style),
-					dcc.Tab(id="go_tab", value="go_tab", style=tab_style, selected_style=tab_selected_style),
-				])]
-			children = children + [tab_layout]
-		elif trigger_id == "mofa_tab":
-			children = mofa_tab_layout
-		elif trigger_id == "deconvolution_tab":
-			children = deconvolution_tab_layout
-		
 		return children
 
 	### metadata tab ###
@@ -3857,12 +3880,13 @@ def define_callbacks(app):
 		State("feature_correlation_plot", "figure"),
 		State("hide_unselected_correlation_switch", "options"),
 		State("correletion_stats", "data"),
+		State("label_to_value", "data"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_feature_correlation(x, y, group_by_column, comparison_only_switch, contrast, hide_unselected_switch, width_fig, height_fig, dataset_x, dataset_y, color_mapping, fig, hide_unselected_switch_options, statistics_data, path):
-		#x = "TNF"
-		#y = "ALOX5"
-		#group_by_column = "condition"
+	def plot_feature_correlation(x, y, group_by_column, comparison_only_switch, contrast, hide_unselected_switch, width_fig, height_fig, dataset_x, dataset_y, color_mapping, fig, hide_unselected_switch_options, statistics_data, label_to_value, path):
+		x = "TNF"
+		y = "ALOX5"
+		group_by_column = "condition"
 		
 		#define contexts
 		ctx = dash.callback_context
@@ -3951,12 +3975,12 @@ def define_callbacks(app):
 				#merge with metadata
 				merged_df = merged_df.merge(metadata_df, how="inner", on="sample")
 				
-				#get hover template and get columns to keep for customdata
+				#prepare for hover data
 				metadata_columns = []
-				for column in merged_df:
-					if column not in ["fq1", "fq2", "control", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-						metadata_columns.append(column)
-				custom_data = merged_df[metadata_columns].fillna("NA")
+				for column in label_to_value:
+					metadata_columns.append(label_to_value[column])
+				merged_df = merged_df.rename(columns=label_to_value)
+				merged_df[metadata_columns] = merged_df[metadata_columns].fillna("NA")
 
 				#plot figure without group by
 				if group_by_column is None:
@@ -3978,10 +4002,13 @@ def define_callbacks(app):
 					#add annotation and change hovertemplate
 					correlation_statistics = f"R<sup>2</sup>={r_squared} p={pvalue_f}"
 					fig.add_annotation(text=correlation_statistics, showarrow=False, font=dict(family="Arial", size=12, color="black"), xref="paper", yref="paper", x=0.1, y=0.1)
+					fig["data"][0]["hovertemplate"] = fig["data"][0]["hovertemplate"].replace("=", ": ")
 					fig["data"][1]["hovertemplate"] = correlation_statistics
 				
 				#plot figure with group by
 				else:
+					original_group_by_column = group_by_column
+					group_by_column = label_to_value[group_by_column]
 					#find out if some of the groups have only 1 sample, which make it impossible to compute correlation
 					group_count = merged_df[group_by_column].value_counts()
 					group_count = pd.DataFrame(group_count)
@@ -3996,7 +4023,7 @@ def define_callbacks(app):
 					groups = merged_df[group_by_column].unique().tolist()
 					group_colors = []
 					for group in groups:
-						group_colors.append(functions.get_color(color_mapping, group_by_column, group))
+						group_colors.append(functions.get_color(color_mapping, original_group_by_column, group))
 					
 					#same feature on both axis
 					fig = px.scatter(merged_df, x=expression_or_abundance_x, y=expression_or_abundance_y, color=group_by_column, color_discrete_sequence=group_colors, trendline="ols", hover_data=metadata_columns,)
@@ -4031,6 +4058,9 @@ def define_callbacks(app):
 
 							#update hover template for line
 							trace["hovertemplate"] = statistics_data[group]
+						#update hover template for markers
+						elif trace["mode"] == "markers":
+							trace["hovertemplate"] = trace["hovertemplate"].replace("=", ": ")
 
 				#update layout and config variables
 				width_fig = 400
