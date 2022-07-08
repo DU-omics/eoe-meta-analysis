@@ -206,12 +206,17 @@ def define_callbacks(app):
 		Input({"type": "tabs", "id": ALL}, "value"),
 		Input("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value"),
+		State("tab_content_div", "children"),
 		prevent_initial_call=True
 	)
-	def update_tab_div_layout(main_tab_value, expression_dataset, path):
+	def update_tab_div_layout(main_tab_value, expression_dataset, path, children):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["value"]
+
+		#be sure to load metadata on startup
+		if children is None:
+			trigger_id = "metadata_tab"
 
 		all_possible_tabs = ["metadata_tab", "profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab", "differential_analysis_tab", "dge_tab", "go_tab", "mofa_tab", "deconvolution_tab"]
 		
