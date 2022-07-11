@@ -2332,8 +2332,7 @@ def define_callbacks(app):
 			min_y = table["log2FoldChange"].min()
 			mid_y = (max_y + min_y)/2
 
-		#colors for plot traces (gray, red, blue)
-		colors_ma_plot = ["#636363", "#D7301F", "#045A8D", "#636363", "#D7301F", "#045A8D"]
+		#colors for plot traces (gray, red, blue, lightgray)
 		colors_ma_plot = {"no_deg": "#636363", "down": "#045A8D", "up": "#D7301F", "selected": "#D9D9D9"}
 		#rename column if not human
 		if expression_dataset not in ["human", "mouse"]:
@@ -2343,19 +2342,14 @@ def define_callbacks(app):
 		ma_plot_fig = go.Figure()
 		for deg_status in ["no_DEG", "Up", "Down", "selected_no_DEG", "selected_Up", "selected_Down"]:
 			#params for trace
-			if "selected" in deg_status:
-				marker_size = 9
-				marker_line = {"color": "#525252", "width": 2}
-				color = colors_ma_plot["selected"]
-			else:	
-				marker_size = 5
-				marker_line = {"color": None, "width": None}
-				if "up" in deg_status.lower():
-					color = colors_ma_plot["up"]
-				elif "down" in deg_status.lower():
-					color = colors_ma_plot["down"]
-				else:
-					color = colors_ma_plot["no_deg"]
+			marker_size = 5
+			marker_line = {"color": None, "width": None}
+			if "up" in deg_status.lower():
+				color = colors_ma_plot["up"]
+			elif "down" in deg_status.lower():
+				color = colors_ma_plot["down"]
+			else:
+				color = colors_ma_plot["no_deg"]
 			filtered_table = table[table["DEG"] == deg_status]
 			#custom data and hover template
 			custom_data = filtered_table[[gene_or_species, pvalue_type, "log2_baseMean", "log2FoldChange"]]
@@ -2395,12 +2389,12 @@ def define_callbacks(app):
 			selected_gene_annotation = [dict(x=mid_x, y=mid_y, text="Multiple transcripts with the same gene name.", showarrow=False, font=dict(family="Arial", size=12, color="#252525"), align="center", bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)]
 
 		#add default annotations
-		ma_plot_fig["layout"]["annotations"] = annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation
+		ma_plot_fig["layout"]["annotations"] = annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation
 
 		#buttons
 		ma_plot_fig.update_layout(updatemenus=[dict(
 			pad=dict(r=5),
-			active=0,
+			active=1,
 			xanchor = "left",
 			direction = "up",
 			bgcolor = "#ffffff",
@@ -3889,9 +3883,9 @@ def define_callbacks(app):
 		State("analysis_dropdown", "value")
 	)
 	def plot_feature_correlation(x, y, group_by_column, comparison_only_switch, contrast, hide_unselected_switch, width_fig, height_fig, dataset_x, dataset_y, color_mapping, fig, hide_unselected_switch_options, statistics_data, label_to_value, path):
-		x = "TNF"
-		y = "ALOX5"
-		group_by_column = "condition"
+		#x = "TNF"
+		#y = "ALOX5"
+		#group_by_column = "condition"
 		
 		#define contexts
 		ctx = dash.callback_context
@@ -4109,10 +4103,11 @@ def define_callbacks(app):
 		Input("correletion_stats", "data"),
 		Input("feature_correlation_plot", "figure"),
 		Input("feature_correlation_plot", "restyleData"),
+		Input("sort_by_significance_correlation_switch", "value"),
 		State("group_by_correlation_dropdown", "value"),
 		State("color_mapping", "data"),
 	)
-	def update_statistics_correlation(statistics_data, correlation_fig, legend_click, group_by_column, color_mapping):
+	def update_statistics_correlation(statistics_data, correlation_fig, legend_click, sort_by_significance_switch, group_by_column, color_mapping):
 
 		#hide div if any group by column is specified
 		if group_by_column is None:
@@ -4135,6 +4130,18 @@ def define_callbacks(app):
 			fig = go.Figure()
 			fig.update_layout(xaxis_linecolor="rgb(255,255,255)", yaxis_linecolor="rgb(255,255,255)", xaxis_showticklabels=False, yaxis_showticklabels=False, xaxis_fixedrange=True, yaxis_fixedrange=True, xaxis_ticks="", yaxis_ticks="", margin=dict(l=0, r=0, t=0, b=0))
 			
+			#sort statistics
+			boolean_sort_by_significance_switch = functions.boolean_switch(sort_by_significance_switch)
+			p_dict = {}
+			if boolean_sort_by_significance_switch:
+				for group in statistics_data.keys():
+					if group in visible_groups:
+						text = statistics_data[group]
+						p = re.match(r"R<sup>2</sup>=.+\sp=(.+)", text).group(1)
+						p = float(p)
+						p_dict[group] = p
+				visible_groups = sorted(p_dict.keys(), key=p_dict.get)
+
 			#setup loop and coordinates
 			annotation_x = 0.05
 			annotation_y = 1

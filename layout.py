@@ -992,7 +992,7 @@ correlation_tab_layout = html.Div([
 				dcc.Dropdown(
 					id="group_by_correlation_dropdown",
 			)], style={"width": "100%"}, className="dropdown-luigi"),
-		], style={"width": "50%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
+		], style={"width": "35%", "display": "inline-block", "vertical-align": "middle", "textAlign": "left"}),
 		#switches
 		html.Div([
 			#comparison_only switch
@@ -1007,7 +1007,7 @@ correlation_tab_layout = html.Div([
 						switch=True
 					)
 				], style={"textAlign": "center"})
-			], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"}),
+			], style={"width": "32%", "display": "inline-block", "vertical-align": "middle"}),
 
 			#hide unselected switch
 			html.Div([
@@ -1021,8 +1021,22 @@ correlation_tab_layout = html.Div([
 						switch=True
 					)
 				], style={"textAlign": "center"}),
-			], style={"width": "50%", "display": "inline-block", "vertical-align": "middle"})
-	], style={"width": "50%", "display": "inline-block"}),
+			], style={"width": "32%", "display": "inline-block", "vertical-align": "middle"}),
+
+			#sort correlation by significance
+			html.Div([
+				html.Label(["Sort by significance",
+					dbc.Checklist(
+						options=[
+							{"label": "", "value": 1},
+						],
+						value=[],
+						id="sort_by_significance_correlation_switch",
+						switch=True
+					)
+				], style={"textAlign": "center"}),
+			], style={"width": "36%", "display": "inline-block", "vertical-align": "middle"})
+	], style={"width": "65%", "display": "inline-block"}),
 		#width slider
 		html.Div([
 			html.Label(["Width",
