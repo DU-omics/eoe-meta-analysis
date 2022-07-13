@@ -270,8 +270,8 @@ def plot_mds_continuous(mds_df, x, y, variable_to_plot, color, mds_continuous_fi
 		subplot_column = 1
 		marker_colorbar_x = 0.415
 		selected_metadata = variable_to_plot[0]
-		continuous_variable_to_plot = label_to_value[selected_metadata]
-		colorbar_title = label_to_value[selected_metadata]
+		continuous_variable_to_plot = selected_metadata
+		colorbar_title = selected_metadata
 		hover_template = general_hover_template + "<extra></extra>"
 	
 	#fill nan with NA

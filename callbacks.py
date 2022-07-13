@@ -1867,7 +1867,7 @@ def define_callbacks(app):
 								#stores samples to keep after filtering
 								samples_to_keep.append(dot[0])
 			else:
-				samples_to_keep = mds_df["sample"].tolist()
+				samples_to_keep = mds_df["sample"].str.replace("_", " ").tolist()
 
 			#define x and y
 			if mds_type == "tsne":
@@ -1913,6 +1913,7 @@ def define_callbacks(app):
 			mds_df = mds_df.rename(columns=label_to_value)
 			mds_df = mds_df.replace("_", " ", regex=True)
 			mds_df = mds_df.rename(columns=label_to_value)
+			metadata_original = metadata
 			metadata = label_to_value[metadata]
 
 			#create fig, figure layout will change based on which metadata is plotted
@@ -1937,10 +1938,7 @@ def define_callbacks(app):
 				fig = functions.plot_mds_discrete(mds_df, color_mapping, x, y, metadata, fig, label_to_value, path)
 			else:
 				variable_to_plot = [metadata]
-				#comparison only will filter the samples
-				if boolean_comparison_only_switch:
-					mds_df = mds_df[mds_df["condition"].isin(contrast.split("-vs-"))]
-				color = functions.get_color(color_mapping, metadata, "continuous")
+				color = functions.get_color(color_mapping, metadata_original, "continuous")
 				fig = functions.plot_mds_continuous(mds_df, x, y, variable_to_plot, color, fig, label_to_value, path, colorbar_len)
 
 			#apply old trace visibility if needed
@@ -1975,7 +1973,7 @@ def define_callbacks(app):
 			fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		##### CONFIG OPTIONS ####
-		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mds_{mds_dataset}_colored_by_{metadata}_and_{feature}"}, "edits": {"legendPosition": True, "colorbarPosition": True, "annotationText": True}, "doubleClickDelay": 1000}
+		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mds_{mds_dataset}_colored_by_{metadata}_and_{feature}"}, "edits": {"legendPosition": True, "annotationText": True}, "doubleClickDelay": 1000}
 
 		return fig, config_fig
 
