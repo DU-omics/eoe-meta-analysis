@@ -497,6 +497,9 @@ def define_callbacks(app):
 		Input("analysis_dropdown", "value")
 	)
 	def set_main_feature_dropdown_value(expression_dataset, selected_point_ma_plot, dge_table_cell_data, path):
+		if expression_dataset is None:
+			raise PreventUpdate
+		
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -779,7 +782,9 @@ def define_callbacks(app):
 		State("analysis_dropdown", "value")
 	)
 	def get_filter_x_values_boxplots_dropdowns(selected_x, selected_y, feature_dataset, path):
-		
+		if feature_dataset is None:
+			raise PreventUpdate
+
 		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
 
 		return options, x_values
@@ -1166,6 +1171,7 @@ def define_callbacks(app):
 	@app.callback(
 		Output("split_by_1_deconvolution_dropdown", "options"),
 		Output("split_by_2_deconvolution_dropdown", "options"),
+		Output("split_by_3_deconvolution_dropdown", "options"),
 		Output("data_sets_deconvolution_dropdown", "options"),
 		Output("data_sets_deconvolution_dropdown", "value"),
 		Input({"type": "tabs", "id": "main_tabs"}, "value"),
@@ -1175,7 +1181,7 @@ def define_callbacks(app):
 	def update_options_deconvolution_dropdowns(tab_value, options_discrete, deconvolution_datasets_options):
 		dataset_value = deconvolution_datasets_options[0]["value"]
 
-		return options_discrete, options_discrete, deconvolution_datasets_options, dataset_value
+		return options_discrete, options_discrete, options_discrete, deconvolution_datasets_options, dataset_value
 
 	### DOWNLOAD CALLBACKS ###
 
@@ -1956,7 +1962,7 @@ def define_callbacks(app):
 			fig = functions.plot_mds_continuous(mds_df, x, y, variable_to_plot, color, fig, label_to_value, path, colorbar_len)
 
 			#update_layout
-			fig.update_layout(height=height, legend_title_text=metadata.capitalize().replace("_", " "), legend_orientation="h", legend_itemsizing="constant", legend_tracegroupgap = 0.05, legend_title_side="top", legend_font_size=12, legend_yanchor="top", legend_y=0.3, font_family="Arial", margin_t=65, margin_l=0, margin_b=10, xaxis_title_text=x, yaxis_title_text=y, xaxis2_title_text=x, yaxis2_title_text=y)
+			fig.update_layout(height=height, legend_title_text=metadata.capitalize().replace("_", " "), legend_orientation="h", legend_itemsizing="constant", legend_tracegroupgap=0.05, legend_title_side="top", legend_font_size=12, legend_yanchor="top", legend_y=0.3, font_family="Arial", margin_t=65, margin_l=0, margin_b=10, xaxis_title_text=x, yaxis_title_text=y, xaxis2_title_text=x, yaxis2_title_text=y)
 			
 			#synch zoom
 			fig.update_xaxes(matches="x")
@@ -2435,14 +2441,12 @@ def define_callbacks(app):
 		Output("plots_per_row_deconvolution_dropdown", "value"),
 		Input("split_by_1_deconvolution_dropdown", "value"),
 		Input("split_by_2_deconvolution_dropdown", "value"),
+		Input("split_by_3_deconvolution_dropdown", "value"),
 		Input("plots_per_row_deconvolution_dropdown", "value"),
 		Input("data_sets_deconvolution_dropdown", "value"),
 		Input("analysis_dropdown", "value")
 	)
-	def plot_deconvolution(split_by, split_by_2, plot_per_row, deconvolution_dataset, path):
-		#define contexts
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
+	def plot_deconvolution(split_by, split_by_2, split_by_3, plot_per_row, deconvolution_dataset, path):
 
 		#open deconvolution df
 		deconvolution_df = functions.download_from_github(path, f"deconvolution/{deconvolution_dataset}")
@@ -2452,40 +2456,25 @@ def define_callbacks(app):
 		if deconvolution_df.empty:
 			raise PreventUpdate
 
-		#clean df
-		deconvolution_df[split_by] = deconvolution_df[split_by].str.replace("_", " ")
-		deconvolution_df = deconvolution_df.dropna(subset = [split_by])
+		#gather split by columns
+		split_by_columns = []
+		for column in [split_by, split_by_2, split_by_3]:
+			if column not in split_by_columns:
+				split_by_columns.append(column)
 		
-		#get cell types
-		cell_types = deconvolution_df["Cell type"].unique().tolist()
+		#clean df
+		deconvolution_df[split_by_columns] = deconvolution_df[split_by_columns].replace("_", " ", regex=True)
+		deconvolution_df = deconvolution_df.dropna(subset=split_by_columns)
 
-		#sum proportion for each selected value
-		if split_by == split_by_2:
-			#group by
-			grouped_df = deconvolution_df.groupby([split_by]).sum()
-			grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
-			grouped_df = grouped_df.reset_index()
+		#group by
+		grouped_df = deconvolution_df.groupby(split_by_columns).sum()
+		grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
+		grouped_df = grouped_df.reset_index()
 
-			#create x_values column
-			grouped_df["x_values"] = grouped_df[split_by]
-			deconvolution_df["x_values"] = deconvolution_df[split_by]
-		else:
-			if trigger_id == "split_by_2_deconvolution_dropdown.value":
-				plot_per_row = 3
-			
-			#clean also the second column
-			deconvolution_df = deconvolution_df.dropna(subset = [split_by_2])
-			deconvolution_df[split_by_2] = deconvolution_df[split_by_2].str.replace("_", " ")
-			
-			#group by
-			grouped_df = deconvolution_df.groupby([split_by, split_by_2]).sum()
-			grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
-			grouped_df = grouped_df.reset_index()
-
-			#create x_values column with the two variables
-			grouped_df["x_values"] = grouped_df[split_by] + " " + grouped_df[split_by_2]
-			deconvolution_df["x_values"] = deconvolution_df[split_by] + " " + deconvolution_df[split_by_2]
-
+		#create x_values column with the variables
+		grouped_df["x_values"] = grouped_df[split_by_columns].T.agg("<br>".join)
+		deconvolution_df["x_values"] = deconvolution_df[split_by_columns].T.agg("<br>".join)
+		
 		#get values that will be on the x axis of the subplots
 		x_values = deconvolution_df["x_values"].unique().tolist()
 		x_values.sort()
@@ -2512,6 +2501,9 @@ def define_callbacks(app):
 		proportion_df = pd.concat(filtered_df_list)
 		proportion_df["percentage_relative_proportion"] = proportion_df["relative_proportion"] * 100
 
+		#get cell types
+		cell_types = deconvolution_df["Cell type"].unique().tolist()
+		
 		#setup deconvolution color dict
 		deconvolution_color_dict = {}
 		i = 0
@@ -2545,27 +2537,42 @@ def define_callbacks(app):
 				specs[-1][-i] = None
 
 		#create subplot
-		fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion")
+		vertical_spacing = (0.18/n_rows) + (0.02 * len(split_by_columns))
+		#compute height and relative graph portion for legend and rows
+		space_for_legend = 200
+		height = space_for_legend + (n_rows*150) + (15*len(split_by_columns)*n_rows)
+		proportion_for_legend = space_for_legend/height
+		proportion_for_other_rows = (1 - proportion_for_legend)/n_rows
+		row_heights = [proportion_for_other_rows for i in range(0, n_rows)]
+		row_heights.append(proportion_for_legend)
+
+		#add specs for legend
+		legend_specs = []
+		for i in range(0, plot_per_row):
+			legend_specs.append(None)
+		specs.append(legend_specs)
+
+		fig = make_subplots(rows=n_rows+1, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion", vertical_spacing=vertical_spacing, row_heights=row_heights)
 
 		#get cell types and populate figure
 		working_row = 1
 		working_col = 1
 		showlegend = True
-		split_by_for_hover = split_by.capitalize().replace("_", " ")
-		split_by_2_for_hover = split_by_2.capitalize().replace("_", " ")
 		for x_value in x_values:
 			filtered_df = proportion_df[proportion_df["x_values"] == x_value]
 			filtered_df = filtered_df.set_index("Cell type")
 			for cell_type in cell_types:
-				if split_by == split_by_2:
-					hovertemplate = f"{split_by_for_hover}: %{{x}}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
-				else:
-					filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
-					x_1 = filtered_deconvolution_df[split_by].unique().tolist()
-					x_1 = x_1[0]
-					x_2 = filtered_deconvolution_df[split_by_2].unique().tolist()
-					x_2 = x_2[0]
-					hovertemplate = f"{split_by_for_hover}: {x_1}<br>{split_by_2_for_hover}: {x_2}<br>Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"
+				#build hover
+				filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+				partial_hovertemplates = []
+				for column in split_by_columns:
+					column_for_hover = column.capitalize().replace("_", " ")
+					x = filtered_deconvolution_df[column].unique().tolist()
+					x = x[0]
+					partial_hovertemplates.append(f"{column_for_hover}: {x}")
+
+				hovertemplate = "<br>".join(partial_hovertemplates + [f"Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"])
+				#add trace
 				fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate=hovertemplate), row=working_row, col=working_col)
 			
 			#adjust row and col counts
@@ -2578,21 +2585,19 @@ def define_callbacks(app):
 			if showlegend:
 				showlegend = False
 
-			#update layout
-			height = (n_rows*100) + 200
-			if height == 140:
-				height = 240
-			#get host for title
-			host = functions.get_content_from_github(path, "data")
-			if "human" in host:
-				host = "human"
-			else:
-				host = "mouse"
-			title_text = "Cell type compositions by {host} transcriptome deconvolution".format(host=host)
-			fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, legend_orientation="h")
+		#get host for title
+		host = functions.get_content_from_github(path, "data")
+		if "human" in host:
+			host = "human"
+		else:
+			host = "mouse"
+		title_text = "Cell type compositions by {host} transcriptome deconvolution".format(host=host)
+		fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, legend_orientation="h", legend_title="Cell types", legend_tracegroupgap=0.05, legend_title_side="top", legend_font_size=12, legend_yanchor="top", legend_y=proportion_for_legend-0.05)
 
-			fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-			fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		#transparent figure
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		config_deconvolution = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": title_text}, "edits": {"titleText": True, "legendPosition": True}}
 

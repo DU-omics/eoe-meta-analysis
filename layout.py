@@ -1481,9 +1481,17 @@ deconvolution_tab_layout = html.Div([
 		)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 
 		#second split_by dropdown
-		html.Label(["Split also by",
+		html.Label(["and by",
 			dcc.Dropdown(
 			id="split_by_2_deconvolution_dropdown",
+			clearable=False,
+			value="condition",
+		)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+		#second split_by dropdown
+		html.Label(["and by",
+			dcc.Dropdown(
+			id="split_by_3_deconvolution_dropdown",
 			clearable=False,
 			value="condition",
 		)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
