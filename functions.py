@@ -169,45 +169,26 @@ def get_options_feature_dropdown(expression_dataset, features, search_value, cur
 		
 	return options
 
-#function for zoom synchronization mds
-def synchronize_zoom(mds_to_update, reference_mds):
-	mds_to_update["layout"]["xaxis"]["range"] = reference_mds["layout"]["xaxis"]["range"]
-	mds_to_update["layout"]["yaxis"]["range"] = reference_mds["layout"]["yaxis"]["range"]
-	mds_to_update["layout"]["xaxis"]["autorange"] = reference_mds["layout"]["xaxis"]["autorange"]
-	mds_to_update["layout"]["yaxis"]["autorange"] = reference_mds["layout"]["yaxis"]["autorange"]
-
-	return mds_to_update
-
 #function for creating a discrete colored mds from tsv file
-def plot_mds_discrete(color_mapping, mds_type, mds_dataset, selected_metadata, mds_discrete_fig, height, label_to_value, boolean_comparison_only_switch, contrast, path):
-	#open tsv
-	mds_df = download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
-	mds_df = pd.read_csv(mds_df, sep = "\t")
-	#comparison only will filter the samples
-	if boolean_comparison_only_switch:
-		mds_df = mds_df[mds_df["condition"].isin(contrast.split("-vs-"))]
-	number_of_samples = len(mds_df["sample"].tolist())
+def plot_mds_discrete(mds_df, color_mapping, x, y, selected_metadata, mds_discrete_fig, label_to_value, path):
+
+	#too many samples will need smaller dots
+	number_of_samples = len(mds_df["Sample"].tolist())
 	if number_of_samples > 20:
 		marker_size = 6
 	else:
 		marker_size = 8
-
-	#prepare df
-	mds_df = mds_df.sort_values(by=[selected_metadata])
-	mds_df[selected_metadata] = mds_df[selected_metadata].fillna("NA")
-	mds_df = mds_df.rename(columns=label_to_value)
-	mds_df = mds_df.replace("_", " ", regex=True)
 
 	#get repo
 	repo = get_repo_name_from_path(path, repos)
 
 	#plot
 	i = 0
-	if config["repos"][repo]["sorted_conditions"] and selected_metadata == "condition":
+	if config["repos"][repo]["sorted_conditions"] and selected_metadata == "Condition":
 		metadata_fields_ordered = config["repos"][repo]["condition_list"]
 		metadata_fields_ordered = [metadata_field.replace("_", " ") for metadata_field in metadata_fields_ordered]
 	else:
-		metadata_fields_ordered = mds_df[label_to_value[selected_metadata]].unique().tolist()
+		metadata_fields_ordered = mds_df[selected_metadata].unique().tolist()
 		metadata_fields_ordered.sort()
 
 	#get hover template and get columns to keep for customdata
@@ -222,41 +203,28 @@ def plot_mds_discrete(color_mapping, mds_type, mds_dataset, selected_metadata, m
 	#hover template for this trace
 	hover_template = general_hover_template + "<extra></extra>"
 
-	#define x and y
-	if mds_type == "tsne":
-		x = "x"
-		y = "y"
-	elif mds_type == "umap":
-		x = "UMAP1"
-		y = "UMAP2"
-
 	#add traces
 	for metadata in metadata_fields_ordered:
-		filtered_mds_df = mds_df[mds_df[label_to_value[selected_metadata]] == metadata]
+		filtered_mds_df = mds_df[mds_df[selected_metadata] == metadata]
 		filtered_mds_df = filtered_mds_df.round(2)
 		custom_data = filtered_mds_df[metadata_columns].fillna("NA")
-		marker_color = get_color(color_mapping, selected_metadata, metadata)
-		mds_discrete_fig.add_trace(go.Scatter(x=filtered_mds_df[x], y=filtered_mds_df[y], marker_opacity=1, marker_color=marker_color, marker_size=marker_size, customdata=custom_data, mode="markers", legendgroup=metadata, showlegend=True, hovertemplate=hover_template, name=metadata, visible=True))
-
-	#update layout
-	mds_discrete_fig.update_layout(height = height, xaxis_title_text = x, yaxis_title_text = y, title_xref="paper", title_xanchor="center", title_x=0.72, title_y=0.95,title_font_size=14, legend_title_text=selected_metadata.capitalize().replace("_", " "), legend_orientation="v", legend_xanchor="left", legend_x=0, legend_yanchor="top", legend_y=1.2, legend_itemsizing="constant", legend_tracegroupgap = 0.05, legend_title_side="top", legend_font_size=12, xaxis_automargin=True, yaxis_automargin=True, font_family="Arial", margin=dict(t=70, b=0, l=10, r=10), xaxis_domain=[0.45, 1])
+		marker_color = get_color(color_mapping, selected_metadata.lower().replace(" ", "_"), metadata)
+		mds_discrete_fig.add_trace(go.Scatter(x=filtered_mds_df[x], y=filtered_mds_df[y], marker_opacity=1, marker_color=marker_color, marker_size=marker_size, customdata=custom_data, mode="markers", legendgroup=metadata, showlegend=True, hovertemplate=hover_template, name=metadata, visible=True), row=1, col=1)
 	
 	#mds_discrete_fig["layout"]["paper_bgcolor"]="LightSteelBlue"
 
 	return mds_discrete_fig
 
 #function for creating a continuous colored mds from tsv file
-def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuous_fig, height, label_to_value, path):
+def plot_mds_continuous(mds_df, x, y, variable_to_plot, color, mds_continuous_fig, label_to_value, path, colorbar_len):
+	
 	#operations on mds_df
-	number_of_samples = len(mds_df["sample"].tolist())
+	number_of_samples = len(mds_df["Sample"].tolist())
 	if number_of_samples > 20:
 		marker_size = 6
 	else:
 		marker_size = 8
-
-	mds_df = mds_df.rename(columns=label_to_value)
-	mds_df = mds_df.replace("_", " ", regex=True)
-
+	
 	#get hover template and get columns to keep for customdata
 	metadata_columns = []
 	i = 0
@@ -268,6 +236,8 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 
 	#expression continuous umap will have counts
 	if len(variable_to_plot) == 3:
+		subplot_column = 2
+		marker_colorbar_x = 1.02
 		expression_dataset = variable_to_plot[0]
 		feature = variable_to_plot[1]
 		samples_to_keep = variable_to_plot[2]
@@ -297,6 +267,8 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 		hover_template = general_hover_template + "Log2{expression_or_abundance}: %{{marker.color}}<br><extra></extra>".format(expression_or_abundance=expression_or_abundance)
 	#metadata continuous umap will use the metadata without counts
 	else:
+		subplot_column = 1
+		marker_colorbar_x = 0.415
 		selected_metadata = variable_to_plot[0]
 		continuous_variable_to_plot = label_to_value[selected_metadata]
 		colorbar_title = label_to_value[selected_metadata]
@@ -305,20 +277,12 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 	#fill nan with NA
 	mds_df = mds_df.fillna("NA")
 	mds_df = mds_df.round(2)
-	
-	#define x and y
-	if mds_type == "tsne":
-		x = "x"
-		y = "y"
-	elif mds_type == "umap":
-		x = "UMAP1"
-		y = "UMAP2"
 
 	#select only NA values
 	na_df = mds_df.loc[mds_df[continuous_variable_to_plot] == "NA"]
 	custom_data = na_df[metadata_columns]
 	#add discrete trace for NA values
-	mds_continuous_fig.add_trace(go.Scatter(x=na_df[x], y=na_df[y], marker_color=na_color, marker_size=marker_size, customdata=custom_data, mode="markers", showlegend=False, hovertemplate=hover_template, visible=True))
+	mds_continuous_fig.add_trace(go.Scatter(x=na_df[x], y=na_df[y], marker_color=na_color, marker_size=marker_size, customdata=custom_data, mode="markers", showlegend=False, hovertemplate=hover_template, name="na_continuous_trace", visible=True), row=1, col=subplot_column)
 	#select only not NA
 	mds_df = mds_df.loc[mds_df[continuous_variable_to_plot] != "NA"]
 	custom_data = mds_df[metadata_columns]
@@ -328,10 +292,7 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 		colorscale = color
 	else:
 		colorscale = ["#FFFFFF", color]
-	mds_continuous_fig.add_trace(go.Scatter(x=mds_df[x], y=mds_df[y], marker_color=marker_color, marker_colorscale=colorscale, marker_showscale=True, marker_opacity=1, marker_size=marker_size, marker_colorbar_title=colorbar_title, marker_colorbar_title_side="right", marker_colorbar_title_font_size=14, marker_colorbar_thicknessmode="pixels", marker_colorbar_thickness=15, marker_colorbar_tickfont={"family": "Arial", "size": 14}, mode="markers", customdata=custom_data, hovertemplate=hover_template, showlegend=False, visible=True))
-	
-	#update layout
-	mds_continuous_fig.update_layout(height=height, title={"x": 0.5, "y": 0.95, "font_size": 14, "xref": "paper", "xanchor": "center"}, font_family="Arial", hoverlabel_bgcolor="lightgrey", xaxis_automargin=True, yaxis_automargin=True, margin=dict(t=70, b=0, l=10, r=60), xaxis_title_text=x, yaxis_title_text=y)
+	mds_continuous_fig.add_trace(go.Scatter(x=mds_df[x], y=mds_df[y], name=continuous_variable_to_plot, marker_color=marker_color, marker_colorscale=colorscale, marker_showscale=True, marker_opacity=1, marker_size=marker_size, marker_colorbar_title=colorbar_title, marker_colorbar_title_side="right", marker_colorbar_title_font_size=14, marker_colorbar_thicknessmode="pixels", marker_colorbar_thickness=15, marker_colorbar_len=colorbar_len, marker_colorbar_tickfont={"family": "Arial", "size": 14}, marker_colorbar_x=marker_colorbar_x, marker_colorbar_yanchor="top", marker_colorbar_y=1, mode="markers", customdata=custom_data, hovertemplate=hover_template, showlegend=False, visible=True), row=1, col=subplot_column)
 	
 	#mds_continuous_fig["layout"]["paper_bgcolor"]="#E5F5F9"
 
@@ -339,18 +300,20 @@ def plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_continuou
 
 #get number of displayed samples in mds
 def get_displayed_samples(figure_data):
+
 	x_range = figure_data["layout"]["xaxis"]["range"]
 	y_range = figure_data["layout"]["yaxis"]["range"]
 	
-	#start of the app: give an artificial big range for axes
+	#start of the app: get range for axes
 	if x_range is None or y_range is None:
-		x_range = [-1000000000000000, 1000000000000000]
-		y_range = [-1000000000000000, 1000000000000000]
+		full_fig = figure_data.full_figure_for_development(warn=False)
+		x_range = list(full_fig.layout.xaxis.range)
+		y_range = list(full_fig.layout.yaxis.range)
 	
-	n_samples = 0
 	#parse only visible traces
+	n_samples = 0
 	for trace in figure_data["data"]:
-		if trace["visible"] is True:
+		if trace["visible"] is True and trace["name"] not in ["na_continuous_trace", "Log2 expression", "Log2 abundance"]:
 			#check all points
 			for i in range(0, len(trace["x"])):
 				x = trace["x"][i]

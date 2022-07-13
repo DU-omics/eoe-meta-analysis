@@ -38,8 +38,9 @@ def define_callbacks(app):
 		#metadata table data
 		Output("metadata_table_store", "data"),
 		Output("metadata_columns_store", "data"),
-		#metadata options
-		Output("metadata_dropdown", "options"),
+		#metadata options and value
+		Output("metadata_dropdown_mds", "options"),
+		Output("metadata_dropdown_mds", "value"),
 		#heatmap annotation options
 		Output("heatmap_annotation_dropdown_options", "data"),
 		#discrete metadata options
@@ -176,7 +177,7 @@ def define_callbacks(app):
 				], style=tab_style, selected_style=tab_selected_style)
 			all_tabs.append(deconvolution_tab)
 		
-		return color_mapping, label_to_value, all_tabs, "metadata_tab", metadata_table_data, metadata_table_columns, metadata_options, heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, mofa_contrasts_options, deconvolution_datasets_options, header_children
+		return color_mapping, label_to_value, all_tabs, "metadata_tab", metadata_table_data, metadata_table_columns, metadata_options, "condition", heatmap_annotation_options, discrete_metadata_options,  continuous_metadata_options, mofa_contrasts_options, deconvolution_datasets_options, header_children
 
 	#add gsea switch
 	@app.callback(
@@ -1019,13 +1020,13 @@ def define_callbacks(app):
 		State("y_correlation_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def get_options_x_correlation_feature_dropdown(search_value, expression_dataset, current_value, path):
+	def get_options_y_correlation_feature_dropdown(search_value, expression_dataset, current_value, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
 
 		#reset the feature if the dataset is changed
-		if trigger_id == "x_dataset_correlation_dropdown.value":
+		if trigger_id == "y_dataset_correlation_dropdown.value":
 			options = []
 			value = None
 		#change of search value
@@ -1789,224 +1790,194 @@ def define_callbacks(app):
 
 	##### plots #####
 
-	#mds metadata
+	#mds
 	@app.callback(
-		Output("mds_metadata", "figure"),
-		Output("mds_metadata", "config"),
-		Output("mds_metadata_div", "style"),
+		Output("mds_graph", "figure"),
+		Output("mds_graph", "config"),
 		Input("mds_dataset", "value"),
 		Input("mds_type", "value"),
-		Input("metadata_dropdown", "value"),
-		Input("mds_expression", "relayoutData"),
+		Input("metadata_dropdown_mds", "value"),
+		Input("feature_dataset_dropdown", "value"),
+		Input("feature_dropdown", "value"),
+		Input("contrast_dropdown", "value"),
+		Input("mds_graph", "restyleData"),
+		Input("mds_graph", "relayoutData"),
 		Input("comparison_only_mds_metadata_switch", "value"),
 		Input("hide_unselected_mds_metadata_switch", "value"),
-		Input("contrast_dropdown", "value"),
-		Input("mds_metadata", "relayoutData"),
-		Input("mds_metadata", "restyleData"),
-		State("mds_metadata", "figure"),
-		State("mds_expression", "figure"),
+		State("mds_graph", "figure"),
 		State("color_mapping", "data"),
 		State("label_to_value", "data"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_mds_metadata(mds_dataset, mds_type, metadata_to_plot, zoom_mds_expression, comparison_only_switch, hide_unselected_switch, contrast, legend_mds_metadata_click, zoom_mds_metadata, mds_metadata_fig, mds_expression_fig, color_mapping, label_to_value, path):
+	def plot_mds(mds_dataset, mds_type, metadata, expression_dataset, feature, contrast, legend_click, zoom, comparison_only_switch, hide_unselected_switch, fig, color_mapping, label_to_value, path):
+
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
-		height = 400
 
 		#boolean switches
 		boolean_comparison_only_switch = functions.boolean_switch(comparison_only_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
-		
+
 		#do not update the plot for change in contrast if the switch is off
-		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and mds_expression_fig is not None:
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
 			raise PreventUpdate
 
-		#open metadata
-		metadata_df = functions.download_from_github(path, "metadata.tsv")
-		metadata_df = pd.read_csv(metadata_df, sep = "\t")
-
-		#change dataset or metadata: create a new figure from tsv
-		if trigger_id in ["mds_type.value", "mds_dataset.value", "metadata_dropdown.value", "comparison_only_mds_metadata_switch.value", "contrast_dropdown.value"] or mds_metadata_fig is None:
-			
-			#preserve old zoom
-			keep_old_zoom = False
-			if mds_metadata_fig is not None and trigger_id not in ["mds_type.value", "mds_dataset.value", "comparison_only_mds_metadata_switch.value", "contrast_dropdown.value"]:
-				xaxis_range = mds_metadata_fig["layout"]["xaxis"]["range"]
-				yaxis_range = mds_metadata_fig["layout"]["yaxis"]["range"]
-				keep_old_zoom = True
-
-			#create figure from tsv
-			mds_metadata_fig = go.Figure()
-			if str(metadata_df.dtypes[metadata_to_plot]) == "object":
-				mds_metadata_fig = functions.plot_mds_discrete(color_mapping, mds_type, mds_dataset, metadata_to_plot, mds_metadata_fig, height, label_to_value, boolean_comparison_only_switch, contrast, path)
+		#hide unselected legend items
+		if trigger_id == "hide_unselected_mds_metadata_switch.value" and fig is not None:
+			if boolean_hide_unselected_switch:
+				fig["layout"]["legend"]["itemclick"] = False
+				fig["layout"]["legend"]["itemdoubleclick"] = False
+				for trace in fig["data"]:
+					if trace["visible"] == "legendonly":
+						trace["visible"] = False
 			else:
-				variable_to_plot = [metadata_to_plot]
-				#get msd df
-				mds_df = functions.download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
-				mds_df = pd.read_csv(mds_df, sep = "\t")
+				fig["layout"]["legend"]["itemclick"] = "toggle"
+				fig["layout"]["legend"]["itemdoubleclick"] = "toggleothers"
+				for trace in fig["data"]:
+					if trace["visible"] is False:
+						trace["visible"] = "legendonly"
+		#update number of samples in subplot titles whenever you zoom
+		elif trigger_id == "mds_graph.relayoutData" and fig is not None:
+			for annotation in fig["layout"]["annotations"]:
+				annotation["text"] = re.sub("n=\d+", "n=", annotation["text"])
+				annotation["text"] += str(functions.get_displayed_samples(fig))
+		#new plot
+		else:
+			#open mds_df
+			mds_df = functions.download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
+			mds_df = pd.read_csv(mds_df, sep = "\t")
+
+			#comparison only will filter the samples
+			if boolean_comparison_only_switch:
+				mds_df = mds_df[mds_df["condition"].isin(contrast.split("-vs-"))]
+
+			#parse old fig if the legend has been clicked
+			if trigger_id == "mds_graph.restyleData":
+				#get samples to keep
+				samples_to_keep = []
+				#save trace visibility
+				trace_visibility = {}
+				#parse metadata figure data 
+				for trace in fig["data"]:
+					if trace["name"] not in ["na_continuous_trace", "Log2 expression"]:
+						trace_visibility[trace["name"]] = trace["visible"]
+						if trace["visible"] is True:
+							for dot in trace["customdata"]:
+								#stores samples to keep after filtering
+								samples_to_keep.append(dot[0])
+			else:
+				samples_to_keep = mds_df["sample"].tolist()
+
+			#define x and y
+			if mds_type == "tsne":
+				x = "x"
+				y = "y"
+			elif mds_type == "umap":
+				x = "UMAP1"
+				y = "UMAP2"
+
+			#labels for graph title
+			if "lipid" in mds_dataset:
+				omics = "lipidome"
+				subdirs = functions.get_content_from_github(path, "data")
+				if "human" in subdirs:
+					mds_title = "human"
+				elif "mouse" in subdirs:
+					mds_title = "mouse"
+			else:
+				omics = "transcriptome"
+			if mds_dataset in ["human", "mouse"]:
+				mds_title = mds_dataset
+			else:
+				mds_title = mds_dataset.replace("_", " ")
+
+			#titles for subplots
+			left_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + metadata.replace("_", " ") + " metadata n="
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+				expression_or_abundance = " expression"
+			else:
+				expression_or_abundance = " abundance"
+			if "genes" in expression_dataset:
+				feature_gene = feature.split("@")[0]
+				feature_beast = feature.split("@")[1]
+				feature_beast = feature_beast.replace("_", " ")
+				feature = feature_gene + " - " + feature_beast
+				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS colored by<br>" + feature + expression_or_abundance + " n="
+			else:
+				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n="
+
+			#operations on mds_df
+			mds_df = mds_df.sort_values(by=[metadata])
+			mds_df[metadata] = mds_df[metadata].fillna("NA")
+			mds_df = mds_df.rename(columns=label_to_value)
+			mds_df = mds_df.replace("_", " ", regex=True)
+			mds_df = mds_df.rename(columns=label_to_value)
+			metadata = label_to_value[metadata]
+
+			#create fig, figure layout will change based on which metadata is plotted
+			if str(mds_df.dtypes[metadata]) == "object":
+				plot_rows = 2
+				horizontal_spacing=0.1
+				specs = [[{}, {}], [None, None]]
+				colorbar_len = 0.6
+				row_heights = [0.7, 0.3]
+				height = 690
+			else:
+				plot_rows = 1
+				horizontal_spacing=0.2
+				specs = [[{}, {}]]
+				colorbar_len = 1
+				row_heights = [1]
+				height = 440
+			fig = make_subplots(plot_rows, 2, column_titles=[left_title, right_title], horizontal_spacing=horizontal_spacing, specs=specs, row_heights=row_heights)
+			
+			#discrete or continuous metadata
+			if str(mds_df.dtypes[metadata]) == "object":
+				fig = functions.plot_mds_discrete(mds_df, color_mapping, x, y, metadata, fig, label_to_value, path)
+			else:
+				variable_to_plot = [metadata]
 				#comparison only will filter the samples
 				if boolean_comparison_only_switch:
 					mds_df = mds_df[mds_df["condition"].isin(contrast.split("-vs-"))]
-				color = functions.get_color(color_mapping, metadata_to_plot, "continuous")
-				mds_metadata_fig = functions.plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_metadata_fig, height, label_to_value, path)
+				color = functions.get_color(color_mapping, metadata, "continuous")
+				fig = functions.plot_mds_continuous(mds_df, x, y, variable_to_plot, color, fig, label_to_value, path, colorbar_len)
 
-			#apply old zoom if present
-			if keep_old_zoom:
-				mds_metadata_fig["layout"]["xaxis"]["range"] = xaxis_range
-				mds_metadata_fig["layout"]["yaxis"]["range"] = yaxis_range
-				mds_metadata_fig["layout"]["xaxis"]["autorange"] = False
-				mds_metadata_fig["layout"]["yaxis"]["autorange"] = False
-		
-		#change umap expression means just to update the zoom
-		elif trigger_id == "mds_expression.relayoutData" and mds_expression_fig is not None:
-			mds_metadata_fig = functions.synchronize_zoom(mds_metadata_fig, mds_expression_fig)
-		
-		#get number of displayed samples
-		n_samples_mds_metadata = functions.get_displayed_samples(mds_metadata_fig)
+			#apply old trace visibility if needed
+			if trigger_id == "mds_graph.restyleData":
+				for trace in fig["data"]:
+					trace["visible"] = trace_visibility[trace["name"]]
 
-		#labels for graph title
-		if "lipid" in mds_dataset:
-			omics = "lipidome"
-			subdirs = functions.get_content_from_github(path, "data")
-			if "human" in subdirs:
-				mds_title = "human"
-			elif "mouse" in subdirs:
-				mds_title = "mouse"
-		else:
-			omics = "transcriptome"
-		if mds_dataset in ["human", "mouse"]:
-			mds_title = mds_dataset
-		else:
-			mds_title = mds_dataset.replace("_", " ")
-
-		#apply title
-		mds_metadata_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + metadata_to_plot.replace("_", " ") + " metadata n=" + str(n_samples_mds_metadata)
-
-
-		#hide unselected legend items
-		if boolean_hide_unselected_switch:
-			mds_metadata_fig["layout"]["legend"]["itemclick"] = False
-			mds_metadata_fig["layout"]["legend"]["itemdoubleclick"] = False
-			for trace in mds_metadata_fig["data"]:
-				if trace["visible"] == "legendonly":
-					trace["visible"] = False
-		else:
-			mds_metadata_fig["layout"]["legend"]["itemclick"] = "toggle"
-			mds_metadata_fig["layout"]["legend"]["itemdoubleclick"] = "toggleothers"
-			for trace in mds_metadata_fig["data"]:
-				if trace["visible"] is False :
-					trace["visible"] = "legendonly"
-
-		#div style
-		if str(metadata_df.dtypes[metadata_to_plot]) == "object":
-			mds_metadata_div_style = {"width": "45%", "display": "inline-block"}
-		else:
-			mds_metadata_div_style = {"width": "33.5%", "display": "inline-block"}
-
-		##### CONFIG OPTIONS ####
-		config_mds_metadata = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{metadata}".format(mds_metadata = mds_dataset, metadata = metadata_to_plot)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
-
-		mds_metadata_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-		mds_metadata_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
-		mds_metadata_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
-
-		return mds_metadata_fig, config_mds_metadata, mds_metadata_div_style
-
-	#mds feature
-	@app.callback(
-		Output("mds_expression", "figure"),
-		Output("mds_expression", "config"),
-		Output("mds_expression_div", "style"),
-		Input("mds_dataset", "value"),
-		Input("mds_type", "value"),
-		Input("feature_dataset_dropdown", "value"),
-		Input("feature_dropdown", "value"),
-		Input("mds_metadata", "relayoutData"),
-		Input("mds_metadata", "restyleData"),
-		Input("mds_metadata", "figure"),
-		State("mds_expression", "figure"),
-		State("color_mapping", "data"),
-		State("label_to_value", "data"),
-		State("analysis_dropdown", "value"),
-		prevent_initial_call=True
-	)
-	def plot_mds_feature(mds_dataset, mds_type, expression_dataset, feature, zoom_mds_metadata, legend_click, mds_metadata_fig, mds_expression_fig, color_mapping, label_to_value, path):
-		#define contexts
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-		height = 400
-
-		#do not plot if there is no feature
-		if feature is None:
-			raise PreventUpdate
-
-		#change umap dataset, expression dataset or gene/species: create a new figure from tsv
-		if trigger_id in ["mds_type.value", "mds_dataset.value", "feature_dataset_dropdown.value", "feature_dropdown.value", "mds_metadata.figure", "mds_metadata.restyleData"] or mds_expression_fig is None:
-
-			#get samples to keep
-			samples_to_keep = []
-			#parse metadata figure data 
-			for trace in mds_metadata_fig["data"]:
-				if trace["visible"] is True:
-					for dot in trace["customdata"]:
-						#stores samples to keep after filtering
-						samples_to_keep.append(dot[0])
+			#setup variables for plotting
 			variable_to_plot = [expression_dataset, feature, samples_to_keep]
-			#create figure
-			mds_expression_fig = go.Figure()
-			#get msd df
-			mds_df = functions.download_from_github(path, "data/" + mds_dataset + "/mds/" + mds_type + ".tsv")
-			mds_df = pd.read_csv(mds_df, sep = "\t")
+			#filter samples
+			mds_df = mds_df[mds_df["Sample"].isin(samples_to_keep)]
+			#get color
 			color = functions.get_color(color_mapping, "Log2 expression", "continuous")
-			mds_expression_fig = functions.plot_mds_continuous(mds_df, mds_type, variable_to_plot, color, mds_expression_fig, height, label_to_value, path)
+			#add traces
+			fig = functions.plot_mds_continuous(mds_df, x, y, variable_to_plot, color, fig, label_to_value, path, colorbar_len)
 
-		#update zoom
-		mds_metadata_fig = functions.synchronize_zoom(mds_expression_fig, mds_metadata_fig)
+			#update_layout
+			fig.update_layout(height=height, legend_title_text=metadata.capitalize().replace("_", " "), legend_orientation="h", legend_itemsizing="constant", legend_tracegroupgap = 0.05, legend_title_side="top", legend_font_size=12, legend_yanchor="top", legend_y=0.3, font_family="Arial", margin_t=65, margin_l=0, margin_b=10, xaxis_title_text=x, yaxis_title_text=y, xaxis2_title_text=x, yaxis2_title_text=y)
+			
+			#synch zoom
+			fig.update_xaxes(matches="x")
+			fig.update_yaxes(matches="y")
 
-		#get number of displayed samples
-		n_samples_mds_expression = functions.get_displayed_samples(mds_metadata_fig)
+			#update subplot titles
+			for annotation in fig["layout"]["annotations"]:
+				annotation["font"]["size"] = 14
+				annotation["text"] += str(functions.get_displayed_samples(fig))
 
-		#labels for graph title
-		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-			expression_or_abundance = " expression"
-		else:
-			expression_or_abundance = " abundance"
-
-		#labels for graph title
-		if "lipid" in mds_dataset:
-			omics = "lipidome"
-			subdirs = functions.get_content_from_github(path, "data")
-			if "human" in subdirs:
-				mds_title = "human"
-			elif "mouse" in subdirs:
-				mds_title = "mouse"
-		else:
-			omics = "transcriptome"
-		if mds_dataset in ["human", "mouse"]:
-			mds_title = mds_dataset
-		else:
-			mds_title = mds_dataset.replace("_", " ")
-
-		#apply title
-		if "genes" in expression_dataset:
-			feature_gene = feature.split("@")[0]
-			feature_beast = feature.split("@")[1]
-			feature_beast = feature_beast.replace("_", " ")
-			feature = feature_gene + " - " + feature_beast
-			mds_expression_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS colored by<br>" + feature + expression_or_abundance + " n=" + str(n_samples_mds_expression)
-		else:
-			mds_expression_fig["layout"]["title"]["text"] = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n=" + str(n_samples_mds_expression)
-
-		mds_expression_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-		mds_expression_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			#transparent background
+			fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		##### CONFIG OPTIONS ####
-		config_mds_expression = {"doubleClick": "autosize", "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mds_{mds_metadata}_colored_by_{gene_species}_{expression_abundance}".format(mds_metadata = mds_dataset, gene_species = feature, expression_abundance = expression_or_abundance)}, "edits": {"colorbarPosition": True, "titleText": True}}
-		mds_expression_div_style = {"width": "34.5%", "display": "inline-block"}
+		config_fig = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mds_{mds_dataset}_colored_by_{metadata}_and_{feature}"}, "edits": {"legendPosition": True, "colorbarPosition": True, "annotationText": True}, "doubleClickDelay": 1000}
 
-		return mds_expression_fig, config_mds_expression, mds_expression_div_style
+		return fig, config_fig
 
 	#boxplots
 	@app.callback(
@@ -3930,8 +3901,10 @@ def define_callbacks(app):
 					#expression or abundance for x
 					if dataset_x in ["human", "mouse"] or "genes" in dataset_x:
 						expression_or_abundance = "expression"
+						x = x.replace("€", "/")
 					else:
 						expression_or_abundance = "abundance"
+						x = x.replace("_", " ").replace("[", "").replace("]", "")
 					expression_or_abundance_x = f"Log2 {expression_or_abundance} {x}"
 
 					#log2
@@ -3949,8 +3922,10 @@ def define_callbacks(app):
 					#expression or abundance for x
 					if dataset_x in ["human", "mouse"] or "genes" in dataset_x:
 						expression_or_abundance = "expression"
+						x = x.replace("€", "/")
 					else:
 						expression_or_abundance = "abundance"
+						x = x.replace("_", " ").replace("[", "").replace("]", "")
 					expression_or_abundance_x = f"Log2 {expression_or_abundance} {x}"
 					#log2
 					counts_x[expression_or_abundance_x] = np.log2(counts_x["counts"])
@@ -3961,8 +3936,10 @@ def define_callbacks(app):
 					#expression or abundance for y
 					if dataset_y in ["human", "mouse"] or "genes" in dataset_y:
 						expression_or_abundance = "expression"
+						y = y.replace("€", "/")
 					else:
 						expression_or_abundance = "abundance"
+						y = y.replace("_", " ").replace("[", "").replace("]", "")
 					expression_or_abundance_y = f"Log2 {expression_or_abundance} {y}"
 					#log2
 					counts_y[expression_or_abundance_y] = np.log2(counts_y["counts"])
@@ -3990,6 +3967,8 @@ def define_callbacks(app):
 					statistics_results = px.get_trendline_results(fig)
 					#format scientific notation for pvalue
 					pvalue_f = f"{statistics_results.px_fit_results.iloc[0].f_pvalue:.1e}".replace("e-0", "e-")
+					if float(pvalue_f) <= 0.05:
+						pvalue_f += "*"
 					#get rsquared
 					r_squared = round(statistics_results.px_fit_results.iloc[0].rsquared, 1)
 
@@ -4043,6 +4022,8 @@ def define_callbacks(app):
 							group_results = statistics_results.query(f"{group_by_column} == '{group}'").px_fit_results.iloc[0]
 							#format scientific notation for pvalue
 							pvalue_f = f"{group_results.f_pvalue:.1e}".replace("e-0", "e-")
+							if float(pvalue_f) <= 0.05:
+								pvalue_f += "*"
 							#get rsquared
 							r_squared = round(group_results.rsquared, 1)
 
@@ -4137,7 +4118,7 @@ def define_callbacks(app):
 				for group in statistics_data.keys():
 					if group in visible_groups:
 						text = statistics_data[group]
-						p = re.match(r"R<sup>2</sup>=.+\sp=(.+)", text).group(1)
+						p = re.match(r"R<sup>2</sup>=.+\sp=(.+)\*?\b", text).group(1)
 						p = float(p)
 						p_dict[group] = p
 				visible_groups = sorted(p_dict.keys(), key=p_dict.get)

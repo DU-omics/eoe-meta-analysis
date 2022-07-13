@@ -145,7 +145,7 @@ main_layout = html.Div([
 				html.Div([
 					html.Label(["Color by", 
 						dcc.Dropdown(
-							id="metadata_dropdown",
+							id="metadata_dropdown_mds",
 							clearable=False,
 							value="condition"
 					)], style={"width": "100%", "textAlign": "left"}),
@@ -200,25 +200,14 @@ main_layout = html.Div([
 				], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"})
 			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
 
-			#mds metadata
-			html.Div(id="mds_metadata_div", children=[
+			#mds graph
+			html.Div([
 				dbc.Spinner(
-					id = "loading_mds_metadata",
-					children = dcc.Graph(id="mds_metadata"),
+					children = dcc.Graph(id="mds_graph"),
 					size = "md",
 					color = "lightgray"
 				)
-			], style={"width": "48%", "display": "inline-block"}),
-
-			#mds expression
-			html.Div(id="mds_expression_div", children=[
-				dbc.Spinner(
-					id = "loading_mds_expression",
-					children = dcc.Graph(id="mds_expression"),
-					size = "md",
-					color = "lightgray"
-				)
-			], style={"width": "35%", "display": "inline-block"}),
+			], style={"width": "80%", "display": "inline-block"}),
 		], style={"width": "100%", "display": "inline-block"}),
 		
 		html.Br(),
