@@ -552,6 +552,9 @@ def define_callbacks(app):
 		State("analysis_dropdown", "value")
 	)
 	def update_options_feature_dropdown(search_value, current_value, expression_dataset, path):
+		if expression_dataset is None:
+			raise PreventUpdate
+		
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1987,6 +1990,7 @@ def define_callbacks(app):
 	@app.callback(
 		Output("boxplots_graph", "figure"),
 		Output("boxplots_graph", "config"),
+		Output("boxplot_div", "style"),
 		Output("x_filter_dropdown_div", "hidden"),
 		Output("hide_unselected_boxplot_switch", "value"),
 		Output("comparison_only_boxplots_switch", "value"),
@@ -2213,11 +2217,15 @@ def define_callbacks(app):
 		#general config for boxplots
 		config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
 
+		#transparent background
 		box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
 		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 		box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
-		return box_fig, config_boxplots, hidden, hide_unselected_switch, comparison_only_switch, best_conditions_switch, width, height
+		#style
+		style = {"width": width}
+
+		return box_fig, config_boxplots, style, hidden, hide_unselected_switch, comparison_only_switch, best_conditions_switch, width, height
 
 	#MA-plot
 	@app.callback(
@@ -2438,170 +2446,238 @@ def define_callbacks(app):
 	@app.callback(
 		Output("deconvolution_graph", "figure"),
 		Output("deconvolution_graph", "config"),
-		Output("plots_per_row_deconvolution_dropdown", "value"),
+		Output("reset_labels_deconvolution_button", "disabled"),
 		Input("split_by_1_deconvolution_dropdown", "value"),
 		Input("split_by_2_deconvolution_dropdown", "value"),
 		Input("split_by_3_deconvolution_dropdown", "value"),
 		Input("plots_per_row_deconvolution_dropdown", "value"),
 		Input("data_sets_deconvolution_dropdown", "value"),
-		Input("analysis_dropdown", "value")
+		Input("deconvolution_graph", "clickData"),
+		Input("analysis_dropdown", "value"),
+		Input("reset_labels_deconvolution_button", "n_clicks"),
+		State("deconvolution_graph", "figure"),
+		State("deconvolution_graph", "config")
 	)
-	def plot_deconvolution(split_by, split_by_2, split_by_3, plot_per_row, deconvolution_dataset, path):
+	def plot_deconvolution(split_by, split_by_2, split_by_3, plot_per_row, deconvolution_dataset, click_data, path, n_clicks, fig, config_deconvolution):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
 
-		#open deconvolution df
-		deconvolution_df = functions.download_from_github(path, f"deconvolution/{deconvolution_dataset}")
-		deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t", low_memory=False)
-
-		#if there is no file, do not plot
-		if deconvolution_df.empty:
-			raise PreventUpdate
-
-		#gather split by columns
-		split_by_columns = []
-		for column in [split_by, split_by_2, split_by_3]:
-			if column not in split_by_columns:
-				split_by_columns.append(column)
-		
-		#clean df
-		deconvolution_df[split_by_columns] = deconvolution_df[split_by_columns].replace("_", " ", regex=True)
-		deconvolution_df = deconvolution_df.dropna(subset=split_by_columns)
-
-		#group by
-		grouped_df = deconvolution_df.groupby(split_by_columns).sum()
-		grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
-		grouped_df = grouped_df.reset_index()
-
-		#create x_values column with the variables
-		grouped_df["x_values"] = grouped_df[split_by_columns].T.agg("<br>".join)
-		deconvolution_df["x_values"] = deconvolution_df[split_by_columns].T.agg("<br>".join)
-		
-		#get values that will be on the x axis of the subplots
-		x_values = deconvolution_df["x_values"].unique().tolist()
-		x_values.sort()
-		grouped_df = grouped_df.set_index("x_values")
-
-		#compute relative proportion by Cell type
-		filtered_df_list = []
-		for x_value in x_values:
-			#get value to compute relative proportion
-			sum_value = grouped_df.loc[x_value, "proportion_sum"]
-			#filter df for x value and compute his relative proportion
-			filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
-			filtered_df["relative_proportion"] = filtered_df["Proportion"] / sum_value
-			#sum values of the same Cell type
-			filtered_df = filtered_df.groupby(["Cell type"]).sum()
-			#reconstruct df
-			filtered_df = pd.DataFrame({"relative_proportion": filtered_df["relative_proportion"]})
-			filtered_df["x_values"] = x_value
-			filtered_df = filtered_df.reset_index()
-			#append to list
-			filtered_df_list.append(filtered_df)
-
-		#cat dfs
-		proportion_df = pd.concat(filtered_df_list)
-		proportion_df["percentage_relative_proportion"] = proportion_df["relative_proportion"] * 100
-
-		#get cell types
-		cell_types = deconvolution_df["Cell type"].unique().tolist()
-		
-		#setup deconvolution color dict
-		deconvolution_color_dict = {}
-		i = 0
-		for cell_type in cell_types:
-			deconvolution_color_dict[cell_type] = colors[i]
-			i += 1
-
-		#create figure
-		fig = go.Figure()
-
-		#define number of rows
-		if (len(x_values) % plot_per_row) == 0:
-			n_rows = len(x_values)/plot_per_row
-		else:
-			n_rows = len(x_values)/plot_per_row + 1
-		n_rows = int(n_rows)
-
-		#define specs for subplot starting from the space for the legend
-		specs = []
-
-		#define specs for each plot row
-		for i in range(0, n_rows):
-			specs.append([])
-			for y in range(0, plot_per_row):
-				specs[i].append({})
-		
-		#in case of odd number of selected elements, some plots in the grid are None
-		if (len(x_values) % plot_per_row) != 0:
-			odd_elements_to_plot = len(x_values) - plot_per_row * (n_rows - 1)
-			for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
-				specs[-1][-i] = None
-
-		#create subplot
-		vertical_spacing = (0.18/n_rows) + (0.02 * len(split_by_columns))
-		#compute height and relative graph portion for legend and rows
-		space_for_legend = 200
-		height = space_for_legend + (n_rows*150) + (15*len(split_by_columns)*n_rows)
-		proportion_for_legend = space_for_legend/height
-		proportion_for_other_rows = (1 - proportion_for_legend)/n_rows
-		row_heights = [proportion_for_other_rows for i in range(0, n_rows)]
-		row_heights.append(proportion_for_legend)
-
-		#add specs for legend
-		legend_specs = []
-		for i in range(0, plot_per_row):
-			legend_specs.append(None)
-		specs.append(legend_specs)
-
-		fig = make_subplots(rows=n_rows+1, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion", vertical_spacing=vertical_spacing, row_heights=row_heights)
-
-		#get cell types and populate figure
-		working_row = 1
-		working_col = 1
-		showlegend = True
-		for x_value in x_values:
-			filtered_df = proportion_df[proportion_df["x_values"] == x_value]
-			filtered_df = filtered_df.set_index("Cell type")
-			for cell_type in cell_types:
-				#build hover
-				filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
-				partial_hovertemplates = []
-				for column in split_by_columns:
-					column_for_hover = column.capitalize().replace("_", " ")
-					x = filtered_deconvolution_df[column].unique().tolist()
-					x = x[0]
-					partial_hovertemplates.append(f"{column_for_hover}: {x}")
-
-				hovertemplate = "<br>".join(partial_hovertemplates + [f"Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"])
-				#add trace
-				fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate=hovertemplate), row=working_row, col=working_col)
+		#add text on clicked bar
+		if trigger_id == "deconvolution_graph.clickData":
+			#get the plot which has been clicked and the actual bar
+			clicked_x = click_data["points"][0]["x"]
+			clicked_y = click_data["points"][0]["y"]
 			
-			#adjust row and col counts
-			working_col += 1
-			if working_col == plot_per_row + 1:
-				working_row += 1
-				working_col = 1
+			#the number of text will influence the disabled status of the button
+			number_of_annotations = 0
 
-			#showlegend only on the first tracw
-			if showlegend:
-				showlegend = False
+			#loop over the figure
+			for trace in fig["data"]:
+				#count text
+				if "text" in trace:
+					number_of_annotations += 1
+				
+				if trace["x"][0] == clicked_x and trace["y"][0] == clicked_y:
+					#remove text
+					if "text" in trace:
+						del trace["constraintext"]
+						del trace["outsidetextfont"]
+						del trace["text"]
+						del trace["textposition"]
+						del trace["cliponaxis"]
+						number_of_annotations -= 1
+					#add text
+					else:
+						trace["constraintext"] = "none"
+						trace["outsidetextfont"] = {}
+						trace["outsidetextfont"]["size"] = 10
+						trace["outsidetextfont"]["family"] = "Arial"
+						trace["outsidetextfont"]["color"] = trace["marker"]["color"]
+						trace["text"] = trace["name"]
+						trace["textposition"] = "outside"
+						trace["cliponaxis"] = False
+						number_of_annotations += 1
+			
+			#count annotations and define disabled
+			if number_of_annotations == 0:
+				disabled = True
+			else:
+				disabled = False
+		
+		#remove all annotations
+		elif trigger_id == "reset_labels_deconvolution_button.n_clicks":
+			for trace in fig["data"]:
+				if "text" in trace:
+					del trace["constraintext"]
+					del trace["outsidetextfont"]
+					del trace["text"]
+					del trace["textposition"]
+					del trace["cliponaxis"]
+			
+			#after clearing the figure, disable the button
+			disabled = True
 
-		#get host for title
-		host = functions.get_content_from_github(path, "data")
-		if "human" in host:
-			host = "human"
+		#new plot
 		else:
-			host = "mouse"
-		title_text = "Cell type compositions by {host} transcriptome deconvolution".format(host=host)
-		fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, legend_orientation="h", legend_title="Cell types", legend_tracegroupgap=0.05, legend_title_side="top", legend_font_size=12, legend_yanchor="top", legend_y=proportion_for_legend-0.05)
+			#new plot will not have any text on it so the reset labels button should be disabled
+			disabled = True
+			
+			#open deconvolution df
+			deconvolution_df = functions.download_from_github(path, f"deconvolution/{deconvolution_dataset}")
+			deconvolution_df = pd.read_csv(deconvolution_df, sep = "\t", low_memory=False)
 
-		#transparent figure
-		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
-		fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+			#if there is no file, do not plot
+			if deconvolution_df.empty:
+				raise PreventUpdate
 
-		config_deconvolution = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": title_text}, "edits": {"titleText": True, "legendPosition": True}}
+			#gather split by columns
+			split_by_columns = []
+			for column in [split_by, split_by_2, split_by_3]:
+				if column not in split_by_columns:
+					split_by_columns.append(column)
+			
+			#clean df
+			deconvolution_df[split_by_columns] = deconvolution_df[split_by_columns].replace("_", " ", regex=True)
+			deconvolution_df = deconvolution_df.dropna(subset=split_by_columns)
 
-		return fig, config_deconvolution, plot_per_row
+			#group by
+			grouped_df = deconvolution_df.groupby(split_by_columns).sum()
+			grouped_df = pd.DataFrame({"proportion_sum": grouped_df["Proportion"]})
+			grouped_df = grouped_df.reset_index()
+
+			#create x_values column with the variables
+			grouped_df["x_values"] = grouped_df[split_by_columns].T.agg("<br>".join)
+			deconvolution_df["x_values"] = deconvolution_df[split_by_columns].T.agg("<br>".join)
+			
+			#get values that will be on the x axis of the subplots
+			x_values = deconvolution_df["x_values"].unique().tolist()
+			x_values.sort()
+			grouped_df = grouped_df.set_index("x_values")
+
+			#compute relative proportion by Cell type
+			filtered_df_list = []
+			for x_value in x_values:
+				#get value to compute relative proportion
+				sum_value = grouped_df.loc[x_value, "proportion_sum"]
+				#filter df for x value and compute his relative proportion
+				filtered_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+				filtered_df["relative_proportion"] = filtered_df["Proportion"] / sum_value
+				#sum values of the same Cell type
+				filtered_df = filtered_df.groupby(["Cell type"]).sum()
+				#reconstruct df
+				filtered_df = pd.DataFrame({"relative_proportion": filtered_df["relative_proportion"]})
+				filtered_df["x_values"] = x_value
+				filtered_df = filtered_df.reset_index()
+				#append to list
+				filtered_df_list.append(filtered_df)
+
+			#cat dfs
+			proportion_df = pd.concat(filtered_df_list)
+			proportion_df["percentage_relative_proportion"] = proportion_df["relative_proportion"] * 100
+
+			#get cell types
+			cell_types = deconvolution_df["Cell type"].unique().tolist()
+			
+			#setup deconvolution color dict
+			deconvolution_color_dict = {}
+			i = 0
+			for cell_type in cell_types:
+				deconvolution_color_dict[cell_type] = colors[i]
+				i += 1
+
+			#create figure
+			fig = go.Figure()
+
+			#define number of rows
+			if (len(x_values) % plot_per_row) == 0:
+				n_rows = len(x_values)/plot_per_row
+			else:
+				n_rows = len(x_values)/plot_per_row + 1
+			n_rows = int(n_rows)
+
+			#define specs for subplot starting from the space for the legend
+			specs = []
+
+			#define specs for each plot row
+			for i in range(0, n_rows):
+				specs.append([])
+				for y in range(0, plot_per_row):
+					specs[i].append({})
+			
+			#in case of odd number of selected elements, some plots in the grid are None
+			if (len(x_values) % plot_per_row) != 0:
+				odd_elements_to_plot = len(x_values) - plot_per_row * (n_rows - 1)
+				for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
+					specs[-1][-i] = None
+
+			#create subplot
+			vertical_spacing = (0.18/n_rows) + (0.02 * len(split_by_columns))
+			#compute height and relative graph portion for legend and rows
+			space_for_legend = 200
+			height = space_for_legend + (n_rows*150) + (15*len(split_by_columns)*n_rows)
+			proportion_for_legend = space_for_legend/height
+			proportion_for_other_rows = (1 - proportion_for_legend)/n_rows
+			row_heights = [proportion_for_other_rows for i in range(0, n_rows)]
+			row_heights.append(proportion_for_legend)
+
+			#add specs for legend
+			legend_specs = []
+			for i in range(0, plot_per_row):
+				legend_specs.append(None)
+			specs.append(legend_specs)
+
+			fig = make_subplots(rows=n_rows+1, cols=plot_per_row, specs=specs, shared_yaxes="all", y_title="Relative proportion", vertical_spacing=vertical_spacing, row_heights=row_heights)
+
+			#get cell types and populate figure
+			working_row = 1
+			working_col = 1
+			showlegend = True
+			for x_value in x_values:
+				filtered_df = proportion_df[proportion_df["x_values"] == x_value]
+				filtered_df = filtered_df.set_index("Cell type")
+				for cell_type in cell_types:
+					#build hover
+					filtered_deconvolution_df = deconvolution_df[deconvolution_df["x_values"] == x_value]
+					partial_hovertemplates = []
+					for column in split_by_columns:
+						column_for_hover = column.capitalize().replace("_", " ")
+						x = filtered_deconvolution_df[column].unique().tolist()
+						x = x[0]
+						partial_hovertemplates.append(f"{column_for_hover}: {x}")
+
+					hovertemplate = "<br>".join(partial_hovertemplates + [f"Cell type: {cell_type}<br>Fraction: %{{y:.0f}}%<extra></extra>"])
+					#add trace
+					fig.add_trace(go.Bar(name=cell_type, x=[x_value], y=[filtered_df.loc[cell_type, "percentage_relative_proportion"]], showlegend=showlegend, legendgroup=cell_type, marker_color=deconvolution_color_dict[cell_type], hovertemplate=hovertemplate), row=working_row, col=working_col)
+				
+				#adjust row and col counts
+				working_col += 1
+				if working_col == plot_per_row + 1:
+					working_row += 1
+					working_col = 1
+
+				#showlegend only on the first tracw
+				if showlegend:
+					showlegend = False
+
+			#get host for title
+			host = functions.get_content_from_github(path, "data")
+			if "human" in host:
+				host = "human"
+			else:
+				host = "mouse"
+			title_text = "Cell type compositions by {host} transcriptome deconvolution".format(host=host)
+			fig.update_layout(margin=dict(t=40, l=70, r=0), font_family="Arial", font_size=11, height=height, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, legend_orientation="h", legend_title="Cell types", legend_tracegroupgap=0.05, legend_title_side="top", legend_font_size=12, legend_yanchor="top", legend_y=proportion_for_legend-0.05)
+
+			#transparent figure
+			fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+
+			#figure config
+			config_deconvolution = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": title_text}, "edits": {"titleText": True, "legendPosition": True}}
+
+		return fig, config_deconvolution, disabled
 
 	#GO-plot
 	@app.callback(

@@ -217,113 +217,122 @@ main_layout = html.Div([
 		html.Div([
 			#boxplots options
 			html.Div([
-				#x dropdown
-				html.Label(["x",
-					dcc.Dropdown(
-					id="x_boxplot_dropdown",
-					clearable=False,
-					value="condition"
-				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-				#y dropdown
-				html.Label(["y", 
-							dcc.Dropdown(
-								id="y_boxplot_dropdown",
-								clearable=False,
-								value="log2_expression",
-				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-				#group by dropdown
-				html.Label(["Group by", 
-							dcc.Dropdown(
-								id="group_by_boxplot_dropdown",
-								clearable=False,
-								value="condition"
-				)], className="dropdown-luigi", style={"width": "10%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-				#info boxplots
-				html.Div([
-					html.Div(id="info_boxplots",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
-					dbc.Tooltip(
-						children=[dcc.Markdown(
-							"""
-							On the left, select the data for __x__- and __y__-axis, and use the __group by__ dropdown to facet the plot.
+				#first row
+				html.Div([	
+					#x dropdown
+					html.Label(["x",
+						dcc.Dropdown(
+						id="x_boxplot_dropdown",
+						clearable=False,
+						value="condition"
+					)], className="dropdown-luigi", style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#y dropdown
+					html.Label(["y", 
+						dcc.Dropdown(
+							id="y_boxplot_dropdown",
+							clearable=False,
+							value="log2_expression",
+					)], className="dropdown-luigi", style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#group by dropdown
+					html.Label(["Group by", 
+						dcc.Dropdown(
+							id="group_by_boxplot_dropdown",
+							clearable=False,
+							value="condition"
+					)], className="dropdown-luigi", style={"width": "20%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+					#info boxplots
+					html.Div([
+						html.Div(id="info_boxplots",  children="ℹ", style={"border": "2px solid black", "border-radius": 20, "width": 20, "height": 20, "font-family": "courier-new", "font-size": "15px", "font-weight": "bold", "line-height": 16, "margin": "auto"}),
+						dbc.Tooltip(
+							children=[dcc.Markdown(
+								"""
+								On the left, select the data for __x__- and __y__-axis, and use the __group by__ dropdown to facet the plot.
 
-							Use the __comparison only__ switch to display only the groups belonging to the two conditions of interest.
+								Use the __comparison only__ switch to display only the groups belonging to the two conditions of interest.
 
-							Use the appropriate switch to __show as boxplots__.
+								Use the appropriate switch to __show as boxplots__.
 
-							Use __height__ and __width__ sliders to resize the entire plot.
+								Use __height__ and __width__ sliders to resize the entire plot.
 
-							Use the __legend__ to hide a group. Use the __hide unselected__ switch to clear the legend from undisplayed groups.
-							""")
-						],
-						target="info_boxplots",
-						style={"font-family": "arial", "font-size": 14}
-					),
-				], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"}),
-				#comparison only switch
-				html.Div([
-					html.Label(["Comparison only",
-						dbc.Checklist(
-							options=[
-								{"label": "", "value": 1},
+								Use the __legend__ to hide a group. Use the __hide unselected__ switch to clear the legend from undisplayed groups.
+								""")
 							],
-							value=[1],
-							id="comparison_only_boxplots_switch",
-							switch=True
-						)
-					], style={"textAlign": "center"}),
-				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
-				#best conditions switch
-				html.Div([
-					html.Label(["Best conditions",
-						dbc.Checklist(
-							options=[
-								{"label": "", "value": 1},
-							],
-							value=[],
-							id="best_conditions_boxplots_switch",
-							switch=True
-						)
-					], style={"textAlign": "center"}),
-				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
-				#hide unselected switch
-				html.Div([
-					html.Label(["Hide unselected",
-						dbc.Checklist(
-							options=[
-								{"label": "", "value": 1},
-							],
-							value=[],
-							id="hide_unselected_boxplot_switch",
-							switch=True
-						)
-					], style={"textAlign": "center"}),
-				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
-				#show as boxplot switch
-				html.Div([
-					html.Label(["Show as boxplots",
-						dbc.Checklist(
-							options=[
-								{"label": "", "value": 1},
-							],
-							value=[],
-							id="show_as_boxplot_switch",
-							switch=True
-						)
-					], style={"textAlign": "center"}),
-				], style={"width": "9%", "display": "inline-block", "vertical-align": "middle"}),
-				#height slider
-				html.Div([
-					html.Label(["Height",
-						dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1, marks=None)
-					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "14.5%", "display": "inline-block", "vertical-align": "middle"}),
-				#width slider
-				html.Div([
-					html.Label(["Width",
-						dcc.Slider(id="boxplots_width_slider", min=200, max=1000, step=1, marks=None)
-					], style={"width": "100%", "height": "30px", "display": "inline-block"})
-				], style={"width": "14.5%", "display": "inline-block", "vertical-align": "middle"}),
-			], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
+							target="info_boxplots",
+							style={"font-family": "arial", "font-size": 14}
+						),
+					], style={"width": "5%", "display": "inline-block", "vertical-align": "middle"})
+				], style={"width": "100%", "font-size": "12px", "display": "inline-block"}),
+				
+				html.Br(),
+
+				#second row
+				html.Div([	
+					#comparison only switch
+					html.Div([
+						html.Label(["Comparison only",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[1],
+								id="comparison_only_boxplots_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+					#best conditions switch
+					html.Div([
+						html.Label(["Best conditions",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="best_conditions_boxplots_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+					#hide unselected switch
+					html.Div([
+						html.Label(["Hide unselected",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="hide_unselected_boxplot_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+					#show as boxplot switch
+					html.Div([
+						html.Label(["Show as boxplots",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[],
+								id="show_as_boxplot_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+					#height slider
+					html.Div([
+						html.Label(["Height",
+							dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1, marks=None)
+						], style={"width": "100%", "height": "30px", "display": "inline-block"})
+					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
+					#width slider
+					html.Div([
+						html.Label(["Width",
+							dcc.Slider(id="boxplots_width_slider", min=200, max=1000, step=1, marks=None)
+						], style={"width": "100%", "height": "30px", "display": "inline-block"})
+					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"})
+				], style={"width": "100%", "font-size": "12px", "display": "inline-block"})
+			], style={"width": "80%", "display": "inline-block"}),
 			
 			#x filter dropdown
 			html.Div(id="x_filter_dropdown_div", hidden=True, children=[
@@ -336,13 +345,14 @@ main_layout = html.Div([
 
 			#plot
 			html.Div([
-				dbc.Spinner(
-					id = "loading_boxplots",
-					children = dcc.Graph(id="boxplots_graph"),
-					size = "md",
-					color = "lightgray"
-				),
-			], style={"width": "80%", "display": "inline-block"})
+				html.Div(id="boxplot_div", children=[
+					dbc.Spinner(
+						children = dcc.Graph(id="boxplots_graph"),
+						size = "md",
+						color = "lightgray"
+					),
+				])
+			], style={"width": "100%", "display": "inline-block", "justify-content":"center", "display":"flex"})
 		], style={"width": "100%", "display": "inline-block"}),
 
 		html.Br(),
@@ -370,7 +380,7 @@ main_layout = html.Div([
 						target="info_ma_plot",
 						style={"font-family": "arial", "font-size": 14}
 					),
-				], style={"width": "100%", "display": "inline-block"}),
+				], style={"width": "85%", "display": "inline-block"}),
 				#MA-plot
 				html.Div([
 					dbc.Spinner(
@@ -379,8 +389,8 @@ main_layout = html.Div([
 						size = "md",
 						color = "lightgray"
 					)
-				], style={"width": "52%", "display": "inline-block"}),
-			], style={"width": "50%", "display": "inline-block", "font-size": "12px"}),
+				], style={"width": "85%", "display": "inline-block"}),
+			], style={"width": "30%", "display": "inline-block", "font-size": "12px"}),
 
 			#go plot
 			html.Div([
@@ -1488,7 +1498,7 @@ deconvolution_tab_layout = html.Div([
 			value="condition",
 		)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 
-		#second split_by dropdown
+		#third split_by dropdown
 		html.Label(["and by",
 			dcc.Dropdown(
 			id="split_by_3_deconvolution_dropdown",
@@ -1511,6 +1521,11 @@ deconvolution_tab_layout = html.Div([
 			id="data_sets_deconvolution_dropdown",
 			clearable=False,
 		)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
+
+		#reset labels button
+		html.Div([
+			dbc.Button("Reset labels", id="reset_labels_deconvolution_button", disabled=True, style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", 'color': 'black'})
+		], style={"width": "20%", "display": "inline-block", "vertical-align": "middle", 'color': 'black'}),
 
 		#deconvolution plot
 		html.Div([
