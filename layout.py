@@ -418,7 +418,7 @@ main_layout = html.Div([
 					html.Div([], style={"width": "1%", "display": "inline-block"}),
 
 					#add gsea switch
-					html.Div(id="add_gsea_switch_div", children=[
+					html.Div(id="add_gsea_switch_div", hidden=True, children=[
 						html.Label(["Add GSEA",
 							dbc.Checklist(
 								options=[
@@ -928,21 +928,53 @@ multi_violin_tab_layout = html.Div([
 		html.Br(),
 		html.Br(),
 
-		#update and download stats buttons
-		html.Div(id="multibox_stats_buttons_div", hidden=True, children=[
-			dbc.Button("Update statistics", id="update_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-
-			html.Div(children=[], style={"width": "10%", "display": "inline-block"}),
-
-			dbc.Button("Download statistics", id="download_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
-			dcc.Download(id="download_multiboxplot_stats")
-		], style={"width": "100%", "display": "inline-block", "vertical-align": "middle"}),
-
 		#div that can contain statistics table
 		html.Br(),
-		html.Div(id="multiboxplot_stats_div", hidden=True, style={"width": "100%", "display": "inline-block"}, className="luigi-dash-table"),
+		dbc.Spinner(
+			size = "md",
+			color = "lightgray",
+			children = html.Div(
+				id="multiboxplot_stats_div",
+				hidden=True,
+				style={"width": "100%", "display": "inline-block"},
+				className="luigi-dash-table",
+				children=[
+					#download statistics
+					dbc.Button("Download statistics", id="download_multiboxplot_stats_button", style={"font-size": 12, "text-transform": "none", "font-weight": "normal", "background-image": "linear-gradient(-180deg, #FFFFFF 0%, #D9D9D9 100%)", "color": "black"}),
+					dcc.Download(id="download_multiboxplot_stats"),
+					
+					#table
+					html.Br(),
+					html.Br(),
+					dash_table.DataTable(
+						id="stats_multixoplots_table",
+						filter_action="native",
+						style_filter={
+							"text-align": "left"
+						},
+						style_table={
+							"text-align": "left"
+						},
+						style_cell={
+							"whiteSpace": "normal",
+							"height": "auto",
+							"fontSize": 12, 
+							"font-family": "arial",
+							"text-align": "left"
+						},
+						page_size=25,
+						sort_action="native",
+						style_header={
+							"text-align": "left"
+						},
+						style_as_list_view=True,
+						filter_options={"case": "insensitive"}
+					),
+					html.Br()
+				]
+			)
+		),
 		html.Br()
-
 	], style={"width": "100%", "display": "inline-block"})
 ])
 

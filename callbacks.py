@@ -1639,164 +1639,6 @@ def define_callbacks(app):
 
 		return columns, data
 
-	#multiboxplot statistics
-	@app.callback(
-		Output("stats_multiboxplots_switch", "options"),
-		Output("stats_multiboxplots_switch", "value"),
-		Output("multiboxplot_stats_div", "children"),
-		Output("multiboxplot_stats_div", "hidden"),
-		Output("multibox_stats_buttons_div", "hidden"),
-		Input("stats_multiboxplots_switch", "value"),
-		Input("comparison_only_multiboxplots_switch", "value"),
-		Input("x_multiboxplots_dropdown", "value"),
-		Input("stringency_dropdown", "value"),
-		Input("update_multiboxplot_stats_button", "n_clicks"),
-		State("multi_boxplots_graph", "figure"),
-		State("feature_dataset_dropdown", "value"),
-		State("y_multiboxplots_dropdown", "options"),
-		State("stats_multiboxplots_switch", "options"),
-		State("analysis_dropdown", "value")
-	)
-	def display_multibox_stats(stats_switch, comparison_only_switch, x, stringency, update_statistics_button, multiboxplot_graph, expression_dataset, y_options, switch_options, path):
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-
-		#statistics are only available for "condition" in x
-		if trigger_id == "x_multiboxplots_dropdown.value":
-			if x == "condition":
-				switch_options = [{"label": "", "value": 1}]
-				stats_switch = [1]
-			else:
-				switch_options = [{"label": "", "value": 1, "disabled": True}]
-				stats_switch = []
-		
-		boolean_stats_switch = functions.boolean_switch(stats_switch)
-
-		if boolean_stats_switch:
-			hidden = False
-			
-			#get possible values for y axis annotation
-			possible_y_titles = []
-			for option in y_options:
-				possible_y_titles.append(option["label"])
-
-			#get genes in plot
-			genes = []
-			for annotation in multiboxplot_graph["layout"]["annotations"]:
-				if annotation["text"] not in possible_y_titles:
-					genes.append(annotation["text"])
-
-			#get conditions in plot
-			conditions = []
-			for trace in multiboxplot_graph["data"]:
-				if trace["visible"] == True:
-					if trace["name"] not in conditions:
-						conditions.append(trace["name"])
-			
-			#get contrasts which have both conditions in the selected conditions in the plot
-			contrasts_df_list = []
-			dge_folder = "data/" + expression_dataset + "/dge"
-			dge_files = functions.get_content_from_github(path, dge_folder)
-			for dge_file in dge_files:
-				contrast = dge_file.split("/")[-1]
-				contrast = contrast.split(".")[0]
-				conditions_in_contrast = contrast.split("-vs-")
-				condition_1 = conditions_in_contrast[0]
-				condition_2 = conditions_in_contrast[1]
-				if condition_1.replace("_", " ") in conditions and condition_2.replace("_", " ") in conditions:
-					dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
-					dge_table = pd.read_csv(dge_table, sep = "\t")
-					dge_table = dge_table.dropna(subset=["Gene"])
-					
-					#since feature names are clean, to filter the dge table we need to clean it
-					if expression_dataset in ["human", "mouse"]:
-						dge_table["clean_feature"] = [x.replace("€", "/") for x in dge_table["Gene"]]
-					else:
-						if "lipid" in expression_dataset:
-							dge_table["clean_feature"] = dge_table["Gene"]
-						elif "genes" in expression_dataset:
-							clean_gen_column_name = []
-							for x in dge_table["Gene"]:
-								gene_x = x.split("@")[0]
-								beast_x = x.split("@")[1]
-								beast_x = beast_x.replace("_", " ")
-								x = gene_x + " - " + beast_x
-								clean_gen_column_name.append(x)
-							dge_table["clean_feature"] = clean_gen_column_name.copy()
-						else:
-							dge_table["clean_feature"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in dge_table["Gene"]]
-
-					dge_table = dge_table[dge_table["clean_feature"].isin(genes)]
-					dge_table["Comparison"] = contrast.replace("-", " ").replace("_", " ")
-					contrasts_df_list.append(dge_table)
-
-			#concat all dfs
-			if len(contrasts_df_list) > 1:
-				merged_df = pd.concat(contrasts_df_list)
-			#no need to concat
-			elif len(contrasts_df_list) == 1:
-				merged_df = dge_table
-			#no any contrast for the selected conditions: create mock df
-			else:
-				if expression_dataset in ["human", "mouse"]:
-					base_mean_label = "Average expression"
-					gene_column_name = "Gene"
-				else:
-					#base mean label
-					if "genes" in expression_dataset:
-						base_mean_label = "Average expression"
-					else:
-						base_mean_label = "Average abundance"
-					#all other variables
-					gene_column_name = expression_dataset.replace("_", " ").capitalize()
-				merged_df = pd.DataFrame(columns=["Comparison", gene_column_name, "Geneid", base_mean_label, "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"])
-
-			statistics_table_columns, statistics_table_data, style_data_conditional = functions.dge_table_operations(merged_df, expression_dataset, stringency, False, path)
-
-			#table
-			children = [
-				
-				html.Br(),
-				
-				dbc.Spinner(
-					size="md",
-					color="lightgray",
-					children=dash_table.DataTable(
-						id="stats_multixoplots_table",
-						filter_action="native",
-						style_filter={
-							"text-align": "left"
-						},
-						style_table={
-							"text-align": "left"
-						},
-						style_cell={
-							"whiteSpace": "normal",
-							"height": "auto",
-							"fontSize": 12, 
-							"font-family": "arial",
-							"text-align": "left"
-						},
-						style_data_conditional=style_data_conditional,
-						page_size=25,
-						sort_action="native",
-						style_header={
-							"text-align": "left"
-						},
-						style_as_list_view=True,
-						data=statistics_table_data,
-						columns=statistics_table_columns,
-						filter_options={"case": "insensitive"}
-					)
-				),
-				html.Br()
-			]
-		else:
-			hidden = True
-			children = []
-
-		return switch_options, stats_switch, children, hidden, hidden
-
 	##### plots #####
 
 	#mds
@@ -2142,7 +1984,7 @@ def define_callbacks(app):
 							selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
 							metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
 				
-				#tmp
+				#clean metatranscriptomic genes
 				if "genes" in expression_dataset:
 					feature_gene = feature.split("@")[0]
 					feature_beast = feature.split("@")[1]
@@ -2166,8 +2008,8 @@ def define_callbacks(app):
 							title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
 					else:
 						y_values = filtered_metadata[y_metadata]
-						y_axis_title = y_metadata
-						title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata, x_metadata=x_metadata.replace("_", " ").capitalize())
+						y_axis_title = y_metadata.replace("_", " ").capitalize()
+						title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
 					x_values = filtered_metadata[x_metadata]
 
 					#create hovertext
@@ -2183,7 +2025,7 @@ def define_callbacks(app):
 					if boolean_show_as_boxplot: 
 						box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
 					else:
-						box_fig.add_trace(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata], points="all"))
+						box_fig.add_trace(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata], points="all", spanmode="hard"))
 
 				#figure layout
 				if width < 600:
@@ -3619,42 +3461,65 @@ def define_callbacks(app):
 
 	#multiboxplots
 	@app.callback(
+		## outputs figure
 		Output("multi_boxplots_graph", "figure"),
 		Output("multi_boxplots_graph", "config"),
 		Output("multi_boxplots_div", "hidden"),
-		Output("multiboxplot_div", "style"),
 		Output("x_filter_dropdown_multiboxplots_div", "hidden"),
 		Output("comparison_only_multiboxplots_switch", "value"),
 		Output("best_conditions_multiboxplots_switch", "value"),
 		Output("hide_unselected_multiboxplots_switch", "value"),
+		Output("hide_unselected_multiboxplots_switch", "options"),
 		Output("multiboxplots_height_slider", "value"),
 		Output("multiboxplots_width_slider", "value"),
-		Output("update_multiboxplot_stats_button", "n_clicks"),
+		Output("stats_multiboxplots_switch", "options"),
+		Output("stats_multiboxplots_switch", "value"),
+		## output table
+		Output("multiboxplot_stats_div", "hidden"),
+		Output("stats_multixoplots_table", "style_data_conditional"),
+		Output("stats_multixoplots_table", "data"),
+		Output("stats_multixoplots_table", "columns"),
+		## inputs
+		#update plot button
 		Input("update_multiboxplot_plot_button", "n_clicks"),
+		#dropdowns
+		Input("stringency_dropdown", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
 		Input("group_by_multiboxplots_dropdown", "value"),
 		Input("y_multiboxplots_dropdown", "value"),
+		Input("plot_per_row_multiboxplots_dropdown", "value"),
+		Input("x_filter_multiboxplots_dropdown", "value"),
+		#swithces
 		Input("comparison_only_multiboxplots_switch", "value"),
 		Input("best_conditions_multiboxplots_switch", "value"),
 		Input("hide_unselected_multiboxplots_switch", "value"),
 		Input("show_as_multiboxplot_switch", "value"),
-		Input("x_filter_multiboxplots_dropdown", "value"),
-		Input("plot_per_row_multiboxplots_dropdown", "value"),
+		Input("stats_multiboxplots_switch", "value"),
+		#sliders
 		Input("multiboxplots_height_slider", "value"),
 		Input("multiboxplots_width_slider", "value"),
+		## states
 		State("contrast_dropdown", "value"),
 		State("feature_multi_boxplots_dropdown", "value"),
 		State("feature_dataset_dropdown", "value"),
 		State("multi_boxplots_graph", "figure"),
-		State("multi_boxplots_div", "hidden"),
+		State("multi_boxplots_graph", "config"),
+		State("y_multiboxplots_dropdown", "options"),
+		State("hide_unselected_multiboxplots_switch", "options"),
+		State("stats_multiboxplots_switch", "options"),
 		State("x_filter_dropdown_multiboxplots_div", "hidden"),
 		State("analysis_dropdown", "value"),
 		State("color_mapping", "data"),
-		State("update_multiboxplot_stats_button", "n_clicks"),
+		State("multiboxplot_stats_div", "hidden"),
+		State("stats_multixoplots_table", "style_data_conditional"),
+		State("stats_multixoplots_table", "data"),
+		State("stats_multixoplots_table", "columns")
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, x_metadata, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, selected_x_values, plot_per_row, height, width, contrast, selected_features, expression_dataset, box_fig, hidden_status, x_filter_div_hidden, path, color_mapping, n_clicks_update_multiboxplot_stats):
+	def plot_multiboxplots(n_clicks_multiboxplots, stringency, x_metadata, group_by_metadata, y_metadata, plot_per_row, selected_x_values, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, stats_switch, height, width, contrast, selected_features, expression_dataset, box_fig, config_multi_boxplots, y_options, hide_unselected_stats_options, show_stats_switch_options, x_filter_div_hidden, path, color_mapping, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
+		##### FIGURE #####		
+
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -3664,35 +3529,47 @@ def define_callbacks(app):
 		boolean_best_conditions_switch = functions.boolean_switch(best_conditions_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		boolean_show_as_boxplot_switch = functions.boolean_switch(show_as_boxplot_switch)
+		boolean_stats_switch = functions.boolean_switch(stats_switch)
 
 		#do not update the plot for change in contrast if the switch is off
 		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False:
 			raise PreventUpdate
 
-		#title text
-		if expression_dataset in ["human", "mouse"]:
-			title_text = "{host} gene expression profiles per ".format(host=expression_dataset.capitalize()) + x_metadata.replace("_", " ").capitalize()
-		elif "genes" in expression_dataset:
-			title_text = "{} expression profiles per".format(expression_dataset.replace("_genes", " gene").capitalize())
+		#can't display stats if x is not condition and y is not log2 expression/abundance
+		if x_metadata != "condition" or y_metadata != "log2_expression":
+			boolean_stats_switch = False
+			stats_switch = []
+			show_stats_switch_options = [{"label": "", "value": 1, "disabled": True}]
 		else:
-			title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").replace("archaea", "archaeal").replace("bacteria", "bacterial").capitalize()) + x_metadata.replace("_", " ").capitalize()
+			show_stats_switch_options = [{"label": "", "value": 1, "disabled": False}]
 
-		#open metadata
-		metadata_df_full = functions.download_from_github(path, "metadata.tsv")
-		metadata_df_full = pd.read_csv(metadata_df_full, sep = "\t")
-
-		#clean metadata
-		metadata_df_full = metadata_df_full.fillna("NA")
-		metadata_df_full = metadata_df_full.replace("_", " ", regex=True)
-		
 		#empty dropdown
 		if selected_features is None or selected_features == []:
-			hidden_status = True
+			plot_hidden_status = True
 			x_filter_div_hidden = True
+			stats_div_hidden = True
+			style_data_conditional = []
+			statistics_table_data = []
+			statistics_table_columns = []
 		#filled dropdown
 		else:
-			if trigger_id not in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
+			#plot hidden div status
+			plot_hidden_status = False
 
+			#use existing plot
+			if trigger_id in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_height_slider.value", "stats_multiboxplots_switch.value"] and box_fig is not None:
+				box_fig = go.Figure(box_fig)
+									
+			#create new plot
+			else:
+				#open metadata
+				metadata_df_full = functions.download_from_github(path, "metadata.tsv")
+				metadata_df_full = pd.read_csv(metadata_df_full, sep = "\t")
+
+				#clean metadata
+				metadata_df_full = metadata_df_full.fillna("NA")
+				metadata_df_full = metadata_df_full.replace("_", " ", regex=True)
+				
 				#if there is a change in the plot, hide unselected must be false
 				hide_unselected_switch = []
 				boolean_hide_unselected_switch = False
@@ -3763,8 +3640,16 @@ def define_callbacks(app):
 
 				if y_metadata in ["log2_expression", "log2_abundance"]:
 					y_axis_title = "Log2 {}".format(expression_or_abundance)
+					#title text
+					if expression_dataset in ["human", "mouse"]:
+						title_text = "{host} gene expression profiles per ".format(host=expression_dataset.capitalize()) + x_metadata.replace("_", " ").capitalize()
+					elif "genes" in expression_dataset:
+						title_text = "{} expression profiles per".format(expression_dataset.replace("_genes", " gene").capitalize())
+					else:
+						title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").capitalize()) + x_metadata.replace("_", " ").capitalize()
 				else:
-					y_axis_title = y_metadata
+					y_axis_title = y_metadata.replace("_", " ").capitalize()
+					title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
 
 				#make subplots
 				subplot_titles = []
@@ -3857,7 +3742,7 @@ def define_callbacks(app):
 						if boolean_show_as_boxplot_switch:
 							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True), row=working_row, col=working_col)
 						else:
-							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True), row=working_row, col=working_col)
+							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True, spanmode="hard"), row=working_row, col=working_col)
 
 					#just one legend for trece showed is enough
 					if showlegend is True:
@@ -3876,36 +3761,235 @@ def define_callbacks(app):
 					box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", boxmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
 				else:
 					box_fig.update_layout(height=height, width=width, title={"text": title_text, "x": 0.5, "y": 0.99, "yanchor": "top"}, font_size=14, font_family="Arial", violinmode=boxmode, legend_title_text=group_by_metadata.capitalize(), legend_y=1, legend_tracegroupgap=5, showlegend=True)
+
+				#transparent figure
+				box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+				box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+				box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+
+				config_multi_boxplots = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
+
+			#resize fig
+			if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
+				box_fig.update_layout(height=height, width=width)
 			else:
-				box_fig = go.Figure(box_fig)
-				if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
-					box_fig.update_layout(height=height, width=width)
-			
+				#add statistics if necessary
+				if boolean_stats_switch:
+					#force hide unselected
+					boolean_hide_unselected_switch = True
+					hide_unselected_switch = [1]
+					hide_unselected_stats_options = [{"label": "", "value": 1, "disabled": True}]
+					stats_div_hidden = False
+					
+					#get possible values for y axis annotation
+					possible_y_titles = []
+					for option in y_options:
+						possible_y_titles.append(option["label"])
+
+					#get genes in plot
+					genes = []
+					for annotation in box_fig["layout"]["annotations"]:
+						if annotation["text"] not in possible_y_titles:
+							genes.append(annotation["text"])
+
+					#get conditions in plot
+					conditions = []
+					for trace in box_fig["data"]:
+						if trace["visible"] == True:
+							if trace["name"] not in conditions:
+								conditions.append(trace["name"])
+					
+					#get contrasts which have both conditions in the selected conditions in the plot
+					contrasts_df_list = []
+					dge_folder = "data/" + expression_dataset + "/dge"
+					dge_files = functions.get_content_from_github(path, dge_folder)
+					for dge_file in dge_files:
+						contrast = dge_file.split("/")[-1]
+						contrast = contrast.split(".")[0]
+						conditions_in_contrast = contrast.split("-vs-")
+						condition_1 = conditions_in_contrast[0]
+						condition_2 = conditions_in_contrast[1]
+						if condition_1.replace("_", " ") in conditions and condition_2.replace("_", " ") in conditions:
+							dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
+							dge_table = pd.read_csv(dge_table, sep = "\t")
+							dge_table = dge_table.dropna(subset=["Gene"])
+							
+							#since feature names are clean, to filter the dge table we need to clean it
+							if expression_dataset in ["human", "mouse"]:
+								dge_table["clean_feature"] = [x.replace("€", "/") for x in dge_table["Gene"]]
+							else:
+								if "lipid" in expression_dataset:
+									dge_table["clean_feature"] = dge_table["Gene"]
+								elif "genes" in expression_dataset:
+									clean_gen_column_name = []
+									for x in dge_table["Gene"]:
+										gene_x = x.split("@")[0]
+										beast_x = x.split("@")[1]
+										beast_x = beast_x.replace("_", " ")
+										x = gene_x + " - " + beast_x
+										clean_gen_column_name.append(x)
+									dge_table["clean_feature"] = clean_gen_column_name.copy()
+								else:
+									dge_table["clean_feature"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in dge_table["Gene"]]
+
+							dge_table = dge_table[dge_table["clean_feature"].isin(genes)]
+							dge_table["Comparison"] = contrast.replace("-", " ").replace("_", " ")
+							contrasts_df_list.append(dge_table)
+
+					#concat all dfs
+					if len(contrasts_df_list) > 1:
+						merged_df = pd.concat(contrasts_df_list)
+					#no need to concat
+					elif len(contrasts_df_list) == 1:
+						merged_df = dge_table
+					#no any contrast for the selected conditions: create mock df
+					else:
+						if expression_dataset in ["human", "mouse"]:
+							base_mean_label = "Average expression"
+							gene_column_name = "Gene"
+						else:
+							#base mean label
+							if "genes" in expression_dataset:
+								base_mean_label = "Average expression"
+							else:
+								base_mean_label = "Average abundance"
+							#all other variables
+							gene_column_name = expression_dataset.replace("_", " ").capitalize()
+						merged_df = pd.DataFrame(columns=["Comparison", gene_column_name, "Geneid", base_mean_label, "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"])
+
+					#prepare data for dash table
+					statistics_table_columns, statistics_table_data, style_data_conditional = functions.dge_table_operations(merged_df, expression_dataset, stringency, False, path)
+
+					#need a column for dge status
+					statistics_df = pd.DataFrame(statistics_table_data)
+					stringency = stringency.split("_")
+					if stringency[0] == "padj":
+						pvalue_type = "FDR"
+					else:
+						pvalue_type = "P-value"
+					pvalue_value = stringency[1]
+					statistics_df.loc[(statistics_df[pvalue_type] <= float(pvalue_value)), "DEG"] = "DEG"
+					statistics_df.loc[(statistics_df["DEG"].isnull()), "DEG"] = "no_DEG"
+
+					#recreate subplot from fig
+					x_domain = box_fig["layout"]["xaxis"]["domain"]
+					y_domain = box_fig["layout"]["yaxis"]["domain"]
+					#define number of rows
+					if (len(selected_features) % plot_per_row) == 0:
+						n_rows = len(selected_features)/plot_per_row
+					else:
+						n_rows = int(len(selected_features)/plot_per_row) + 1
+					n_rows = int(n_rows)
+					box_fig = make_subplots(figure=box_fig, rows=n_rows, cols=plot_per_row)
+					box_fig["layout"]["xaxis"]["domain"] = x_domain
+					box_fig["layout"]["yaxis"]["domain"] = y_domain
+					
+					#get genes in plot and in df
+					genes = statistics_df["Gene"].unique().tolist()
+					traces_for_gene = int(len(box_fig["data"])/len(genes))
+
+					#get all conditions in fig to identify later the left conditions
+					all_conditions = []
+					for i in range(0, traces_for_gene):
+						all_conditions.append(box_fig["data"][i]["name"])
+
+					#loop over genes/subplots
+					i_traces = 0
+					row = 1
+					col = 1
+					max_lines_per_row_to_add = 0
+					for gene in genes:
+						#count lines per gene
+						max_lines_per_row = 0
+						
+						#get significant contrasts for each genes
+						gene_df = statistics_df[statistics_df["Gene"] == gene]
+						dge_status = gene_df["DEG"].unique().tolist()
+						if "DEG" in dge_status:
+							gene_df = gene_df[gene_df["DEG"] == "DEG"]
+							contrasts = gene_df["Comparison"].unique().tolist()
+							
+							#update max lines for row
+							if len(contrasts) > max_lines_per_row:
+								max_lines_per_row = len(contrasts)
+
+							#get max y from gene data
+							all_y = []
+							for i in range(i_traces, i_traces+traces_for_gene):
+								all_y.append(max(box_fig["data"][i]["y"]))
+							y = max(all_y) * 1.2
+							y_increase = y - max(all_y)
+
+							#update next traces
+							i_traces += traces_for_gene
+
+							#add line for contrasts
+							lines_per_genes = 0
+							for contrast in contrasts:
+								conditions = contrast.split(" vs ")
+								#add line
+								box_fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False), row=row, col=col)
+
+								#identify left condition
+								for condition in all_conditions:
+									if condition in conditions:
+										left_condition = condition
+										break
+
+								#add *
+								box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", font_family="Calibri", font_size=32, showarrow=False, row=row, col=col)
+
+								#next line will be a bit upper the last one
+								y += y_increase
+						else:
+							#update next traces
+							i_traces += traces_for_gene
+
+						#update plot coordinates
+						col += 1
+						if col > plot_per_row:
+							max_lines_per_row_to_add += max_lines_per_row
+							col = 1
+							row += 1
+					
+					#update height based on how many lines has been added
+					height += max_lines_per_row * 25
+				#hide all statistics and remove them from the plot (if they are present)
+				else:
+					#remove lines
+					new_traces = []
+					for trace in box_fig["data"]:
+						if "mode" not in trace:
+							new_traces.append(trace)
+					box_fig["data"] = new_traces
+
+					#remove *
+					new_annotations = []
+					for annotation in box_fig["layout"]["annotations"]:
+						if annotation["text"] != "*":
+							new_annotations.append(annotation)
+					box_fig["layout"]["annotations"] = new_annotations
+
+					#other elements
+					hide_unselected_stats_options = [{"label": "", "value": 1, "disabled": False}]
+					stats_div_hidden = True
+					style_data_conditional = []
+					statistics_table_data = []
+					statistics_table_columns = []
+
 			#when the switch is true, the legend is no longer interactive
 			if boolean_hide_unselected_switch:
 				box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
 				for trace in box_fig["data"]:
-					if trace["visible"] == "legendonly":
+					if trace["visible"] == "legendonly" and "mode" not in trace:
 						trace["visible"] = False
 			else:
 				box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
 				for trace in box_fig["data"]:
-					if trace["visible"] is False :
+					if trace["visible"] is False and "mode" not in trace:
 						trace["visible"] = "legendonly"
 
-			#hidden div status
-			hidden_status = False
-
-			#transparent figure
-			box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-			box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
-			box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
-
-		config_multi_boxplots = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
-
-		multiboxplot_div_style = {"height": height, "width": "100%", "display":"inline-block"}
-
-		return box_fig, config_multi_boxplots, hidden_status, multiboxplot_div_style, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width, n_clicks_update_multiboxplot_stats
+		return box_fig, config_multi_boxplots, plot_hidden_status, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, hide_unselected_stats_options, height, width, show_stats_switch_options, stats_switch, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns
 	
 	#correlation plot
 	@app.callback(
@@ -4278,7 +4362,7 @@ def define_callbacks(app):
 						filtered_diversity_df["hovertext"] = filtered_diversity_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_diversity_df[column].astype(str) + "<br>"
 				hovertext = filtered_diversity_df["hovertext"].tolist()
 
-				fig.add_trace(go.Violin(x=filtered_diversity_df[group_by], y=filtered_diversity_df[index_column], name=x_value, marker_color=marker_color, hoverinfo="text", marker_size=3, line_width=4, hovertext=hovertext, legendgroup=x_value, showlegend=showlegend, points="all"), row=1, col=col)
+				fig.add_trace(go.Violin(x=filtered_diversity_df[group_by], y=filtered_diversity_df[index_column], name=x_value, marker_color=marker_color, hoverinfo="text", marker_size=3, line_width=4, hovertext=hovertext, legendgroup=x_value, showlegend=showlegend, points="all", spanmode="hard"), row=1, col=col)
 
 			#next subplot
 			if showlegend:
@@ -4616,7 +4700,7 @@ def define_callbacks(app):
 						group_df["hovertext"] = group_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + group_df[column].astype(str) + "<br>"
 				hovertext = group_df["hovertext"].tolist()
 
-				fig.add_trace(go.Violin(x=x_values, y=y_values, name=group, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all", showlegend=False), row=1, col=col)
+				fig.add_trace(go.Violin(x=x_values, y=y_values, name=group, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all", showlegend=False, spanmode="hard"), row=1, col=col)
 				if col == 1:
 					fig.update_yaxes(title_text="Factor score", title_standoff=5, row=1, col=col)
 
@@ -4732,7 +4816,7 @@ def define_callbacks(app):
 			hovertext = filtered_df["hovertext"].tolist()
 
 			#add trace
-			fig.add_trace(go.Violin(x=x_values, y=y_values, name=condition, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all"))
+			fig.add_trace(go.Violin(x=x_values, y=y_values, name=condition, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, points="all", spanmode="hard"))
 
 		#update layout
 		fig.update_layout(title={"text": f"{clean_feature}", "font_size": 16, "x": 0.5, "xanchor": "center"}, yaxis_title=log2_expression_or_abundance, height=142, margin_t=30, margin_b=0, margin_l=0)
