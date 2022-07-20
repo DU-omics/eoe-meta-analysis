@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 from functools import reduce
 from sklearn.preprocessing import scale
 import tempfile
+import scipy
+from itertools import combinations
 #import modules
 import functions
 from functions import config, colors, gender_colors, na_color, repos, tab_style, tab_selected_style
@@ -937,27 +939,17 @@ def define_callbacks(app):
 	def get_x_options_multiboxplots(selected_tab, discrete_options):
 		return discrete_options, discrete_options
 
-	#get y options multiboxplot dropdown
-	@app.callback(
-		Output("y_multiboxplots_dropdown", "options"),
-		Input({"type": "tabs", "id": "profiling_tabs"}, "value"),
-		State("continuous_metadata_options", "data")
-	)
-	def get_y_options_multiboxplots(selected_tab, continuous_options):
-		return continuous_options
-
 	#filter x axis multiboxplots
 	@app.callback(
 		Output("x_filter_multiboxplots_dropdown", "options"),
 		Output("x_filter_multiboxplots_dropdown", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
-		Input("y_multiboxplots_dropdown", "value"),
 		Input("feature_dataset_dropdown", "value"),
 		State("analysis_dropdown", "value")
 	)
-	def get_x_filter_values_multiboxplots(selected_x, selected_y, feature_dataset, path):
+	def get_x_filter_values_multiboxplots(selected_x, feature_dataset, path):
 
-		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, selected_y, feature_dataset, path)
+		options, x_values = functions.get_x_axis_elements_boxplots(selected_x, "log2_expression", feature_dataset, path)
 
 		return options, x_values
 
@@ -1753,8 +1745,8 @@ def define_callbacks(app):
 				feature_gene = feature.split("@")[0]
 				feature_beast = feature.split("@")[1]
 				feature_beast = feature_beast.replace("_", " ")
-				feature = feature_gene + " - " + feature_beast
-				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS colored by<br>" + feature + expression_or_abundance + " n="
+				feature_clean = feature_gene + " - " + feature_beast
+				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS colored by<br>" + feature_clean + expression_or_abundance + " n="
 			else:
 				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n="
 
@@ -1891,6 +1883,7 @@ def define_callbacks(app):
 					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
 		#new plot
 		else:
+			#create new plot from 0
 			if trigger_id != "hide_unselected_boxplot_switch.value":
 				#open metadata
 				metadata_df = functions.download_from_github(path, "metadata.tsv")
@@ -2041,6 +2034,7 @@ def define_callbacks(app):
 					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
 				else:
 					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), violinmode=boxmode, showlegend=True)
+			#take old fig
 			else:
 				box_fig = go.Figure(box_fig)
 
@@ -3486,7 +3480,6 @@ def define_callbacks(app):
 		Input("stringency_dropdown", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
 		Input("group_by_multiboxplots_dropdown", "value"),
-		Input("y_multiboxplots_dropdown", "value"),
 		Input("plot_per_row_multiboxplots_dropdown", "value"),
 		Input("x_filter_multiboxplots_dropdown", "value"),
 		#swithces
@@ -3504,7 +3497,6 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("multi_boxplots_graph", "figure"),
 		State("multi_boxplots_graph", "config"),
-		State("y_multiboxplots_dropdown", "options"),
 		State("hide_unselected_multiboxplots_switch", "options"),
 		State("stats_multiboxplots_switch", "options"),
 		State("x_filter_dropdown_multiboxplots_div", "hidden"),
@@ -3515,7 +3507,7 @@ def define_callbacks(app):
 		State("stats_multixoplots_table", "data"),
 		State("stats_multixoplots_table", "columns")
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, stringency, x_metadata, group_by_metadata, y_metadata, plot_per_row, selected_x_values, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, stats_switch, height, width, contrast, selected_features, expression_dataset, box_fig, config_multi_boxplots, y_options, hide_unselected_stats_options, show_stats_switch_options, x_filter_div_hidden, path, color_mapping, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns):
+	def plot_multiboxplots(n_clicks_multiboxplots, stringency, x_metadata, group_by_metadata, plot_per_row, selected_x_values, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, stats_switch, height, width, contrast, selected_features, expression_dataset, box_fig, config_multi_boxplots, hide_unselected_stats_options, show_stats_switch_options, x_filter_div_hidden, path, color_mapping, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
 		##### FIGURE #####		
@@ -3536,7 +3528,7 @@ def define_callbacks(app):
 			raise PreventUpdate
 
 		#can't display stats if x is not condition and y is not log2 expression/abundance
-		if x_metadata != "condition" or y_metadata != "log2_expression":
+		if x_metadata != "condition":
 			boolean_stats_switch = False
 			stats_switch = []
 			show_stats_switch_options = [{"label": "", "value": 1, "disabled": True}]
@@ -3557,9 +3549,8 @@ def define_callbacks(app):
 			plot_hidden_status = False
 
 			#use existing plot
-			if trigger_id in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_height_slider.value", "stats_multiboxplots_switch.value"] and box_fig is not None:
+			if trigger_id in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_width_slider.value", "stats_multiboxplots_switch.value"] and box_fig is not None:
 				box_fig = go.Figure(box_fig)
-									
 			#create new plot
 			else:
 				#open metadata
@@ -3634,22 +3625,15 @@ def define_callbacks(app):
 				if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 					expression_or_abundance = "expression"
 					log2_expression_or_abundance = "Log2 expression"
-				else:
-					expression_or_abundance = "abundance"
-					log2_expression_or_abundance = "Log2 abundance"
-
-				if y_metadata in ["log2_expression", "log2_abundance"]:
-					y_axis_title = "Log2 {}".format(expression_or_abundance)
-					#title text
 					if expression_dataset in ["human", "mouse"]:
 						title_text = "{host} gene expression profiles per ".format(host=expression_dataset.capitalize()) + x_metadata.replace("_", " ").capitalize()
 					elif "genes" in expression_dataset:
 						title_text = "{} expression profiles per".format(expression_dataset.replace("_genes", " gene").capitalize())
-					else:
-						title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").capitalize()) + x_metadata.replace("_", " ").capitalize()
 				else:
-					y_axis_title = y_metadata.replace("_", " ").capitalize()
-					title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
+					expression_or_abundance = "abundance"
+					log2_expression_or_abundance = "Log2 abundance"
+					title_text = "{} abundance profiles per ".format(expression_dataset.replace("_", " ").capitalize()) + x_metadata.replace("_", " ").capitalize()
+				y_axis_title = "Log2 {}".format(expression_or_abundance)			
 
 				#make subplots
 				subplot_titles = []
@@ -3662,24 +3646,21 @@ def define_callbacks(app):
 					else:
 						feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
 					subplot_titles.append(feature)
-				box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True, vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
+				box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True,  vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
 
 				#loop 1 plot per gene
 				working_row = 1
 				working_col = 1
 				showlegend = True
 				for feature in selected_features:
-					#counts as y need external file with count values
-					if y_metadata in ["log2_expression", "log2_abundance"]:
-						counts = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
-						counts = pd.read_csv(counts, sep = "\t")
-						counts = counts.replace("_", " ", regex=True)
-						#merge and compute log2 and replace inf with 0
-						metadata_df = metadata_df_full.merge(counts, how="inner", on="sample")
-						metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
-						metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
-					else:
-						metadata_df = metadata_df_full.copy()
+					#get counts
+					counts = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
+					counts = pd.read_csv(counts, sep = "\t")
+					counts = counts.replace("_", " ", regex=True)
+					#merge and compute log2 and replace inf with 0
+					metadata_df = metadata_df_full.merge(counts, how="inner", on="sample")
+					metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
+					metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
 
 					#setup traces
 					if x_metadata == group_by_metadata:
@@ -3724,11 +3705,8 @@ def define_callbacks(app):
 						#only 2 decimals
 						filtered_metadata = filtered_metadata.round(2)
 						#get x and y
-						if y_metadata in ["log2_expression", "log2_abundance"]:
-							y_values = filtered_metadata[log2_expression_or_abundance]
-						else:
-							y_values = filtered_metadata[y_metadata]
 						x_values = filtered_metadata[x_metadata]
+						y_values = filtered_metadata[log2_expression_or_abundance]
 
 						#create hovertext
 						filtered_metadata["hovertext"] = ""
@@ -3770,26 +3748,23 @@ def define_callbacks(app):
 				config_multi_boxplots = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
 			#resize fig
-			if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_height_slider.value"]:
+			if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_width_slider.value"]:
 				box_fig.update_layout(height=height, width=width)
+			#modify figure content
 			else:
 				#add statistics if necessary
 				if boolean_stats_switch:
+				
 					#force hide unselected
 					boolean_hide_unselected_switch = True
 					hide_unselected_switch = [1]
 					hide_unselected_stats_options = [{"label": "", "value": 1, "disabled": True}]
 					stats_div_hidden = False
-					
-					#get possible values for y axis annotation
-					possible_y_titles = []
-					for option in y_options:
-						possible_y_titles.append(option["label"])
 
 					#get genes in plot
 					genes = []
 					for annotation in box_fig["layout"]["annotations"]:
-						if annotation["text"] not in possible_y_titles:
+						if annotation["text"] not in ["Log2 expression", "Log2 abundance"]:
 							genes.append(annotation["text"])
 
 					#get conditions in plot
@@ -3871,21 +3846,20 @@ def define_callbacks(app):
 					statistics_df.loc[(statistics_df[pvalue_type] <= float(pvalue_value)), "DEG"] = "DEG"
 					statistics_df.loc[(statistics_df["DEG"].isnull()), "DEG"] = "no_DEG"
 
-					#recreate subplot from fig
-					x_domain = box_fig["layout"]["xaxis"]["domain"]
-					y_domain = box_fig["layout"]["yaxis"]["domain"]
 					#define number of rows
 					if (len(selected_features) % plot_per_row) == 0:
 						n_rows = len(selected_features)/plot_per_row
 					else:
 						n_rows = int(len(selected_features)/plot_per_row) + 1
 					n_rows = int(n_rows)
-					box_fig = make_subplots(figure=box_fig, rows=n_rows, cols=plot_per_row)
-					box_fig["layout"]["xaxis"]["domain"] = x_domain
-					box_fig["layout"]["yaxis"]["domain"] = y_domain
+					box_fig = make_subplots(figure=box_fig, rows=n_rows, cols=plot_per_row, vertical_spacing=(0.2/(n_rows)))
 					
 					#get genes in plot and in df
-					genes = statistics_df["Gene"].unique().tolist()
+					if expression_dataset in ["human", "mouse"]:
+						gene_column = "Gene"
+					else:
+						gene_column = expression_dataset.replace("_", " ").capitalize()
+					genes = statistics_df[gene_column].unique().tolist()
 					traces_for_gene = int(len(box_fig["data"])/len(genes))
 
 					#get all conditions in fig to identify later the left conditions
@@ -3903,7 +3877,7 @@ def define_callbacks(app):
 						max_lines_per_row = 0
 						
 						#get significant contrasts for each genes
-						gene_df = statistics_df[statistics_df["Gene"] == gene]
+						gene_df = statistics_df[statistics_df[gene_column] == gene]
 						dge_status = gene_df["DEG"].unique().tolist()
 						if "DEG" in dge_status:
 							gene_df = gene_df[gene_df["DEG"] == "DEG"]
@@ -3924,7 +3898,6 @@ def define_callbacks(app):
 							i_traces += traces_for_gene
 
 							#add line for contrasts
-							lines_per_genes = 0
 							for contrast in contrasts:
 								conditions = contrast.split(" vs ")
 								#add line
@@ -4312,13 +4285,20 @@ def define_callbacks(app):
 	@app.callback(
 		Output("diversity_graph", "figure"),
 		Output("diversity_graph", "config"),
+		Output("statistics_diversity_switch", "value"),
+		Output("statistics_diversity_switch", "options"),
 		Input("group_by_diversity_dropdown", "value"),
+		Input("statistics_diversity_switch", "value"),
+		State("statistics_diversity_switch", "options"),
 		State("feature_dataset_dropdown", "value"),
 		State("color_mapping", "data"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_species_diversity(group_by, expression_dataset, color_mapping, path):
+	def plot_species_diversity(group_by, statistics_switch_value, statistics_switch_options, expression_dataset, color_mapping, path):
 		
+		#boolean switch
+		boolean_statistics_switch_value = functions.boolean_switch(statistics_switch_value)
+
 		#make subplots
 		#plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index", "Species dominance<br>by Inverse Simpson index"]
 		#fig = make_subplots(rows=1, cols=3, subplot_titles=plots, y_title="Index")
@@ -4337,20 +4317,46 @@ def define_callbacks(app):
 			elif plot == "Species dominance<br>by Simpson index":
 				file_name = "simpson"
 				index_column = "Simpson_index"
-			elif plot == "Species dominance<br>by Inverse Simpson index":
-				file_name = "invsimpson"
-				index_column = "Inversed_Simpson_index"
+			#elif plot == "Species dominance<br>by Inverse Simpson index":
+				#file_name = "invsimpson"
+				#index_column = "Inversed_Simpson_index"
 
 			#open df
 			diversity_df = functions.download_from_github(path, f"diversity/{expression_dataset}/{file_name}.tsv")
 			diversity_df = pd.read_csv(diversity_df, sep = "\t")
 			diversity_df = diversity_df.replace("_", " ", regex=True)
+			diversity_df = diversity_df.fillna("NA")
 
 			#get x values
 			x_values = diversity_df[group_by].unique().tolist()
 			x_values.sort()
 
+			#statistics switch can't be clicked if there is only one element on x
+			if len(x_values) < 2:
+				statistics_switch_value = []
+				statistics_switch_options = [{"label": "", "value": 1, "disabled": True}]
+				boolean_statistics_switch_value = False
+			else:
+				statistics_switch_options = [{"label": "", "value": 1, "disabled": False}]
+
+			#save data for statistics
+			if boolean_statistics_switch_value:
+				data_for_statistics = {}
+				#get all cominations for elements in x_axis
+				all_combinations = list(combinations(x_values, 2))
+				for combination in all_combinations:
+					#filter df
+					values = []
+					for group in combination:
+						df = diversity_df[diversity_df[group_by] == group]
+						values.append(df[index_column])
+					#execute test
+					mw_results = scipy.stats.mannwhitneyu(x=values[0], y=values[1])
+					if mw_results.pvalue <= 0.05:
+						data_for_statistics["-vs-".join(combination)] = round(mw_results.pvalue, 3)
+
 			#add traces for each x value
+			max_y = None
 			for x_value in x_values:
 				filtered_diversity_df = diversity_df[diversity_df[group_by] == x_value]
 				marker_color = functions.get_color(color_mapping, group_by, x_value)
@@ -4362,13 +4368,31 @@ def define_callbacks(app):
 						filtered_diversity_df["hovertext"] = filtered_diversity_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_diversity_df[column].astype(str) + "<br>"
 				hovertext = filtered_diversity_df["hovertext"].tolist()
 
+				#save and update max_y
+				if max_y is None or filtered_diversity_df[index_column].max() > max_y:
+					max_y = filtered_diversity_df[index_column].max()
+
+				#add traces
 				fig.add_trace(go.Violin(x=filtered_diversity_df[group_by], y=filtered_diversity_df[index_column], name=x_value, marker_color=marker_color, hoverinfo="text", marker_size=3, line_width=4, hovertext=hovertext, legendgroup=x_value, showlegend=showlegend, points="all", spanmode="hard"), row=1, col=col)
+			
+			#add bar and * to plot
+			if boolean_statistics_switch_value:
+				#compute y and its increase
+				y = max_y * 1.2
+				y_increase = y - max_y
+				for comparison in data_for_statistics:
+					conditions = comparison.split("-vs-")
+					fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False), row=1, col=col)
+					fig.add_annotation(x=conditions[0], y=y, yshift=5, text="*", font_family="Calibri", font_size=32, showarrow=False, hovertext=data_for_statistics[comparison], row=1, col=col)
+
+					#increase y
+					y += y_increase
 
 			#next subplot
 			if showlegend:
 				showlegend=False
 			col += 1
-		
+
 		#update final layout
 		fig.update_layout(legend_orientation="h", height=500, legend_yanchor="bottom", legend_y=1.25)
 		fig.update_xaxes(tickangle=-90)
@@ -4376,7 +4400,7 @@ def define_callbacks(app):
 		#add tab with figure
 		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{expression_dataset}_diversity"}, "edits": {"legendPosition": True, "annotationText": True}}
 
-		return fig, config
+		return fig, config, statistics_switch_value, statistics_switch_options
 	
 	##### mofa callbacks #####
 

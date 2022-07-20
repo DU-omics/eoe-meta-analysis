@@ -793,14 +793,6 @@ multi_violin_tab_layout = html.Div([
 					clearable=False,
 					value="condition"
 				)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
-				#y dropdown
-				html.Label(["y", 
-					dcc.Dropdown(
-						id="y_multiboxplots_dropdown",
-						clearable=False,
-						value="log2_expression",
-						className="dropdown-luigi"
-				)], className="dropdown-luigi", style={"width": "15%", "display": "inline-block", "vertical-align": "middle", "margin-left": "auto", "margin-right": "auto", "textAlign": "left"}),
 				#group by dropdown
 				html.Label(["Group by", 
 					dcc.Dropdown(
@@ -879,7 +871,7 @@ multi_violin_tab_layout = html.Div([
 							options=[
 								{"label": "", "value": 1},
 							],
-							value=[],
+							value=[1],
 							id="stats_multiboxplots_switch",
 							switch=True
 						)
@@ -905,9 +897,8 @@ multi_violin_tab_layout = html.Div([
 				html.Label(["x filter", 
 					dcc.Dropdown(
 						id="x_filter_multiboxplots_dropdown",
-						multi=True, 
-						className="dropdown-luigi"
-				)], style={"width": "100%", "textAlign": "left"}),
+						multi=True,
+				)], className="dropdown-luigi", style={"width": "100%", "textAlign": "left"}),
 			], style={"width": "90%", "display": "inline-block", "textAlign": "left", "font-size": "12px"}),
 
 			#graph
@@ -1109,14 +1100,28 @@ diversity_tab_layout = html.Div([
 	html.Div([
 		html.Br(),
 
-		#dropdown and sliders
+		#dropdown and switch
 		html.Div([
+			#dropdown
 			html.Label(["Group by",
 				dcc.Dropdown(
 					id="group_by_diversity_dropdown",
 					clearable=False,
 					value="condition"
 			)], style={"width": "15%", "vertical-align": "middle", "textAlign": "left"}, className="dropdown-luigi"),
+			#switch
+			html.Div([
+				html.Label(["Statistics",
+					dbc.Checklist(
+						options=[
+							{"label": "", "value": 1},
+						],
+						value=[1],
+						id="statistics_diversity_switch",
+						switch=True
+					)
+				], style={"textAlign": "center"}),
+			], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
 		], style={"width": "100%", "display": "inline-block", "font-size": "12px"}),
 		
 		#graph

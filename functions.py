@@ -172,6 +172,12 @@ def get_options_feature_dropdown(expression_dataset, features, search_value, cur
 #function for creating a discrete colored mds from tsv file
 def plot_mds_discrete(mds_df, color_mapping, x, y, selected_metadata, mds_discrete_fig, label_to_value, path):
 
+	#need original selected metadata
+	for key in label_to_value:
+		if selected_metadata == label_to_value[key]:
+			selected_metadata_for_color_mapping = key
+			break
+
 	#too many samples will need smaller dots
 	number_of_samples = len(mds_df["Sample"].tolist())
 	if number_of_samples > 20:
@@ -208,7 +214,7 @@ def plot_mds_discrete(mds_df, color_mapping, x, y, selected_metadata, mds_discre
 		filtered_mds_df = mds_df[mds_df[selected_metadata] == metadata]
 		filtered_mds_df = filtered_mds_df.round(2)
 		custom_data = filtered_mds_df[metadata_columns].fillna("NA")
-		marker_color = get_color(color_mapping, selected_metadata.lower().replace(" ", "_"), metadata)
+		marker_color = get_color(color_mapping, selected_metadata_for_color_mapping, metadata)
 		mds_discrete_fig.add_trace(go.Scatter(x=filtered_mds_df[x], y=filtered_mds_df[y], marker_opacity=1, marker_color=marker_color, marker_size=marker_size, customdata=custom_data, mode="markers", legendgroup=metadata, showlegend=True, hovertemplate=hover_template, name=metadata, visible=True), row=1, col=1)
 	
 	#mds_discrete_fig["layout"]["paper_bgcolor"]="LightSteelBlue"
@@ -509,7 +515,10 @@ def dge_table_operations(table, dataset, stringency, target_prioritization, path
 
 		#data carpentry
 		table["id"] = table[gene_column_name]
-		table = table.sort_values(by=[pvalue_type])
+		if "Comparison" in table.columns:
+			table = table.sort_values(by=["Comparison", pvalue_type])
+		else:
+			table = table.sort_values(by=[pvalue_type])
 		table = table.rename(columns={"log2FoldChange": "log2 FC", "lfcSE": "log2 FC SE", "pvalue": "P-value", "padj": "FDR", "baseMean": base_mean_label})
 		table["P-value"] = table["P-value"].fillna("NA")
 		table["FDR"] = table["FDR"].fillna("NA")
