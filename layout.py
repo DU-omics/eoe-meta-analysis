@@ -319,6 +319,19 @@ main_layout = html.Div([
 							)
 						], style={"textAlign": "center"}),
 					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
+					#stats switch
+					html.Div([
+						html.Label(["Statistics",
+							dbc.Checklist(
+								options=[
+									{"label": "", "value": 1},
+								],
+								value=[1],
+								id="stats_boxplots_switch",
+								switch=True
+							)
+						], style={"textAlign": "center"}),
+					], style={"width": "10%", "display": "inline-block", "vertical-align": "middle"}),
 					#height slider
 					html.Div([
 						html.Label(["Height",
