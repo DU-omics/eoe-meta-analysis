@@ -1490,7 +1490,7 @@ mofa_tab_layout = html.Div([
 								options=[
 									{"label": "", "value": 1},
 								],
-								value=[],
+								value=[1],
 								id="group_condition_switch_mofa",
 								switch=True
 							)

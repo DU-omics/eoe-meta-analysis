@@ -4540,7 +4540,7 @@ def define_callbacks(app):
 								x_values_for_comparisons.append(x_value)
 					else:
 						x_values_for_comparisons = x_values
-						visible_groups = x_values
+						visible_groups = visible_groups
 					
 					data_for_statistics = {}
 					#get all cominations for elements in x_axis
@@ -4570,8 +4570,9 @@ def define_callbacks(app):
 					hovertext = filtered_diversity_df["hovertext"].tolist()
 
 					#save and update max_y
-					if max_y is None or filtered_diversity_df[index_column].max() > max_y:
-						max_y = filtered_diversity_df[index_column].max()
+					if x_value in visible_groups or visible_groups == "all":
+						if max_y is None or filtered_diversity_df[index_column].max() > max_y:
+							max_y = filtered_diversity_df[index_column].max()
 
 					#add traces
 					if visible_groups == "all":
@@ -4706,6 +4707,10 @@ def define_callbacks(app):
 		fig.update_xaxes(visible=False)
 		fig.update_layout(height=height, margin_t=80, margin_b=0, margin_r=0, title={"text": "Data overview", "font_size": 20, "x": 0.5, "xanchor": "center"})
 
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+
 		#config
 		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"data_overview_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
 
@@ -4781,8 +4786,12 @@ def define_callbacks(app):
 			col += 1				
 
 		#update layout
-		fig.update_layout(height=200+(20*len(y)), margin_t=75, margin_b=0, title={"text": "Multi-layer signatures", "font_size": 20, "x": 0.5, "xanchor": "center"}, plot_bgcolor="#d9d9d9")
+		fig.update_layout(height=200+(20*len(y)), margin_t=75, margin_b=0, title={"text": "Multi-layer signatures", "font_size": 20, "x": 0.5, "xanchor": "center"})
 		fig.update_xaxes(tickangle=-90)
+
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 
 		#config
 		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"mofa_signatures_{group_contrast}"}, "edits": {"titleText": True, "annotationText": True}}
@@ -4882,6 +4891,10 @@ def define_callbacks(app):
 		fig.update_xaxes(zeroline=True)
 		fig.update_yaxes(showline=False)
 
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+
 		#config
 		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "mofa_factor"}, "edits": {"titleText": True, "annotationText": True}}
 
@@ -4957,6 +4970,10 @@ def define_callbacks(app):
 		#update layout
 		fig.update_layout(margin_l=10, margin_r=0, margin_t=40, height=225)
 		fig.update_annotations(font_size=14)
+
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
 
 		#config
 		config = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "factor_score_distribution"}}
@@ -5068,6 +5085,11 @@ def define_callbacks(app):
 		#update layout
 		fig.update_layout(title={"text": f"{clean_feature}", "font_size": 16, "x": 0.5, "xanchor": "center"}, yaxis_title=log2_expression_or_abundance, height=142, margin_t=30, margin_b=0, margin_l=0)
 		fig.update_xaxes(showticklabels=False)
+
+		#transparent background
+		fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
 
 		#general config for boxplots
 		config = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{clean_feature}_profiling"}, "edits": {"legendPosition": True, "titleText": True}}
