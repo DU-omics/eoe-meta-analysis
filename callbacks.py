@@ -398,13 +398,15 @@ def define_callbacks(app):
 	#target prioritization switch
 	@app.callback(
 		Output("target_prioritization_switch_div", "hidden"),
-		Input("feature_dataset_dropdown", "value")
+		Input("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value")
 	)
-	def show_target_prioritization_switch(feature_dataset):
-		if feature_dataset == "human" and config["opentargets"] is True:
-			hidden = False
-		else:
-			hidden = True
+	def show_target_prioritization_switch(feature_dataset, path):
+		hidden = True
+		if feature_dataset == "human":
+			github_content = functions.get_content_from_github(path, "")
+			if "opentargets.tsv" in github_content:
+				hidden = False
 		
 		return hidden
 
@@ -4043,7 +4045,7 @@ def define_callbacks(app):
 						#count lines per gene
 						max_lines_per_row = 0
 						
-						#get significant contrasts for each genes
+						#get significant contrasts for each gene
 						gene_df = statistics_df[statistics_df[gene_column] == gene]
 						dge_status = gene_df["DEG"].unique().tolist()
 						if "DEG" in dge_status:
@@ -4079,7 +4081,7 @@ def define_callbacks(app):
 
 								#add *
 								#hovertext=gene_df.loc[contrast, pvalue_type],
-								box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", font_family="Calibri", font_size=32, showarrow=False, row=row, col=col)
+								box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=gene_df.loc[contrast, pvalue_type], font_family="Calibri", font_size=32, showarrow=False, row=row, col=col)
 
 								#next line will be a bit upper the last one
 								y += y_increase
@@ -4587,7 +4589,7 @@ def define_callbacks(app):
 				#add bar and * to plot
 				if boolean_statistics_switch_value:
 					#compute y and its increase
-					y = max_y * 1.2
+					y = max_y * 1.1
 					y_increase = y - max_y
 					for comparison in data_for_statistics:
 						conditions = comparison.split("-vs-")
@@ -4603,7 +4605,7 @@ def define_callbacks(app):
 				col += 1
 
 			#update final layout
-			fig.update_layout(legend_orientation="h", height=500, legend_yanchor="bottom", legend_y=1.25)
+			fig.update_layout(legend_orientation="h", height=450, legend_yanchor="bottom", legend_y=1.25)
 			fig.update_xaxes(tickangle=-90)
 
 			#add tab with figure

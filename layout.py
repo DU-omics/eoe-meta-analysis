@@ -1158,7 +1158,7 @@ diversity_tab_layout = html.Div([
 				size = "md",
 				color = "lightgray"
 			)
-		], style={"width": "100%", "display": "inline-block"})
+		], style={"width": "75%", "display": "inline-block"})
 	], style={"width": "100%", "display": "inline-block"})
 ])
 

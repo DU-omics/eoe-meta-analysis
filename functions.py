@@ -414,13 +414,12 @@ def dge_table_operations(table, dataset, stringency, target_prioritization, path
 		opentarget_df = download_from_github(path, "opentargets.tsv")
 		opentarget_df = pd.read_csv(opentarget_df, sep="\t")
 		table = pd.merge(table, opentarget_df, on="Gene ID")
+		table = table.fillna("")
 
 		#priority for overexpression
 		if not table.empty:
-			table.loc[table["log2 FC"] >= 1, "DGE"] = 4
-			table.loc[(table["log2 FC"] > 0) & (table["log2 FC"] <1), "DGE"] = 3
-			table.loc[(table["log2 FC"] < 0) & (table["log2 FC"] >-1), "DGE"] = 2
-			table.loc[table["log2 FC"] <= -1, "DGE"] = 1
+			table.loc[(table["log2 FC"] > 0), "DGE"] = 1
+			table.loc[(table["log2 FC"] < 0), "DGE"] = 0
 			#sort values according to these columns
 			table = table.sort_values(["DGE", "index"], ascending = (False, False))
 			table = table.reset_index(drop=True)
@@ -439,13 +438,11 @@ def dge_table_operations(table, dataset, stringency, target_prioritization, path
 			{"name": "Gene ID", "id":"Gene ID"},
 			{"name": "log2 FC", "id":"log2 FC", "type": "numeric", "format": Format(precision=2, scheme=Scheme.fixed)},
 			{"name": "FDR", "id": "FDR", "type": "numeric", "format": Format(precision=2, scheme=Scheme.decimal_or_exponent)},
-			{"name": "Drugs", "id": "drug_count", "type": "numeric"},
-			{"name": "Drugs", "id": "total_drug_count"},
+			{"name": "Drugs count", "id": "drugs_count", "type": "numeric"},
 			{"name": "Drugs", "id": "drugs", "type": "text", "presentation": "markdown"},
-			{"name": "IBD drugs", "id": "IBD_drug_count", "type": "numeric"},
-			{"name": "IBD drugs", "id": "IBD_drugs", "type": "text", "presentation": "markdown"},
-			{"name": "IBD GWAS", "id": "GWAS_count", "type": "numeric"},
-			{"name": "IBD GWAS", "id": "GWAS", "type": "text", "presentation": "markdown"},
+			{"name": "Associated drugs count", "id": "related_drugs_count", "type": "numeric"},
+			{"name": "Associated drugs", "id": "related_drugs", "type": "text", "presentation": "markdown"},
+			{"name": "GWAS", "id": "GWAS_count", "type": "text", "presentation": "markdown"},
 			{"name": "Tissue eQTL", "id": "QTL_in_tissues_count", "type": "numeric"},
 			{"name": "Tissue eQTL", "id": "QTL_in_tissues", "type": "text", "presentation": "markdown"},
 			{"name": "Protein expression in cell types", "id": "expression_in_tissue_cell_types_count", "type": "numeric"},
