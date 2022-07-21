@@ -1122,7 +1122,20 @@ diversity_tab_layout = html.Div([
 					clearable=False,
 					value="condition"
 			)], style={"width": "15%", "vertical-align": "middle", "textAlign": "left"}, className="dropdown-luigi"),
-			#switch
+			#hide unselected switch
+			html.Div([
+				html.Label(["Hide unselected",
+					dbc.Checklist(
+						options=[
+							{"label": "", "value": 1},
+						],
+						value=[],
+						id="hide_unselected_diversity_switch",
+						switch=True
+					)
+				], style={"textAlign": "center"}),
+			], style={"width": "11%", "display": "inline-block", "vertical-align": "middle"}),
+			#statistics switch
 			html.Div([
 				html.Label(["Statistics",
 					dbc.Checklist(

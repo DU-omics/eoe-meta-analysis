@@ -4456,118 +4456,172 @@ def define_callbacks(app):
 		Output("diversity_graph", "config"),
 		Output("statistics_diversity_switch", "value"),
 		Output("statistics_diversity_switch", "options"),
+		Input("diversity_graph", "restyleData"),
 		Input("group_by_diversity_dropdown", "value"),
+		Input("hide_unselected_diversity_switch", "value"),
 		Input("statistics_diversity_switch", "value"),
 		State("statistics_diversity_switch", "options"),
 		State("feature_dataset_dropdown", "value"),
+		State("diversity_graph", "figure"),
+		State("diversity_graph", "config"),
 		State("color_mapping", "data"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_species_diversity(group_by, statistics_switch_value, statistics_switch_options, expression_dataset, color_mapping, path):
-		
+	def plot_species_diversity(legend_click, group_by, hide_unselected_switch, statistics_switch_value, statistics_switch_options, expression_dataset, fig, config, color_mapping, path):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
+
 		#boolean switch
+		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		boolean_statistics_switch_value = functions.boolean_switch(statistics_switch_value)
 
 		#make subplots
 		#plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index", "Species dominance<br>by Inverse Simpson index"]
 		#fig = make_subplots(rows=1, cols=3, subplot_titles=plots, y_title="Index")
-		plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index"]
-		fig = make_subplots(rows=1, cols=2, subplot_titles=plots, y_title="Index")
-
-		#populate subplots
-		col = 1
-		showlegend = True
-		for plot in plots:
-
-			#define which file to open
-			if plot == "Species diversity<br>by Shannon index":
-				file_name = "shannon"
-				index_column = "Shannon_index"
-			elif plot == "Species dominance<br>by Simpson index":
-				file_name = "simpson"
-				index_column = "Simpson_index"
-			#elif plot == "Species dominance<br>by Inverse Simpson index":
-				#file_name = "invsimpson"
-				#index_column = "Inversed_Simpson_index"
-
-			#open df
-			diversity_df = functions.download_from_github(path, f"diversity/{expression_dataset}/{file_name}.tsv")
-			diversity_df = pd.read_csv(diversity_df, sep = "\t")
-			diversity_df = diversity_df.replace("_", " ", regex=True)
-			diversity_df = diversity_df.fillna("NA")
-
-			#get x values
-			x_values = diversity_df[group_by].unique().tolist()
-			x_values.sort()
-
-			#statistics switch can't be clicked if there is only one element on x
-			if len(x_values) < 2:
-				statistics_switch_value = []
-				statistics_switch_options = [{"label": "", "value": 1, "disabled": True}]
-				boolean_statistics_switch_value = False
-			else:
-				statistics_switch_options = [{"label": "", "value": 1, "disabled": False}]
-
-			#save data for statistics
-			if boolean_statistics_switch_value:
-				data_for_statistics = {}
-				#get all cominations for elements in x_axis
-				all_combinations = list(combinations(x_values, 2))
-				for combination in all_combinations:
-					#filter df
-					values = []
-					for group in combination:
-						df = diversity_df[diversity_df[group_by] == group]
-						values.append(df[index_column])
-					#execute test
-					mw_results = scipy.stats.mannwhitneyu(x=values[0], y=values[1])
-					if mw_results.pvalue <= 0.05:
-						data_for_statistics["-vs-".join(combination)] = round(mw_results.pvalue, 3)
-
-			#add traces for each x value
-			max_y = None
-			for x_value in x_values:
-				filtered_diversity_df = diversity_df[diversity_df[group_by] == x_value]
-				marker_color = functions.get_color(color_mapping, group_by, x_value)
-
-				#create hovertext
-				filtered_diversity_df["hovertext"] = ""
-				for column in filtered_diversity_df.columns:
-					if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-						filtered_diversity_df["hovertext"] = filtered_diversity_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_diversity_df[column].astype(str) + "<br>"
-				hovertext = filtered_diversity_df["hovertext"].tolist()
-
-				#save and update max_y
-				if max_y is None or filtered_diversity_df[index_column].max() > max_y:
-					max_y = filtered_diversity_df[index_column].max()
-
-				#add traces
-				fig.add_trace(go.Violin(x=filtered_diversity_df[group_by], y=filtered_diversity_df[index_column], name=x_value, marker_color=marker_color, hoverinfo="text", marker_size=3, line_width=4, hovertext=hovertext, legendgroup=x_value, showlegend=showlegend, points="all", spanmode="hard"), row=1, col=col)
+		
+		#create new plot
+		if trigger_id in ["group_by_diversity_dropdown.value", ".", "diversity_graph.restyleData", "statistics_diversity_switch.value"]:
 			
-			#add bar and * to plot
-			if boolean_statistics_switch_value:
-				#compute y and its increase
-				y = max_y * 1.2
-				y_increase = y - max_y
-				for comparison in data_for_statistics:
-					conditions = comparison.split("-vs-")
-					fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False), row=1, col=col)
-					fig.add_annotation(x=conditions[0], y=y, yshift=5, text="*", font_family="Calibri", font_size=32, showarrow=False, hovertext=data_for_statistics[comparison], row=1, col=col)
+			#parse figure to get visible groups
+			if fig is not None:
+				#get the name of visible traces
+				visible_groups = []
+				for trace in fig["data"]:
+					if "mode" not in trace and trace["visible"] is True and trace["name"] not in visible_groups:
+						visible_groups.append(trace["name"])
+			else:
+				visible_groups = "all"
 
-					#increase y
-					y += y_increase
+			plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index"]
+			fig = make_subplots(rows=1, cols=2, subplot_titles=plots, y_title="Index")
 
-			#next subplot
-			if showlegend:
-				showlegend=False
-			col += 1
+			#populate subplots
+			col = 1
+			showlegend = True
+			for plot in plots:
 
-		#update final layout
-		fig.update_layout(legend_orientation="h", height=500, legend_yanchor="bottom", legend_y=1.25)
-		fig.update_xaxes(tickangle=-90)
+				#define which file to open
+				if plot == "Species diversity<br>by Shannon index":
+					file_name = "shannon"
+					index_column = "Shannon_index"
+				elif plot == "Species dominance<br>by Simpson index":
+					file_name = "simpson"
+					index_column = "Simpson_index"
+				#elif plot == "Species dominance<br>by Inverse Simpson index":
+					#file_name = "invsimpson"
+					#index_column = "Inversed_Simpson_index"
 
-		#add tab with figure
-		config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{expression_dataset}_diversity"}, "edits": {"legendPosition": True, "annotationText": True}}
+				#open df
+				diversity_df = functions.download_from_github(path, f"diversity/{expression_dataset}/{file_name}.tsv")
+				diversity_df = pd.read_csv(diversity_df, sep = "\t")
+				diversity_df = diversity_df.replace("_", " ", regex=True)
+				diversity_df = diversity_df.fillna("NA")
+
+				#get x values
+				x_values = diversity_df[group_by].unique().tolist()
+				x_values.sort()
+
+				#statistics switch can't be clicked if there is only one element on x
+				if len(x_values) < 2:
+					statistics_switch_value = []
+					statistics_switch_options = [{"label": "", "value": 1, "disabled": True}]
+					boolean_statistics_switch_value = False
+				else:
+					statistics_switch_options = [{"label": "", "value": 1, "disabled": False}]
+
+				#save data for statistics
+				if boolean_statistics_switch_value:
+					#legend click filter out x_values
+					if trigger_id == "diversity_graph.restyleData":
+						x_values_for_comparisons = []
+						for x_value in x_values:
+							if x_value in visible_groups:
+								x_values_for_comparisons.append(x_value)
+					else:
+						x_values_for_comparisons = x_values
+						visible_groups = x_values
+					
+					data_for_statistics = {}
+					#get all cominations for elements in x_axis
+					all_combinations = list(combinations(x_values_for_comparisons, 2))
+					for combination in all_combinations:
+						#filter df
+						values = []
+						for group in combination:
+							df = diversity_df[diversity_df[group_by] == group]
+							values.append(df[index_column])
+						#execute test
+						mw_results = scipy.stats.mannwhitneyu(x=values[0], y=values[1])
+						if mw_results.pvalue <= 0.05:
+							data_for_statistics["-vs-".join(combination)] = round(mw_results.pvalue, 3)
+
+				#add traces for each x value
+				max_y = None
+				for x_value in x_values:
+					filtered_diversity_df = diversity_df[diversity_df[group_by] == x_value]
+					marker_color = functions.get_color(color_mapping, group_by, x_value)
+
+					#create hovertext
+					filtered_diversity_df["hovertext"] = ""
+					for column in filtered_diversity_df.columns:
+						if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+							filtered_diversity_df["hovertext"] = filtered_diversity_df["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_diversity_df[column].astype(str) + "<br>"
+					hovertext = filtered_diversity_df["hovertext"].tolist()
+
+					#save and update max_y
+					if max_y is None or filtered_diversity_df[index_column].max() > max_y:
+						max_y = filtered_diversity_df[index_column].max()
+
+					#add traces
+					if visible_groups == "all":
+						visible = True
+					else:	
+						if x_value in visible_groups:
+							visible = True
+						else:
+							visible = "legendonly"
+					fig.add_trace(go.Violin(x=filtered_diversity_df[group_by], y=filtered_diversity_df[index_column], name=x_value, marker_color=marker_color, hoverinfo="text", marker_size=3, line_width=4, hovertext=hovertext, legendgroup=x_value, showlegend=showlegend, points="all", spanmode="hard", visible=visible), row=1, col=col)
+				
+				#add bar and * to plot
+				if boolean_statistics_switch_value:
+					#compute y and its increase
+					y = max_y * 1.2
+					y_increase = y - max_y
+					for comparison in data_for_statistics:
+						conditions = comparison.split("-vs-")
+						fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False), row=1, col=col)
+						fig.add_annotation(x=conditions[0], y=y, yshift=5, text="*", font_family="Calibri", font_size=32, showarrow=False, hovertext=data_for_statistics[comparison], row=1, col=col)
+
+						#increase y
+						y += y_increase
+
+				#next subplot
+				if showlegend:
+					showlegend=False
+				col += 1
+
+			#update final layout
+			fig.update_layout(legend_orientation="h", height=500, legend_yanchor="bottom", legend_y=1.25)
+			fig.update_xaxes(tickangle=-90)
+
+			#add tab with figure
+			config = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": f"{expression_dataset}_diversity"}, "edits": {"legendPosition": True, "annotationText": True}}
+		#use the old one
+		else:
+			fig = go.Figure(fig)
+
+		#hide unselected traces from legend
+		if boolean_hide_unselected_switch:
+			fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
+			for trace in fig["data"]:
+				if trace["visible"] == "legendonly":
+					trace["visible"] = False
+		else:
+			fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
+			for trace in fig["data"]:
+				if trace["visible"] is False:
+					trace["visible"] = "legendonly"
 
 		return fig, config, statistics_switch_value, statistics_switch_options
 	
