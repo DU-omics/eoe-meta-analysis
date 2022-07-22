@@ -468,10 +468,8 @@ def define_callbacks(app):
 				search_value = search_value.readline()
 				search_value = search_value.rstrip()
 		else:
-			if expression_dataset == "human":
-				search_value = "GAPDH"
-			elif expression_dataset == "mouse":
-				search_value = "Gapdh"
+			repo = functions.get_repo_name_from_path(path, repos)
+			search_value = config["repos"][repo]["gene"]
 
 		#get feature list and label
 		features, label, placeholder = functions.get_list_label_placeholder_feature_dropdown(path, expression_dataset)
@@ -537,10 +535,8 @@ def define_callbacks(app):
 					value = value.readline()
 					value = value.rstrip()
 			else:
-				if expression_dataset == "human":
-					value = "GAPDH"
-				elif expression_dataset == "mouse":
-					value = "Gapdh"
+				repo = functions.get_repo_name_from_path(path, repos)
+				value = config["repos"][repo]["gene"]
 		#dge table active cell data
 		else:
 			value = dge_table_cell_data
