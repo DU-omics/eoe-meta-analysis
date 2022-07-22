@@ -4486,7 +4486,7 @@ def define_callbacks(app):
 		if trigger_id in ["group_by_diversity_dropdown.value", ".", "diversity_graph.restyleData", "statistics_diversity_switch.value"]:
 			
 			#parse figure to get visible groups
-			if fig is not None:
+			if fig is not None and trigger_id != "group_by_diversity_dropdown.value":
 				#get the name of visible traces
 				visible_groups = []
 				for trace in fig["data"]:
@@ -4495,7 +4495,8 @@ def define_callbacks(app):
 			else:
 				visible_groups = "all"
 
-			plots = ["Species diversity<br>by Shannon index", "Species dominance<br>by Simpson index"]
+			expression_dataset_for_plot_title = expression_dataset.replace("_", " ").capitalize()
+			plots = [f"{expression_dataset_for_plot_title} diversity<br>by Shannon index", f"{expression_dataset_for_plot_title} dominance<br>by Simpson index"]
 			fig = make_subplots(rows=1, cols=2, subplot_titles=plots, y_title="Index")
 
 			#populate subplots
@@ -4504,10 +4505,10 @@ def define_callbacks(app):
 			for plot in plots:
 
 				#define which file to open
-				if plot == "Species diversity<br>by Shannon index":
+				if plot == f"{expression_dataset_for_plot_title} diversity<br>by Shannon index":
 					file_name = "shannon"
 					index_column = "Shannon_index"
-				elif plot == "Species dominance<br>by Simpson index":
+				elif plot == f"{expression_dataset_for_plot_title} dominance<br>by Simpson index":
 					file_name = "simpson"
 					index_column = "Simpson_index"
 				#elif plot == "Species dominance<br>by Inverse Simpson index":
