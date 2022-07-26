@@ -2,7 +2,7 @@
 from dash import html, dcc
 from dash import dash_table
 import dash_bootstrap_components as dbc
-from functions import multiple_analysis, repos_options, tab_style, tab_selected_style
+from functions import multiple_analysis, repos_options
 
 #main app layout
 main_layout = html.Div([
@@ -311,7 +311,7 @@ main_layout = html.Div([
 						html.Label(["Show as boxplots",
 							dbc.Checklist(
 								options=[
-									{"label": "", "value": 1},
+									{"label": "", "value": 1, "disabled": False},
 								],
 								value=[],
 								id="show_as_boxplot_switch",
@@ -335,7 +335,7 @@ main_layout = html.Div([
 					#height slider
 					html.Div([
 						html.Label(["Height",
-							dcc.Slider(id="boxplots_height_slider", min=200, max=400, step=1, marks=None)
+							dcc.Slider(id="boxplots_height_slider", min=200, max=500, step=1, marks=None)
 						], style={"width": "100%", "height": "30px", "display": "inline-block"})
 					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
 					#width slider
@@ -357,6 +357,7 @@ main_layout = html.Div([
 			], style={"width": "80%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
 
 			#plot
+			dcc.Store(id="data_for_statistics_boxplots"),
 			html.Div([
 				html.Div(id="boxplot_div", children=[
 					dbc.Spinner(
@@ -476,10 +477,6 @@ main_layout = html.Div([
 		html.Div(id="tab_content_div", style={"width": "100%", "display": "inline-block"})
 	], style={"width": 1200, "font-family": "Arial"})
 ], style={"width": "100%", "justify-content":"center", "display":"flex", "textAlign": "center"})
-
-#metadata table data & columns
-#mofa contrasts options
-#deconvolution discrete options & datasets options
 
 #metadata tab layout
 metadata_tab_layout = html.Div([

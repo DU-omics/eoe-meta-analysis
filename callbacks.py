@@ -1126,13 +1126,13 @@ def define_callbacks(app):
 		Output("mofa_comparison_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
 		Input({"type": "tabs", "id": "main_tabs"}, "value"),
-		State("mofa_comparison_dropdown", "options"),
+		Input("mofa_comparison_dropdown", "options"),
 		State("analysis_dropdown", "value")
 	)
 	def set_mofa_contrast_dropdown_value(contrast, tab_value, mofa_contrasts_options, path):
-		ctx = dash.callback_context
-		trigger_id = ctx.triggered[0]["prop_id"]
-
+		if mofa_contrasts_options is None:
+			raise PreventUpdate
+		
 		#open metadata
 		metadata = functions.download_from_github(path, "metadata.tsv")
 		metadata = pd.read_csv(metadata, sep = "\t")
@@ -1824,34 +1824,42 @@ def define_callbacks(app):
 		Output("boxplots_graph", "config"),
 		Output("boxplot_div", "style"),
 		Output("x_filter_dropdown_div", "hidden"),
-		Output("hide_unselected_boxplot_switch", "value"),
 		Output("comparison_only_boxplots_switch", "value"),
 		Output("best_conditions_boxplots_switch", "value"),
-		Output("hide_unselected_boxplot_switch", "options"),
+		Output("stats_boxplots_switch", "value"),
+		Output("stats_boxplots_switch", "options"),
 		Output("boxplots_width_slider", "value"),
 		Output("boxplots_height_slider", "value"),
+		#general dropdowns and legend click
 		Input("feature_dropdown", "value"),
+		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
+		Input("boxplots_graph", "restyleData"),
+		#boxplot dropdowns
 		Input("x_boxplot_dropdown", "value"),
 		Input("x_filter_boxplot_dropdown", "value"),
 		Input("group_by_boxplot_dropdown", "value"),
 		Input("y_boxplot_dropdown", "value"),
+		#switches
 		Input("comparison_only_boxplots_switch", "value"),
 		Input("best_conditions_boxplots_switch", "value"),
-		Input("contrast_dropdown", "value"),
 		Input("hide_unselected_boxplot_switch", "value"),
 		Input("show_as_boxplot_switch", "value"),
 		Input("stats_boxplots_switch", "value"),
+		#sliders
 		Input("boxplots_width_slider", "value"),
 		Input("boxplots_height_slider", "value"),
+		#states
 		State("feature_dataset_dropdown", "value"),
 		State("boxplots_graph", "figure"),
 		State("x_filter_dropdown_div", "hidden"),
-		State("hide_unselected_boxplot_switch", "options"),
+		State("stats_boxplots_switch", "options"),
+		State("boxplots_graph", "config"),
+		State("boxplot_div", "style"),
 		State("color_mapping", "data"),
 		State("analysis_dropdown", "value")
 	)
-	def plot_boxplots(feature, stringency, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, contrast, hide_unselected_switch, show_as_boxplot, show_stats, width, height, expression_dataset, box_fig, hidden, hide_unselected_stats_options, color_mapping, path):
+	def plot_boxplots(feature, contrast, stringency, legend_click, x_metadata, selected_x_values, group_by_metadata, y_metadata, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot, stats_switch, width, height, expression_dataset, box_fig, x_filter_div_hidden, stats_switch_options, config_boxplots, plot_div_style, color_mapping, path):
 		#define contexts
 		ctx = dash.callback_context
 		trigger_id = ctx.triggered[0]["prop_id"]
@@ -1861,187 +1869,174 @@ def define_callbacks(app):
 		boolean_best_conditions_switch = functions.boolean_switch(best_conditions_switch)
 		boolean_hide_unselected_switch = functions.boolean_switch(hide_unselected_switch)
 		boolean_show_as_boxplot = functions.boolean_switch(show_as_boxplot)
-		boolean_stats_switch = functions.boolean_switch(show_stats)
+		boolean_stats_switch = functions.boolean_switch(stats_switch)
 
 		#conditions for which is not necessary to update the plot
-		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None or trigger_id == "stringency_dropdown.value" and boolean_stats_switch is False or trigger_id == "stringency_dropdown.value" and y_metadata != "log2_expression" and boolean_stats_switch is True:
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None or trigger_id == "stringency_dropdown.value" and boolean_stats_switch is False or trigger_id == "stringency_dropdown.value" and y_metadata != "log2_expression" and boolean_stats_switch is True or trigger_id == "boxplots_graph.restyleData" and boolean_stats_switch is False:
 			raise PreventUpdate
 
-		#labels
-		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-			expression_or_abundance = "expression"
-			log2_expression_or_abundance = "Log2 expression"
-		else:
-			expression_or_abundance = "abundance"
-			log2_expression_or_abundance = "Log2 abundance"
+		#new plot
+		if trigger_id in ["feature_dropdown.value", "contrast_dropdown.value", "x_boxplot_dropdown.value", "x_filter_boxplot_dropdown.value", "group_by_boxplot_dropdown.value", "y_boxplot_dropdown.value", "comparison_only_boxplots_switch.value", "best_conditions_boxplots_switch.value", "stringency_dropdown.value"]:
+			#open metadata
+			metadata_df = functions.download_from_github(path, "metadata.tsv")
+			metadata_df = pd.read_csv(metadata_df, sep = "\t")
 
-		#slider resize
-		if trigger_id in ["boxplots_height_slider.value", "boxplots_width_slider.value"]:
-			box_fig["layout"]["height"] = height
-			box_fig["layout"]["width"] = width
+			#clean metadata
+			metadata_df = metadata_df.fillna("NA")
+			metadata_df = metadata_df.replace("_", " ", regex=True)
+
+			#reset hide unselected switch
+			hide_unselected_switch = []
+			boolean_hide_unselected_switch = False
+			
+			#default reset dimension values
+			if trigger_id == "comparison_only_boxplots_switch.value" or box_fig is None and boolean_comparison_only_switch:
+				width = 500
+				height = 375
+			elif trigger_id != "comparison_only_boxplots_switch.value" and boolean_comparison_only_switch is False:
+				width = 900
+				height = 375
+
+			#comparison only and best conditions switches are mutually exclusive
+			if trigger_id == "comparison_only_boxplots_switch.value" and boolean_best_conditions_switch is True:
+				best_conditions_switch = []
+				boolean_best_conditions_switch = False
+			elif trigger_id == "best_conditions_boxplots_switch.value" and boolean_comparison_only_switch is True:
+				comparison_only_switch = []
+				boolean_comparison_only_switch = False
+
+			#filter samples for comparison or for best conditions
+			repo = functions.get_repo_name_from_path(path, repos)
+			if boolean_comparison_only_switch:
+				contrast = contrast.replace("_", " ")
+				metadata_df = metadata_df[metadata_df["condition"].isin(contrast.split("-vs-"))]
+			elif boolean_best_conditions_switch:
+				best_contrasts = config["repos"][repo]["best_comparisons"]
+				best_conditions = []
+				for best_contrast in best_contrasts:
+					best_contrast = best_contrast.replace("_", " ")
+					best_conditions_in_best_contrast = best_contrast.split("-vs-")
+					for best_condition in best_conditions_in_best_contrast:
+						if best_condition not in best_conditions:
+							best_conditions.append(best_condition)
+				metadata_df = metadata_df[metadata_df["condition"].isin(best_conditions)]				
+
+			#labels
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+				expression_or_abundance = "expression"
+				log2_expression_or_abundance = "Log2 expression"
+			else:
+				expression_or_abundance = "abundance"
+				log2_expression_or_abundance = "Log2 abundance"
+
+			#counts as y need external file with count values
+			if y_metadata in ["log2_expression", "log2_abundance"]:
+				counts = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
+				counts = pd.read_csv(counts, sep = "\t")
+				counts = counts.replace("_", " ", regex=True)
+				#merge and compute log2 and replace inf with 0
+				metadata_df = metadata_df.merge(counts, how="inner", on="sample")
+				metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
+				metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
+
+			#get trace names
+			if x_metadata == group_by_metadata:
+				column_for_filtering = x_metadata
+
+				#user defined list of condition
+				if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]  and boolean_comparison_only_switch is False and boolean_best_conditions_switch is False:
+					metadata_fields_ordered = config["repos"][repo]["condition_list"]
+					metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
+				else:
+					metadata_fields_ordered = metadata_df[x_metadata].unique().tolist()
+					metadata_fields_ordered.sort()
+			else:
+				column_for_filtering = group_by_metadata
+				metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
+				metadata_fields_ordered.sort()
+			
+			#grouped or not boxplot setup
+			boxmode = "overlay"
+			x_filter_div_hidden = True
+			#get values that will be on the x axis
+			all_x_values = metadata_df[x_metadata].unique().tolist()
+			for x_value in all_x_values:
+				if boxmode != "group":
+					#filter df for x_value and get his traces
+					filtered_metadata = metadata_df[metadata_df[x_metadata] == x_value]
+					values_column_for_filtering = filtered_metadata[column_for_filtering].unique().tolist()
+					#if, for the same x, there is more than one trace, then should be grouped
+					if len(set(values_column_for_filtering)) > 1:
+						boxmode = "group"
+						x_filter_div_hidden = False
+						#keep only selected x_values
+						selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
+						metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
+			
+			#clean metatranscriptomic genes
+			if "genes" in expression_dataset:
+				feature_gene = feature.split("@")[0]
+				feature_beast = feature.split("@")[1]
+				feature_beast = feature_beast.replace("_", " ")
+				feature = feature_gene + " - " + feature_beast
+
+			#create figure
+			box_fig = go.Figure()
+			for metadata in metadata_fields_ordered:
+				#slice metadata
+				filtered_metadata = metadata_df[metadata_df[column_for_filtering] == metadata]
+				#only 2 decimals
+				filtered_metadata = filtered_metadata.round(2)
+				#get x and y
+				if y_metadata in ["log2_expression", "log2_abundance"]:
+					y_values = filtered_metadata[log2_expression_or_abundance]
+					y_axis_title = "Log2 {}".format(expression_or_abundance)
+					if "genes" in expression_dataset:
+						title_text = feature + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+					else:
+						title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+				else:
+					y_values = filtered_metadata[y_metadata]
+					y_axis_title = y_metadata.replace("_", " ").capitalize()
+					title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
+				x_values = filtered_metadata[x_metadata]
+
+				#create hovertext
+				filtered_metadata["hovertext"] = ""
+				for column in filtered_metadata.columns:
+					if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
+						filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_metadata[column].astype(str) + "<br>"
+				hovertext = filtered_metadata["hovertext"].tolist()
+
+				#create traces
+				marker_color = functions.get_color(color_mapping, column_for_filtering, metadata)
+				
+				if boolean_show_as_boxplot: 
+					box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=True))
+				else:
+					box_fig.add_trace(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=True, points="all", spanmode="hard"))
+
+			#figure layout
+			if boolean_show_as_boxplot:
+				box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
+			else:
+				box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), violinmode=boxmode, showlegend=True)
+			#change <br> position if the figure is not wide enough
 			if width < 600:
 				if "abundance" in box_fig["layout"]["title"]["text"]:
 					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
 				else:
 					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
-		#new plot or use existing one
-		else:
-			#create new plot from 0
-			if trigger_id not in ["hide_unselected_boxplot_switch.value", "stats_boxplots_switch.value", "stringency_dropdown.value"]:
-				#open metadata
-				metadata_df = functions.download_from_github(path, "metadata.tsv")
-				metadata_df = pd.read_csv(metadata_df, sep = "\t")
 
-				#clean metadata
-				metadata_df = metadata_df.fillna("NA")
-				metadata_df = metadata_df.replace("_", " ", regex=True)
-
-				#reset hide unselected switch
-				hide_unselected_switch = []
-				boolean_hide_unselected_switch = False
-				
-				#default reset values
-				if trigger_id == "comparison_only_boxplots_switch.value" or box_fig is None and boolean_comparison_only_switch:
-					width = 500
-					height = 375
-				elif trigger_id != "comparison_only_boxplots_switch.value" and boolean_comparison_only_switch is False:
-					width = 900
-					height = 375
-
-				#comparison only and best conditions switches are mutually exclusive
-				if trigger_id == "comparison_only_boxplots_switch.value" and boolean_best_conditions_switch is True:
-					best_conditions_switch = []
-					boolean_best_conditions_switch = False
-				elif trigger_id == "best_conditions_boxplots_switch.value" and boolean_comparison_only_switch is True:
-					comparison_only_switch = []
-					boolean_comparison_only_switch = False
-
-				#filter samples for comparison
-				repo = functions.get_repo_name_from_path(path, repos)
-				if boolean_comparison_only_switch:
-					contrast = contrast.replace("_", " ")
-					metadata_df = metadata_df[metadata_df["condition"].isin(contrast.split("-vs-"))]
-				elif boolean_best_conditions_switch:
-					best_contrasts = config["repos"][repo]["best_comparisons"]
-					best_conditions = []
-					for best_contrast in best_contrasts:
-						best_contrast = best_contrast.replace("_", " ")
-						best_conditions_in_best_contrast = best_contrast.split("-vs-")
-						for best_condition in best_conditions_in_best_contrast:
-							if best_condition not in best_conditions:
-								best_conditions.append(best_condition)
-					metadata_df = metadata_df[metadata_df["condition"].isin(best_conditions)]				
-
-				#counts as y need external file with count values
-				if y_metadata in ["log2_expression", "log2_abundance"]:
-					counts = functions.download_from_github(path, "data/" + expression_dataset + "/counts/" + feature + ".tsv")
-					counts = pd.read_csv(counts, sep = "\t")
-					counts = counts.replace("_", " ", regex=True)
-					#merge and compute log2 and replace inf with 0
-					metadata_df = metadata_df.merge(counts, how="inner", on="sample")
-					metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
-					metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
-
-				#get trace names
-				if x_metadata == group_by_metadata:
-					column_for_filtering = x_metadata
-
-					#user defined list of condition
-					if x_metadata == "condition" and config["repos"][repo]["sorted_conditions"]  and boolean_comparison_only_switch is False and boolean_best_conditions_switch is False:
-						metadata_fields_ordered = config["repos"][repo]["condition_list"]
-						metadata_fields_ordered = [condition.replace("_", " ") for condition in metadata_fields_ordered]
-					else:
-						metadata_fields_ordered = metadata_df[x_metadata].unique().tolist()
-						metadata_fields_ordered.sort()
-				else:
-					column_for_filtering = group_by_metadata
-					metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
-					metadata_fields_ordered.sort()
-				#reset visible
-				visible = {}
-				for metadata in metadata_fields_ordered:
-					visible[metadata] = True
-
-				#grouped or not boxplot setup
-				boxmode = "overlay"
-				hidden = True
-				#get values that will be on the x axis
-				all_x_values = metadata_df[x_metadata].unique().tolist()
-				for x_value in all_x_values:
-					if boxmode != "group":
-						#filter df for x_value and get his traces
-						filtered_metadata = metadata_df[metadata_df[x_metadata] == x_value]
-						values_column_for_filtering = filtered_metadata[column_for_filtering].unique().tolist()
-						#if, for the same x, there is more than one trace, then should be grouped
-						if len(set(values_column_for_filtering)) > 1:
-							boxmode = "group"
-							hidden = False
-							#keep only selected x_values
-							selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
-							metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
-				
-				#clean metatranscriptomic genes
-				if "genes" in expression_dataset:
-					feature_gene = feature.split("@")[0]
-					feature_beast = feature.split("@")[1]
-					feature_beast = feature_beast.replace("_", " ")
-					feature = feature_gene + " - " + feature_beast
-
-				#create figure
-				box_fig = go.Figure()
-				for metadata in metadata_fields_ordered:
-					#slice metadata
-					filtered_metadata = metadata_df[metadata_df[column_for_filtering] == metadata]
-					#only 2 decimals
-					filtered_metadata = filtered_metadata.round(2)
-					#get x and y
-					if y_metadata in ["log2_expression", "log2_abundance"]:
-						y_values = filtered_metadata[log2_expression_or_abundance]
-						y_axis_title = "Log2 {}".format(expression_or_abundance)
-						if "genes" in expression_dataset:
-							title_text = feature + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
-						else:
-							title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
-					else:
-						y_values = filtered_metadata[y_metadata]
-						y_axis_title = y_metadata.replace("_", " ").capitalize()
-						title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
-					x_values = filtered_metadata[x_metadata]
-
-					#create hovertext
-					filtered_metadata["hovertext"] = ""
-					for column in filtered_metadata.columns:
-						if column not in ["control", "counts", "hovertext", "fq1", "fq2", "analysis_path", "host", "metatranscriptomics", "immune_profiling"]:
-							filtered_metadata["hovertext"] = filtered_metadata["hovertext"] + column.replace("_", " ").capitalize() + ": " + filtered_metadata[column].astype(str) + "<br>"
-					hovertext = filtered_metadata["hovertext"].tolist()
-
-					#create traces
-					marker_color = functions.get_color(color_mapping, column_for_filtering, metadata)
-					
-					if boolean_show_as_boxplot: 
-						box_fig.add_trace(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata]))
-					else:
-						box_fig.add_trace(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible[metadata], points="all", spanmode="hard"))
-
-				#figure layout
-				if width < 600:
-					#apply title if not present
-					if box_fig["layout"]["title"]["text"] is None:
-						box_fig["layout"]["title"]["text"] = title_text
-					
-					if "abundance" in box_fig["layout"]["title"]["text"]:
-						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
-					else:
-						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
-				if boolean_show_as_boxplot:
-					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), boxmode=boxmode, showlegend=True)
-				else:
-					box_fig.update_layout(title = {"text": title_text, "x": 0.5, "xanchor": "center", "xref": "paper", "font_size": 14, "y": 0.95}, legend_title_text=group_by_metadata.capitalize(), legend_yanchor="top", legend_y=1.2, yaxis_title=y_axis_title, xaxis_automargin=True, xaxis_tickangle=-90, yaxis_automargin=True, font_family="Arial", width=width, height=height, margin=dict(t=45, b=50, l=5, r=10), violinmode=boxmode, showlegend=True)
-			#take old fig
+			#if a gene is plotted and statistics is on but group by is not condition is not possible to computew statistics
+			if y_metadata == "log2_expression" and boolean_stats_switch is True and group_by_metadata != "condition":
+				boolean_stats_switch = False
+				stats_switch = []
+				stats_switch_options[0]["disabled"] = True
 			else:
-				box_fig = go.Figure(box_fig)
+				stats_switch_options[0]["disabled"] = False
 
-			#add statistics if necessary
+			#compute statistics
 			if boolean_stats_switch:
 			
 				#if the user changes the stringency, remove the old annotation if present
@@ -2056,21 +2051,6 @@ def define_callbacks(app):
 					#remove *
 					box_fig["layout"]["annotations"] = None
 
-				#force hide unselected
-				boolean_hide_unselected_switch = True
-				hide_unselected_switch = [1]
-				hide_unselected_stats_options = [{"label": "", "value": 1, "disabled": True}]
-
-				#get conditions in plot
-				conditions = []
-				mw_dict = {}
-				for trace in box_fig["data"]:
-					if trace["visible"] == True:
-						if trace["name"] not in conditions:
-							conditions.append(trace["name"])
-						if y_metadata != "log2_expression":
-							mw_dict[trace["name"]] = trace["y"]	
-				
 				#use dge for expression/abundance
 				if y_metadata == "log2_expression":
 					#get contrasts which have both conditions in the selected conditions in the plot
@@ -2083,12 +2063,13 @@ def define_callbacks(app):
 						conditions_in_contrast = contrast.split("-vs-")
 						condition_1 = conditions_in_contrast[0]
 						condition_2 = conditions_in_contrast[1]
-						if condition_1.replace("_", " ") in conditions and condition_2.replace("_", " ") in conditions:
+						#see if both conditions in contrasts are in the contrast
+						if condition_1.replace("_", " ") in metadata_fields_ordered and condition_2.replace("_", " ") in metadata_fields_ordered:
 							dge_table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
 							dge_table = pd.read_csv(dge_table, sep = "\t")
-							dge_table = dge_table.dropna(subset=["Gene"])
 							
 							#since feature names are clean, to filter the dge table we need to clean it
+							dge_table = dge_table.dropna(subset=["Gene"])
 							if expression_dataset in ["human", "mouse"]:
 								dge_table["clean_feature"] = [x.replace("€", "/") for x in dge_table["Gene"]]
 							else:
@@ -2106,6 +2087,7 @@ def define_callbacks(app):
 								else:
 									dge_table["clean_feature"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in dge_table["Gene"]]
 
+							#use only the selected gene in the table
 							dge_table = dge_table[dge_table["clean_feature"] == feature]
 							dge_table["Comparison"] = contrast.replace("-", " ").replace("_", " ")
 							contrasts_df_list.append(dge_table)
@@ -2116,7 +2098,7 @@ def define_callbacks(app):
 					#no need to concat
 					elif len(contrasts_df_list) == 1:
 						merged_df = dge_table
-					#no any contrast for the selected conditions: create mock df
+					#any contrast for the selected conditions: create mock df
 					else:
 						if expression_dataset in ["human", "mouse"]:
 							base_mean_label = "Average expression"
@@ -2131,25 +2113,30 @@ def define_callbacks(app):
 							gene_column_name = expression_dataset.replace("_", " ").capitalize()
 						merged_df = pd.DataFrame(columns=["Comparison", gene_column_name, "Geneid", base_mean_label, "log2FoldChange", "lfcSE", "stat", "pvalue", "padj"])
 
-					#identify degs
+					#identify degs and keep them in the plot
 					stringency = stringency.split("_")
 					pvalue_type = stringency[0]
 					pvalue_value = float(stringency[1])
 					merged_df.loc[(merged_df[pvalue_type] <= pvalue_value), "DEG"] = "DEG"
 					merged_df.loc[(merged_df["DEG"].isnull()), "DEG"] = "no_DEG"
 					merged_df = merged_df[merged_df["DEG"] == "DEG"]
-					#get all contrasts
+					#get all significant contrasts
 					contrasts = merged_df["Comparison"].unique().tolist()
-					merged_df = merged_df.set_index("Comparison")
 					#create data for statistics
+					merged_df = merged_df.set_index("Comparison")
 					data_for_statistics = {}
 					for contrast in contrasts:
-						data_for_statistics[contrast] = merged_df.loc[contrast, pvalue_type]
+						data_for_statistics[contrast] = "{:.2e}".format(merged_df.loc[contrast, pvalue_type])
 				#use MW for other values
 				else:
-					data_for_statistics = {}
+					mw_dict = {}
+					for trace in box_fig["data"]:
+						mw_dict[trace["name"]] = trace["y"]
+					
 					#get all combinations for conditions
-					all_combinations = list(combinations(conditions, 2))
+					all_combinations = list(combinations(list(mw_dict.keys()), 2))
+					#execute MW test for all comparisons
+					data_for_statistics = {}
 					for combination in all_combinations:
 						#get values for testng
 						mw_x = mw_dict[combination[0]]
@@ -2162,8 +2149,9 @@ def define_callbacks(app):
 					#get all contrasts
 					contrasts = data_for_statistics.keys()
 				
-				#add lines if necessary
+				#add lines for significant comparisons
 				if len(contrasts) > 0:
+					#find max_y and conditions
 					max_y = None
 					all_conditions = []
 					for trace in box_fig["data"]:
@@ -2178,7 +2166,7 @@ def define_callbacks(app):
 					for contrast in contrasts:
 						conditions = contrast.split(" vs ")
 						#add line
-						box_fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False))
+						box_fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False, name=contrast, visible=True))
 
 						#identify left condition
 						for condition in all_conditions:
@@ -2187,7 +2175,7 @@ def define_callbacks(app):
 								break
 
 						#add *
-						box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=data_for_statistics[contrast], font_family="Calibri", font_size=32, showarrow=False)
+						box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=data_for_statistics[contrast], font_family="Calibri", font_size=32, showarrow=False, name=contrast, visible=True)
 
 						#next line will be a bit upper the last one
 						y += y_increase
@@ -2203,30 +2191,139 @@ def define_callbacks(app):
 				#remove *
 				box_fig["layout"]["annotations"] = None
 
-			#when the switch is true, the legend is no longer interactive
-			if boolean_hide_unselected_switch:
-				box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
+			#general config for boxplots
+			config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
+
+			#transparent background
+			box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+
+			#plot_div_style
+			plot_div_style = {"width": width}
+		#take old fig
+		else:
+			box_fig = go.Figure(box_fig)
+
+			#slider resize
+			if trigger_id in ["boxplots_height_slider.value", "boxplots_width_slider.value"]:
+				box_fig["layout"]["height"] = height
+				box_fig["layout"]["width"] = width
+				plot_div_style = {"width": width}
+				if width < 600:
+					if "abundance" in box_fig["layout"]["title"]["text"]:
+						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" abundance", "<br>abundance")
+					else:
+						box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
+			#transform to boxplots or violins
+			elif trigger_id == "show_as_boxplot_switch.value":
+				new_traces = []
 				for trace in box_fig["data"]:
-					if trace["visible"] == "legendonly":
-						trace["visible"] = False
-			else:
-				box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
+					y_values = trace["y"]
+					x_values = trace["x"]
+					metadata = trace["name"]
+					marker_color = trace["marker"]["color"]
+					hovertext = trace["hovertext"]
+					visible = trace["visible"]
+					if boolean_show_as_boxplot:
+						new_traces.append(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible))
+					else:
+						new_traces.append(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible, points="all", spanmode="hard"))
+				box_fig["data"] = None
+				box_fig.add_traces(new_traces)
+
+				#figure layout
+				if "boxmode" in box_fig["layout"]:
+					boxmode = box_fig["layout"]["boxmode"]
+				elif "violinmode" in box_fig["layout"]:
+					boxmode = box_fig["layout"]["violinmode"]
+				if boolean_show_as_boxplot:
+					box_fig.update_layout(boxmode=boxmode)
+				else:
+					box_fig.update_layout(violinmode=boxmode)
+			#hide unselected traces
+			elif trigger_id == "hide_unselected_boxplot_switch.value":
+				if boolean_hide_unselected_switch:
+					box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
+					for trace in box_fig["data"]:
+						if trace["visible"] == "legendonly":
+							trace["visible"] = False
+				else:
+					box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
+					for trace in box_fig["data"]:
+						if trace["visible"] is False:
+							trace["visible"] = "legendonly"
+			#legend click when statistics switch is on
+			elif trigger_id == "boxplots_graph.restyleData" and boolean_stats_switch:
+				#parse figure data to get all the necessary infos
+				all_box_violin_traces = []
+				box_visible_traces = []
+				max_y = None
+				all_line_traces = {}
 				for trace in box_fig["data"]:
-					if trace["visible"] is False:
-						trace["visible"] = "legendonly"
+					#get box/violin traces
+					if "mode" not in trace:
+						all_box_violin_traces.append(trace)
+						#compute max y only for visible traces
+						if trace["visible"] is True:
+							box_visible_traces.append(trace["name"])
+							if max_y is None or max(trace["y"]) > max_y:
+								max_y = max(trace["y"])
 
-		#general config for boxplots
-		config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
+					#save lines which are part of visible traces
+					else:
+						all_line_traces[trace["name"]] = {}
+						all_line_traces[trace["name"]]["data"] = trace
+						#save visibility info
+						if trace["x"][0] in box_visible_traces and trace["x"][1] in box_visible_traces:
+							all_line_traces[trace["name"]]["visible"] = True
+						else:
+							all_line_traces[trace["name"]]["visible"] = False
 
-		#transparent background
-		box_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-		box_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
-		box_fig["layout"]["legend_bgcolor"] = "rgba(0,0,0,0)"
+				#get y_increase
+				y_increase = (max_y * 1.1) - max_y
 
-		#style
-		style = {"width": width}
+				#parse annotations and get all contrasts in the picture
+				figure_annotations = {}
+				for annotation in box_fig["layout"]["annotations"]:
+					figure_annotations[annotation["name"]] = annotation
+				contrasts = figure_annotations.keys()
 
-		return box_fig, config_boxplots, style, hidden, hide_unselected_switch, comparison_only_switch, best_conditions_switch, hide_unselected_stats_options, width, height
+				#reset traces and add all boxes
+				box_fig["data"] = None
+				box_fig.add_traces(all_box_violin_traces)
+
+				#update annotations and add lines with new coordinates
+				y = max_y + y_increase
+				updated_annotations = []
+				updated_line_traces = []
+				for contrast in contrasts:
+					#update y data if visible
+					if all_line_traces[contrast]["visible"]:
+						all_line_traces[contrast]["data"]["y"] = [y, y]
+						all_line_traces[contrast]["data"]["visible"] = True
+						figure_annotations[contrast]["y"] = y
+						figure_annotations[contrast]["visible"] = True
+
+						#increase y
+						y += y_increase
+					#hide if not visible
+					else:
+						all_line_traces[contrast]["data"]["visible"] = False
+						figure_annotations[contrast]["visible"] = False
+					
+					#save traces and annotations as list
+					updated_annotations.append(figure_annotations[contrast])
+					updated_line_traces.append(all_line_traces[contrast]["data"])
+
+				#add visible and hidden line traces
+				box_fig.add_traces(updated_line_traces)
+
+				#clear and add updated annotations
+				box_fig["layout"]["annotations"] = None
+				box_fig.update_layout(annotations=updated_annotations)
+
+		return box_fig, config_boxplots, plot_div_style, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, stats_switch, stats_switch_options, width, height
 
 	#MA-plot
 	@app.callback(
