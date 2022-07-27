@@ -1876,7 +1876,7 @@ def define_callbacks(app):
 			raise PreventUpdate
 
 		#new plot
-		if trigger_id in ["feature_dropdown.value", "contrast_dropdown.value", "x_boxplot_dropdown.value", "x_filter_boxplot_dropdown.value", "group_by_boxplot_dropdown.value", "y_boxplot_dropdown.value", "comparison_only_boxplots_switch.value", "best_conditions_boxplots_switch.value", "stringency_dropdown.value"]:
+		if trigger_id in ["feature_dropdown.value", "contrast_dropdown.value", "x_boxplot_dropdown.value", "x_filter_boxplot_dropdown.value", "group_by_boxplot_dropdown.value", "y_boxplot_dropdown.value", "comparison_only_boxplots_switch.value", "best_conditions_boxplots_switch.value", "stats_boxplots_switch.value", "stringency_dropdown.value"]:
 			#open metadata
 			metadata_df = functions.download_from_github(path, "metadata.tsv")
 			metadata_df = pd.read_csv(metadata_df, sep = "\t")
@@ -1890,10 +1890,13 @@ def define_callbacks(app):
 			boolean_hide_unselected_switch = False
 			
 			#default reset dimension values
-			if trigger_id == "comparison_only_boxplots_switch.value" or box_fig is None and boolean_comparison_only_switch:
+			if box_fig is None:
 				width = 500
 				height = 375
-			elif trigger_id != "comparison_only_boxplots_switch.value" and boolean_comparison_only_switch is False:
+			elif trigger_id == "comparison_only_boxplots_switch.value" and boolean_comparison_only_switch is True:
+				width = 500
+				height = 375
+			elif trigger_id == "comparison_only_boxplots_switch.value" and boolean_comparison_only_switch is False:
 				width = 900
 				height = 375
 
@@ -2028,8 +2031,8 @@ def define_callbacks(app):
 				else:
 					box_fig["layout"]["title"]["text"] = box_fig["layout"]["title"]["text"].replace(" expression", "<br>expression")
 
-			#if a gene is plotted and statistics is on but group by is not condition is not possible to computew statistics
-			if y_metadata == "log2_expression" and boolean_stats_switch is True and group_by_metadata != "condition":
+			#if a gene is plotted and statistics is on but group by is not condition is not possible to compute statistics
+			if y_metadata == "log2_expression" and boolean_stats_switch is True and group_by_metadata != "condition" or x_metadata != "condition":
 				boolean_stats_switch = False
 				stats_switch = []
 				stats_switch_options[0]["disabled"] = True
@@ -2038,7 +2041,7 @@ def define_callbacks(app):
 
 			#compute statistics
 			if boolean_stats_switch:
-			
+
 				#if the user changes the stringency, remove the old annotation if present
 				if trigger_id == "stringency_dropdown.value":
 					#remove lines
@@ -2179,6 +2182,12 @@ def define_callbacks(app):
 
 						#next line will be a bit upper the last one
 						y += y_increase
+
+						height += 25
+					
+					#update height
+					box_fig.update_layout(height=height)
+
 			#hide all statistics and remove them from the plot (if they are present)
 			else:
 				#remove lines
@@ -2190,6 +2199,9 @@ def define_callbacks(app):
 
 				#remove *
 				box_fig["layout"]["annotations"] = None
+				
+				#reset height
+				height = 375
 
 			#general config for boxplots
 			config_boxplots = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "boxplots_with_{feature}_{expression_or_abundance}_colored_by_{metadata}".format(feature=feature.replace("€", "_"), expression_or_abundance=expression_or_abundance, metadata=x_metadata)}, "edits": {"legendPosition": True, "titleText": True}, "doubleClickDelay": 1000}
@@ -2225,10 +2237,15 @@ def define_callbacks(app):
 					marker_color = trace["marker"]["color"]
 					hovertext = trace["hovertext"]
 					visible = trace["visible"]
-					if boolean_show_as_boxplot:
-						new_traces.append(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible))
+					#no need to change statistics lines
+					if "mode" in trace:
+						new_traces.append(trace)
+					#change trace type
 					else:
-						new_traces.append(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible, points="all", spanmode="hard"))
+						if boolean_show_as_boxplot:
+							new_traces.append(go.Box(y=y_values, x=x_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible))
+						else:
+							new_traces.append(go.Violin(y=y_values, x=x_values, name=metadata, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible, points="all", spanmode="hard"))
 				box_fig["data"] = None
 				box_fig.add_traces(new_traces)
 
@@ -3725,7 +3742,6 @@ def define_callbacks(app):
 		Output("comparison_only_multiboxplots_switch", "value"),
 		Output("best_conditions_multiboxplots_switch", "value"),
 		Output("hide_unselected_multiboxplots_switch", "value"),
-		Output("hide_unselected_multiboxplots_switch", "options"),
 		Output("multiboxplots_height_slider", "value"),
 		Output("multiboxplots_width_slider", "value"),
 		Output("stats_multiboxplots_switch", "options"),
@@ -3736,8 +3752,9 @@ def define_callbacks(app):
 		Output("stats_multixoplots_table", "data"),
 		Output("stats_multixoplots_table", "columns"),
 		## inputs
-		#update plot button
+		#update plot button and legend click
 		Input("update_multiboxplot_plot_button", "n_clicks"),
+		Input("multi_boxplots_graph", "restyleData"),
 		#dropdowns
 		Input("stringency_dropdown", "value"),
 		Input("x_multiboxplots_dropdown", "value"),
@@ -3759,7 +3776,6 @@ def define_callbacks(app):
 		State("feature_dataset_dropdown", "value"),
 		State("multi_boxplots_graph", "figure"),
 		State("multi_boxplots_graph", "config"),
-		State("hide_unselected_multiboxplots_switch", "options"),
 		State("stats_multiboxplots_switch", "options"),
 		State("x_filter_dropdown_multiboxplots_div", "hidden"),
 		State("analysis_dropdown", "value"),
@@ -3769,7 +3785,7 @@ def define_callbacks(app):
 		State("stats_multixoplots_table", "data"),
 		State("stats_multixoplots_table", "columns")
 	)
-	def plot_multiboxplots(n_clicks_multiboxplots, stringency, x_metadata, group_by_metadata, plot_per_row, selected_x_values, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, stats_switch, height, width, contrast, selected_features, expression_dataset, box_fig, config_multi_boxplots, hide_unselected_stats_options, show_stats_switch_options, x_filter_div_hidden, path, color_mapping, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns):
+	def plot_multiboxplots(n_clicks_multiboxplots, legend_click, stringency, x_metadata, group_by_metadata, plot_per_row, selected_x_values, comparison_only_switch, best_conditions_switch, hide_unselected_switch, show_as_boxplot_switch, stats_switch, height, width, contrast, selected_features, expression_dataset, box_fig, config_multi_boxplots, show_stats_switch_options, x_filter_div_hidden, path, color_mapping, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns):
 		# MEN1; CIT; NDC80; AURKA; PPP1R12A; XRCC2; ENSA; AKAP8; BUB1B; TADA3; DCTN3; JTB; RECQL5; YEATS4; CDK11B; RRM1; CDC25B; CLIP1; NUP214; CETN2
 		
 		##### FIGURE #####		
@@ -3786,11 +3802,11 @@ def define_callbacks(app):
 		boolean_stats_switch = functions.boolean_switch(stats_switch)
 
 		#conditions for which is not necessary to update the plot
-		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None or trigger_id == "stringency_dropdown.value" and boolean_stats_switch is False or trigger_id == "stringency_dropdown.value":
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None or trigger_id == "stringency_dropdown.value" and boolean_stats_switch is False or trigger_id == "stringency_dropdown.value" or trigger_id == "multi_boxplots_graph.restyleData" and boolean_stats_switch is False:
 			raise PreventUpdate
 
-		#can't display stats if x is not condition and y is not log2 expression/abundance
-		if x_metadata != "condition":
+		#can't display stats if x is not condition
+		if x_metadata != "condition" or group_by_metadata != "condition":
 			boolean_stats_switch = False
 			stats_switch = []
 			show_stats_switch_options = [{"label": "", "value": 1, "disabled": True}]
@@ -3810,11 +3826,8 @@ def define_callbacks(app):
 			#plot hidden div status
 			plot_hidden_status = False
 
-			#use existing plot
-			if trigger_id in ["hide_unselected_multiboxplots_switch.value", "multiboxplots_height_slider.value", "multiboxplots_width_slider.value", "stats_multiboxplots_switch.value", "stringency_dropdown.value"] and box_fig is not None:
-				box_fig = go.Figure(box_fig)
 			#create new plot
-			else:
+			if trigger_id in ["update_multiboxplot_plot_button.n_clicks", "x_multiboxplots_dropdown.value", "group_by_multiboxplots_dropdown.value", "x_filter_multiboxplots_dropdown.value", "comparison_only_multiboxplots_switch.value", "best_conditions_multiboxplots_switch.value", "stats_multiboxplots_switch.value", "stringency_dropdown.value"] or box_fig is None:
 				#open metadata
 				metadata_df_full = functions.download_from_github(path, "metadata.tsv")
 				metadata_df_full = pd.read_csv(metadata_df_full, sep = "\t")
@@ -3853,7 +3866,7 @@ def define_callbacks(app):
 
 				#create figure
 				box_fig = go.Figure()
-				
+
 				#define number of rows
 				if (len(selected_features) % plot_per_row) == 0:
 					n_rows = len(selected_features)/plot_per_row
@@ -3909,7 +3922,7 @@ def define_callbacks(app):
 						feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
 					subplot_titles.append(feature)
 				box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True,  vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
-
+				
 				#loop 1 plot per gene
 				working_row = 1
 				working_col = 1
@@ -4009,18 +4022,10 @@ def define_callbacks(app):
 
 				config_multi_boxplots = {"doubleClickDelay": 1000, "modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5, "filename": "multiboxplots_{title_text}".format(title_text = title_text.replace(" ", "_") + x_metadata)}, "edits": {"legendPosition": True, "titleText": True}}
 
-			#resize fig
-			if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_width_slider.value"]:
-				box_fig.update_layout(height=height, width=width)
-			#modify figure content
-			else:
 				#add statistics if necessary
 				if boolean_stats_switch:
 				
-					#force hide unselected
-					boolean_hide_unselected_switch = True
-					hide_unselected_switch = [1]
-					hide_unselected_stats_options = [{"label": "", "value": 1, "disabled": True}]
+					#show div for table
 					stats_div_hidden = False
 
 					#get genes in plot
@@ -4107,14 +4112,6 @@ def define_callbacks(app):
 					pvalue_value = stringency[1]
 					statistics_df.loc[(statistics_df[pvalue_type] <= float(pvalue_value)), "DEG"] = "DEG"
 					statistics_df.loc[(statistics_df["DEG"].isnull()), "DEG"] = "no_DEG"
-
-					#define number of rows
-					if (len(selected_features) % plot_per_row) == 0:
-						n_rows = len(selected_features)/plot_per_row
-					else:
-						n_rows = int(len(selected_features)/plot_per_row) + 1
-					n_rows = int(n_rows)
-					box_fig = make_subplots(figure=box_fig, rows=n_rows, cols=plot_per_row, vertical_spacing=(0.2/(n_rows)))
 					
 					#get genes in plot and in df
 					if expression_dataset in ["human", "mouse"]:
@@ -4135,7 +4132,7 @@ def define_callbacks(app):
 					col = 1
 					max_lines_per_row_to_add = 0
 					for gene in genes:
-						#count lines per gene
+						#count lines per row
 						max_lines_per_row = 0
 						
 						#get significant contrasts for each gene
@@ -4164,7 +4161,7 @@ def define_callbacks(app):
 							for contrast in contrasts:
 								conditions = contrast.split(" vs ")
 								#add line
-								box_fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False), row=row, col=col)
+								box_fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False, name=contrast), row=row, col=col)
 
 								#identify left condition
 								for condition in all_conditions:
@@ -4173,8 +4170,7 @@ def define_callbacks(app):
 										break
 
 								#add *
-								#hovertext=gene_df.loc[contrast, pvalue_type],
-								box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=gene_df.loc[contrast, pvalue_type], font_family="Calibri", font_size=32, showarrow=False, row=row, col=col)
+								box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=gene_df.loc[contrast, pvalue_type], font_family="Calibri", font_size=32, showarrow=False, name=contrast, row=row, col=col)
 
 								#next line will be a bit upper the last one
 								y += y_increase
@@ -4189,8 +4185,8 @@ def define_callbacks(app):
 							col = 1
 							row += 1
 					
-					#update height based on how many lines has been added
-					height += max_lines_per_row * 25
+					#update height based on how many max lines per row has been added
+					height += max_lines_per_row_to_add * 25
 				#hide all statistics and remove them from the plot (if they are present)
 				else:
 					#remove lines
@@ -4208,25 +4204,238 @@ def define_callbacks(app):
 					box_fig["layout"]["annotations"] = new_annotations
 
 					#other elements
-					hide_unselected_stats_options = [{"label": "", "value": 1, "disabled": False}]
 					stats_div_hidden = True
 					style_data_conditional = []
 					statistics_table_data = []
 					statistics_table_columns = []
 
-			#when the switch is true, the legend is no longer interactive
-			if boolean_hide_unselected_switch:
-				box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
-				for trace in box_fig["data"]:
-					if trace["visible"] == "legendonly" and "mode" not in trace:
-						trace["visible"] = False
-			else:
-				box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
-				for trace in box_fig["data"]:
-					if trace["visible"] is False and "mode" not in trace:
-						trace["visible"] = "legendonly"
+					#reset height
+					height = 250 + n_rows*220
 
-		return box_fig, config_multi_boxplots, plot_hidden_status, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, hide_unselected_stats_options, height, width, show_stats_switch_options, stats_switch, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns
+			#use existing plot
+			else:
+				box_fig = go.Figure(box_fig)
+
+				#recreate subplot structure only if necessary
+				if trigger_id in ["show_as_multiboxplot_switch.value", "multi_boxplots_graph.restyleData", "plot_per_row_multiboxplots_dropdown.value", "stats_multiboxplots_switch.value"]:
+					#define number of rows
+					if (len(selected_features) % plot_per_row) == 0:
+						n_rows = len(selected_features)/plot_per_row
+					else:
+						n_rows = int(len(selected_features)/plot_per_row) + 1
+					n_rows = int(n_rows)
+					
+					#relayout all the figure
+					if trigger_id == "plot_per_row_multiboxplots_dropdown.value":
+						specs = []
+						#define specs for each plot row
+						for i in range(0, n_rows):
+							specs.append([])
+							for y in range(0, plot_per_row):
+								specs[i].append({})
+						
+						#in case of odd number of selected elements, some plots in the grid are None
+						if (len(selected_features) % plot_per_row) != 0:
+							odd_elements_to_plot = len(selected_features) - plot_per_row * (n_rows - 1)
+							for i in range(1, ((plot_per_row + 1) - odd_elements_to_plot)):
+								specs[-1][-i] = None
+						
+						#get subplot titles and remove all annotations from figure
+						subplot_titles = []
+						statistics_pvalues = {}
+						for annotation in box_fig["layout"]["annotations"]:
+							if annotation["text"] != "*":
+								subplot_titles.append(annotation["text"])
+							else:
+								statistics_pvalues[annotation["name"]] = annotation["hovertext"]
+						box_fig["layout"]["annotations"] = None
+
+						#compute again row heights
+						row_height = 1/n_rows
+						row_heights = []
+						for i in range(0, n_rows):
+							row_heights.append(row_height)
+
+						#recreate subplot with new layout
+						box_fig = make_subplots(figure=box_fig, specs=specs, rows=n_rows, cols=plot_per_row, subplot_titles=subplot_titles, shared_xaxes=True, vertical_spacing=(0.2/(n_rows)))
+
+						#update feature annotation font on subplot titles
+						box_fig.update_layout(font_family="Arial")
+
+						#add * if necessary
+						for trace in box_fig["data"]:
+							if "mode" in trace:
+								box_fig.add_annotation(x=trace["x"][0], y=trace["y"][0], yshift=5, text="*", font_family="Calibri", font_size=32, showarrow=False, name=trace["name"], hovertext=statistics_pvalues[trace["name"]], xref=trace["xaxis"], yref=trace["yaxis"])
+					#just recreate subplot structure
+					else:
+						box_fig = make_subplots(figure=box_fig, rows=n_rows, cols=plot_per_row, vertical_spacing=(0.2/(n_rows)))
+
+				#resize fig
+				if trigger_id in ["multiboxplots_height_slider.value", "multiboxplots_width_slider.value"]:
+					box_fig.update_layout(height=height, width=width)
+				#transform to boxplots or violins
+				elif trigger_id == "show_as_multiboxplot_switch.value":
+					new_traces = {}
+					for trace in box_fig["data"]:
+						y_values = trace["y"]
+						x_values = trace["x"]
+						name = trace["name"]
+						legendgroup = trace["legendgroup"]
+						showlegend = trace["showlegend"]
+						marker_color = trace["marker"]["color"]
+						hovertext = trace["hovertext"]
+						visible = trace["visible"]
+						xaxis = trace["xaxis"]
+						if xaxis not in new_traces:
+							new_traces[xaxis] = []
+						#no need to change statistics lines
+						if "mode" in trace:
+							new_traces[xaxis].append(trace)
+						#change trace type
+						else:
+							if boolean_show_as_boxplot_switch:
+								new_traces[xaxis].append(go.Box(y=y_values, x=x_values, name=name, legendgroup=legendgroup, showlegend=showlegend, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible, xaxis=xaxis))
+							else:
+								new_traces[xaxis].append(go.Violin(y=y_values, x=x_values, name=name, legendgroup=legendgroup, marker_color=marker_color, hovertext=hovertext, hoverinfo="text", marker_size=3, line_width=4, visible=visible, xaxis=xaxis, points="all", spanmode="hard"))
+					
+					#clear data and add new traces in the right place
+					box_fig["data"] = None
+					col = 1
+					row = 1
+					for xaxis in new_traces:
+						#add traces
+						for trace in new_traces[xaxis]:
+							box_fig.add_trace(trace, col=col, row=row)
+						#update subplot coordinates
+						col += 1
+						if col > plot_per_row:
+							col = 1
+							row += 1
+
+					#figure layout
+					if "boxmode" in box_fig["layout"]:
+						boxmode = box_fig["layout"]["boxmode"]
+					elif "violinmode" in box_fig["layout"]:
+						boxmode = box_fig["layout"]["violinmode"]
+					if boolean_show_as_boxplot_switch:
+						box_fig.update_layout(boxmode=boxmode)
+					else:
+						box_fig.update_layout(violinmode=boxmode)
+				#hide unselected traces
+				elif trigger_id == "hide_unselected_multiboxplots_switch.value":
+					if boolean_hide_unselected_switch:
+						box_fig.update_layout(legend_itemclick=False, legend_itemdoubleclick=False)
+						for trace in box_fig["data"]:
+							if trace["visible"] == "legendonly":
+								trace["visible"] = False
+					else:
+						box_fig.update_layout(legend_itemclick="toggle", legend_itemdoubleclick="toggleothers")
+						for trace in box_fig["data"]:
+							if trace["visible"] is False:
+								trace["visible"] = "legendonly"
+				#legend click when statistics switch is on
+				elif trigger_id == "multi_boxplots_graph.restyleData" and boolean_stats_switch:
+					#parse figure data to get all the necessary infos
+					all_figure_data = {}
+					box_visible_traces = []
+					for trace in box_fig["data"]:
+						#setup xaxis
+						if trace["xaxis"] not in all_figure_data:
+							all_figure_data[trace["xaxis"]] = {"boxes": [], "contrasts": [], "lines": {}, "ymax": None}
+						
+						#get box/violin traces
+						if "mode" not in trace:
+							all_figure_data[trace["xaxis"]]["boxes"].append(trace)
+							if trace["visible"] is True:
+								#collect visible traces
+								if trace["name"] not in box_visible_traces:
+									box_visible_traces.append(trace["name"])
+								#save ymax
+								if all_figure_data[trace["xaxis"]]["ymax"] is None or max(trace["y"]) > all_figure_data[trace["xaxis"]]["ymax"]:
+									all_figure_data[trace["xaxis"]]["ymax"] = max(trace["y"])
+						#line traces
+						else:
+							#define visibility based on visible box traces
+							if trace["x"][0] in box_visible_traces and trace["x"][1] in box_visible_traces:
+								all_figure_data[trace["xaxis"]]["lines"][trace["name"]] = {"data": trace, "visible": True}
+							else:
+								all_figure_data[trace["xaxis"]]["lines"][trace["name"]] = {"data": trace, "visible": False}
+
+					#get y_increase for all xaxis
+					for xaxis in all_figure_data:
+						all_figure_data[xaxis]["y_increase"] = (all_figure_data[xaxis]["ymax"] * 1.2) - all_figure_data[xaxis]["ymax"]
+
+					#parse annotations
+					figure_annotations = {}
+					for annotation in box_fig["layout"]["annotations"]:
+						#add xref if not present
+						if annotation["xref"] not in figure_annotations:
+							if annotation["xref"] != "paper":
+								figure_annotations[annotation["xref"]] = {}
+							else:
+								figure_annotations[annotation["xref"]] = []
+						
+						#statistics and genes annotations are different
+						if annotation["xref"] != "paper":
+							figure_annotations[annotation["xref"]][annotation["name"]] = annotation
+						else:
+							figure_annotations[annotation["xref"]].append(annotation)
+
+					#reset traces and add all boxes
+					box_fig["data"] = None
+					col = 1
+					row = 1
+					for xaxis in all_figure_data:
+						#add traces
+						for trace in all_figure_data[xaxis]["boxes"]:
+							box_fig.add_trace(trace, col=col, row=row)
+						
+						#update subplot coordinates
+						col += 1
+						if col > plot_per_row:
+							col = 1
+							row += 1
+
+					#update annotations and add lines with new coordinates
+					updated_line_traces = []
+					updated_annotations = []
+					for xref in figure_annotations:
+						#modify only *, do not touch feature names on subplot titles
+						if xref != "paper":
+							y = all_figure_data[xref]["ymax"] + all_figure_data[xref]["y_increase"]
+							for contrast in all_figure_data[xref]["lines"]:
+								#update y data if visible
+								if all_figure_data[xref]["lines"][contrast]["visible"]:
+									#update lines
+									all_figure_data[xref]["lines"][contrast]["data"]["y"] = [y, y]
+									all_figure_data[xref]["lines"][contrast]["data"]["visible"] = True
+									#update *
+									figure_annotations[xref][contrast]["y"] = y
+									figure_annotations[xref][contrast]["visible"] = True
+
+									#increase y
+									y += all_figure_data[xref]["y_increase"]
+								else:
+									all_figure_data[xref]["lines"][contrast]["data"]["visible"] = False
+									figure_annotations[xref][contrast]["visible"] = False
+							
+								#save updated line traces on a list
+								updated_line_traces.append(all_figure_data[xref]["lines"][contrast]["data"])
+						
+								#save updated annotation in list
+								updated_annotations.append(figure_annotations[xref][contrast])
+						#for feature annotation there is no contrast
+						else:
+							updated_annotations.extend(figure_annotations[xref])
+					
+					#add visible and hidden line traces
+					box_fig.add_traces(updated_line_traces)
+
+					#clear and add updated annotations
+					box_fig["layout"]["annotations"] = None
+					box_fig.update_layout(annotations=updated_annotations)
+
+		return box_fig, config_multi_boxplots, plot_hidden_status, x_filter_div_hidden, comparison_only_switch, best_conditions_switch, hide_unselected_switch, height, width, show_stats_switch_options, stats_switch, stats_div_hidden, style_data_conditional, statistics_table_data, statistics_table_columns
 	
 	#correlation plot
 	@app.callback(

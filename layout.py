@@ -335,7 +335,7 @@ main_layout = html.Div([
 					#height slider
 					html.Div([
 						html.Label(["Height",
-							dcc.Slider(id="boxplots_height_slider", min=200, max=500, step=1, marks=None)
+							dcc.Slider(id="boxplots_height_slider", min=200, max=750, step=1, marks=None)
 						], style={"width": "100%", "height": "30px", "display": "inline-block"})
 					], style={"width": "20%", "display": "inline-block", "vertical-align": "middle"}),
 					#width slider
@@ -357,7 +357,6 @@ main_layout = html.Div([
 			], style={"width": "80%", "display": "inline-block", "vertical-align": "middle", "font-size": "12px"}),
 
 			#plot
-			dcc.Store(id="data_for_statistics_boxplots"),
 			html.Div([
 				html.Div(id="boxplot_div", children=[
 					dbc.Spinner(
@@ -891,7 +890,7 @@ multi_violin_tab_layout = html.Div([
 				html.Div([
 					#height slider
 					html.Label(["Height",
-						dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max=2000, marks=None)
+						dcc.Slider(id="multiboxplots_height_slider", min=200, step=1, max=3250, marks=None)
 					], style={"width": "49.5%", "display": "inline-block"}),
 					#spacer
 					html.Div([], style={"width": "1%", "display": "inline-block"}),
