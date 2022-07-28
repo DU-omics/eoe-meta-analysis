@@ -9,6 +9,7 @@ from dash.dash_table.Format import Format, Scheme
 import pandas as pd
 import numpy as np
 import re
+import os
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.figure_factory as ff
@@ -131,15 +132,31 @@ def define_callbacks(app):
 		metadata_table = metadata_table.rename(columns=label_to_value)
 		metadata_table_columns = []
 		for column in metadata_table.columns:
-			metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": column})
+			if column == "Source":
+				markdown_source_column = []
+				for source in metadata_table[column]:
+					#identify url
+					if source.startswith("GSE"):
+						url = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
+					elif source.startswith("SRP"):
+						url = "https://trace.ncbi.nlm.nih.gov/Traces/index.html?view=study&acc="
+					elif source.startswith("ERP"):
+						url = "https://www.ebi.ac.uk/ena/browser/view/"
+					#create markdown
+					markdown_source_column.append(f"[{source}]({url}{source})")
+				#add markwdown source column
+				metadata_table["markdown_source"] = markdown_source_column
+				metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": "markdown_source", "type": "text", "presentation": "markdown"})
+			else:
+				metadata_table_columns.append({"name": column.capitalize().replace("_", " "), "id": column})
 		metadata_table_data = metadata_table.to_dict("records")
 
 		#header
 		repo = functions.get_repo_name_from_path(path, repos)
-		if config["repos"][repo]["logo"] == "NA":
+		if config["repos"][repo]["additional_assets_folder"] == "NA":
 			header_children = html.Div(repo, style={"width": "100%", "font-size": 50, "text-align": "center"})
 		else:
-			header_children = html.Img(src=config["repos"][repo]["logo"], alt="logo", style={"width": "70%", "height": "70%"}, title=repo)
+			header_children = html.Img(src=config["repos"][repo]["additional_assets_folder"] + "logo.png", alt="logo", style={"width": "70%", "height": "70%"}, title=repo)
 
 		#tabs
 		#metadata tab
@@ -305,6 +322,29 @@ def define_callbacks(app):
 		return children
 
 	### metadata tab ###
+
+	@app.callback(
+		Output("workflow_div", "children"),
+		Output("workflow_div", "hidden"),
+		Input({"type": "tabs", "id": "main_tabs"}, "value"),
+		State("analysis_dropdown", "value")
+	)
+	def get_workflow(tab_value, path):
+		repo = functions.get_repo_name_from_path(path, repos)
+		if config["repos"][repo]["additional_assets_folder"] == "NA":
+			children = []
+			hidden = True
+		else:
+			workflow_png = config["repos"][repo]["additional_assets_folder"] + "workflow.png"
+			if os.path.exists(workflow_png):
+				children = [html.Img(src=workflow_png, alt="logo", style={"width": "50%", "height": "50%"}, title=repo + " workflow"), html.Br(), html.Br()]
+				hidden = False
+			else:
+				children = []
+				hidden = True
+		
+		return children, hidden
+
 
 	#update metadata tab content
 	@app.callback(
@@ -1187,6 +1227,7 @@ def define_callbacks(app):
 	)
 	def download_metadata(button_click, metadata_table):
 		metadata_table = pd.DataFrame(metadata_table)
+		metadata_table = metadata_table.drop(columns=["markdown_source"])
 		
 		with tempfile.TemporaryDirectory() as tmpdir:
 			writer = pd.ExcelWriter(f"{tmpdir}/metadata.xlsx")

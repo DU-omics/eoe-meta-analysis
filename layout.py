@@ -481,6 +481,8 @@ main_layout = html.Div([
 metadata_tab_layout = html.Div([
 	html.Br(),
 
+	html.Div(id="workflow_div", hidden=True),
+
 	#download metadata button
 	html.Div([
 		dbc.Spinner(

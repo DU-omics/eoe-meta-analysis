@@ -9,7 +9,7 @@ github:
 repos:
   "EoE TaMMA":
     analysis: "EoE TaMMA"
-    logo: "assets/eoe_tamma_logo.png"
+    additional_assets_folder: "assets/eoe_tamma/"
     path: "DU-omics/eoe-meta-analysis_data/master/"
     stringency: "padj_1e-5"
     gene: "CXCL14"
