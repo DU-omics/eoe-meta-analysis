@@ -9,7 +9,6 @@ github:
 repos:
   "EoE TaMMA":
     analysis: "EoE TaMMA"
-    additional_assets_folder: "assets/eoe_tamma/"
     path: "DU-omics/eoe-meta-analysis_data/master/"
     stringency: "padj_1e-5"
     gene: "CXCL14"
@@ -38,8 +37,18 @@ external_resources:
     link_root: https://ibd.broadinstitute.org/gene/
     column_to_use: "Gene ID"
 
-#opentargets
-opentargets: False
+#footer
+footer: "
+  © Copyright 2022 [Luca Massimino](https://scholar.google.com/citations?user=zkPRE9oAAAAJ&hl), 
+  [Luigi Antonio Lamparelli](https://scholar.google.com/citations?hl=en&user=D4JB6sQAAAAJ), 
+  [Alberto Barchi](https://it.linkedin.com/in/alberto-barchi-664a9b180), 
+  [Francesco Vito Mandarino](https://www.researchgate.net/profile/Francesco-Mandarino-2), 
+  [Federica Ungaro](https://scholar.google.com/citations?user=CYfM7wsAAAAJ&hl), 
+  [Silvio Danese](https://scholar.google.com/citations?hl=en&user=2ia1nGUAAAAJ) - 
+  [Report a bug](https://github.com/DU-omics/eoe-meta-analysis/issues) - 
+  [Suggestions](https://github.com/DU-omics/eoe-meta-analysis/issues) - 
+  [How to cite us](https://www.nature.com/articles/s43588-021-00114-y)
+"
 
 palette:
   - "#1f78b4"

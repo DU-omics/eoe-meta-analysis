@@ -24,7 +24,7 @@ from itertools import combinations
 import functions
 from functions import config, colors, gender_colors, na_color, repos, tab_style, tab_selected_style
 
-from layout import metadata_tab_layout, heatmap_tab_layout, multi_violin_tab_layout, correlation_tab_layout, diversity_tab_layout, dge_tab_layout, go_tab_layout, mofa_tab_layout, deconvolution_tab_layout
+from layout import metadata_table_tab_layout, sankey_tab_layout, heatmap_tab_layout, multi_violin_tab_layout, correlation_tab_layout, diversity_tab_layout, dge_tab_layout, go_tab_layout, mofa_tab_layout, deconvolution_tab_layout
 
 def define_callbacks(app):
 
@@ -153,10 +153,10 @@ def define_callbacks(app):
 
 		#header
 		repo = functions.get_repo_name_from_path(path, repos)
-		if config["repos"][repo]["additional_assets_folder"] == "NA":
-			header_children = html.Div(repo, style={"width": "100%", "font-size": 50, "text-align": "center"})
+		if os.path.exists("assets/logo.png"):
+			header_children = html.Img(src="assets/logo.png", alt="logo", style={"width": "70%", "height": "70%"}, title=repo)
 		else:
-			header_children = html.Img(src=config["repos"][repo]["additional_assets_folder"] + "logo.png", alt="logo", style={"width": "70%", "height": "70%"}, title=repo)
+			header_children = html.Div(repo, style={"width": "100%", "font-size": 50, "text-align": "center"})
 
 		#tabs
 		#metadata tab
@@ -238,7 +238,7 @@ def define_callbacks(app):
 		if children is None:
 			trigger_id = "metadata_tab"
 
-		all_possible_tabs = ["metadata_tab", "profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab", "differential_analysis_tab", "dge_tab", "go_tab", "mofa_tab", "deconvolution_tab"]
+		all_possible_tabs = ["metadata_tab", "analysis_overview_tab", "metadata_table_tab", "profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab", "differential_analysis_tab", "dge_tab", "go_tab", "mofa_tab", "deconvolution_tab"]
 		
 		#add diversity tab only if the drodpown has been switched to metatrasncriptomics species and the profiling tab is selected
 		if "species" in trigger_id:
@@ -256,8 +256,23 @@ def define_callbacks(app):
 		if trigger_id in all_possible_tabs:
 
 			#metadata
-			if trigger_id == "metadata_tab":
-				children = [metadata_tab_layout]
+			if trigger_id in ["metadata_tab", "analysis_overview_tab", "metadata_table_tab"]:
+				#overview or default
+				if trigger_id in ["metadata_tab", "analysis_overview_tab"]:
+					metadata_tab_value = "analysis_overview_tab"
+					tab_layout = sankey_tab_layout
+				else:
+					metadata_tab_value = "metadata_table_tab"
+					tab_layout = metadata_table_tab_layout
+				
+				#populate children
+				children = [
+					dcc.Tabs(id={"type": "tabs", "id": "metadata_tabs"}, value=metadata_tab_value, style= {"height": 40}, children=[
+						dcc.Tab(id="analysis_overview_tab", label="Analysis overview", value="analysis_overview_tab", style=tab_style, selected_style=tab_selected_style),
+						dcc.Tab(id="metadata_table_tab", label="Sample characteristics", value="metadata_table_tab", style=tab_style, selected_style=tab_selected_style),
+					])
+				]
+				children = children + [tab_layout]
 			#profiling
 			elif trigger_id in ["profiling_tab", "heatmap_tab", "multi_violin_tab", "feature_correlation_tab", "diversity_tab"]:
 				#heatmap or default
@@ -308,7 +323,8 @@ def define_callbacks(app):
 					dcc.Tabs(id={"type": "tabs", "id": "differential_analysis_tabs"}, value=differential_analysis_tab_value, style= {"height": 40}, children=[
 						dcc.Tab(id="dge_tab", value="dge_tab", style=tab_style, selected_style=tab_selected_style),
 						dcc.Tab(id="go_tab", value="go_tab", style=tab_style, selected_style=tab_selected_style),
-					])]
+					])
+				]
 				children = children + [tab_layout]
 			#mofa
 			elif trigger_id == "mofa_tab":
@@ -323,37 +339,32 @@ def define_callbacks(app):
 
 	### metadata tab ###
 
+	#workflow
 	@app.callback(
 		Output("workflow_div", "children"),
 		Output("workflow_div", "hidden"),
-		Input({"type": "tabs", "id": "main_tabs"}, "value"),
-		State("analysis_dropdown", "value")
+		Input({"type": "tabs", "id": "metadata_tabs"}, "value"),
+		Input("analysis_dropdown", "value")
 	)
 	def get_workflow(tab_value, path):
-		repo = functions.get_repo_name_from_path(path, repos)
-		if config["repos"][repo]["additional_assets_folder"] == "NA":
+		if os.path.exists("assets/workflow.png"):
+			children = [html.Img(src="assets/workflow.png", alt="logo", style={"width": "50%", "height": "50%"}, title="workflow"), html.Br(), html.Br()]
+			hidden = False
+		else:
 			children = []
 			hidden = True
-		else:
-			workflow_png = config["repos"][repo]["additional_assets_folder"] + "workflow.png"
-			if os.path.exists(workflow_png):
-				children = [html.Img(src=workflow_png, alt="logo", style={"width": "50%", "height": "50%"}, title=repo + " workflow"), html.Br(), html.Br()]
-				hidden = False
-			else:
-				children = []
-				hidden = True
 		
 		return children, hidden
 
-
-	#update metadata tab content
+	#update metadata table
 	@app.callback(
 		Output("metadata_table", "data"),
 		Output("metadata_table", "columns"),
-		Input("metadata_table_store", "data"),
-		Input("metadata_columns_store", "data"),
+		Input({"type": "tabs", "id": "metadata_tabs"}, "value"),
+		State("metadata_table_store", "data"),
+		State("metadata_columns_store", "data"),
 	)
-	def update_metadata_tab_content(metadata_table_data, metadata_table_columns):
+	def update_metadata_table(tab_click, metadata_table_data, metadata_table_columns):
 		return metadata_table_data, metadata_table_columns
 
 	### profiling tab ##
@@ -748,20 +759,21 @@ def define_callbacks(app):
 		Input("analysis_dropdown", "value")
 	)
 	def get_stringency_value(expression_dataset, path):	
-		if expression_dataset in ["human", "mouse"]:
+		if expression_dataset is None:
+			raise PreventUpdate
+		
+		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 			folders = functions.get_content_from_github(path, "data/{}".format(expression_dataset))
 			options = []
 			#get all dge analyisis performed
 			for folder in folders:
 				if folder not in ["counts", "dge", "mds", "gsea"]:
-					#label will be constructed
-					label = ""
 					#strincecy type
 					stringency_type = folder.split("_")[0]
 					if stringency_type == "pvalue":
-						label += "P-value "
+						label = "P-value "
 					else:
-						label += "FDR "
+						label = "FDR "
 					#stringency value
 					stringency_value = folder.split("_")[1]
 					label += stringency_value
@@ -771,7 +783,10 @@ def define_callbacks(app):
 		
 			#default value defined in config file
 			repo = functions.get_repo_name_from_path(path, repos)
-			value = functions.config["repos"][repo]["stringency"]
+			if expression_dataset in ["human", "mouse"]:
+				value = functions.config["repos"][repo]["stringency"]
+			else:
+				value = options[0]["value"]
 		else:
 			options = [{"label": "P-value 0.05", "value": "pvalue_0.05"}]
 			value = "pvalue_0.05"
@@ -1611,7 +1626,9 @@ def define_callbacks(app):
 	)
 	def display_go_table(contrast, stringency, search_value, expression_dataset, add_gsea_switch, path):
 		if expression_dataset not in ["human", "mouse", "lipid", "lipid_category"]:
-			raise PreventUpdate
+			expression_dataset = "human"
+			repo = functions.get_repo_name_from_path(path, repos)
+			stringency = config["repos"][repo]["stringency"]
 		
 		#boolean switch
 		boolean_add_gsea_switch = functions.boolean_switch(add_gsea_switch)
@@ -1770,12 +1787,12 @@ def define_callbacks(app):
 			else:
 				omics = "transcriptome"
 			if mds_dataset in ["human", "mouse"]:
-				mds_title = mds_dataset
+				mds_title = mds_dataset.capitalize()
 			else:
-				mds_title = mds_dataset.replace("_", " ")
+				mds_title = mds_dataset.replace("_", " ").capitalize()
 
 			#titles for subplots
-			left_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + metadata.replace("_", " ") + " metadata n="
+			left_title = mds_title + " " + omics + " MDS<br>colored by " + metadata.replace("_", " ") + " n="
 			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
 				expression_or_abundance = " expression"
 			else:
@@ -1785,9 +1802,9 @@ def define_callbacks(app):
 				feature_beast = feature.split("@")[1]
 				feature_beast = feature_beast.replace("_", " ")
 				feature_clean = feature_gene + " - " + feature_beast
-				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS colored by<br>" + feature_clean + expression_or_abundance + " n="
+				right_title = mds_title + " " + omics + " MDS colored by<br>" + feature_clean + expression_or_abundance + " n="
 			else:
-				right_title = "Sample dispersion within<br>the " + mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n="
+				right_title = mds_title + " " + omics + " MDS<br>colored by " + feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + expression_or_abundance + " n="
 
 			#operations on mds_df
 			mds_df = mds_df.sort_values(by=[metadata])
@@ -1983,6 +2000,24 @@ def define_callbacks(app):
 				metadata_df[log2_expression_or_abundance] = np.log2(metadata_df["counts"])
 				metadata_df[log2_expression_or_abundance].replace(to_replace = -np.inf, value = 0, inplace=True)
 
+				#clean metatranscriptomic genes
+				if "genes" in expression_dataset:
+					feature_gene = feature.split("@")[0]
+					feature_beast = feature.split("@")[1]
+					feature_beast = feature_beast.replace("_", " ")
+					feature = feature_gene + " - " + feature_beast
+
+				#title text
+				if expression_dataset in ["human", "mouse"]:
+					title_text = feature + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+				else:
+					if "genes" in expression_dataset:
+						title_text = feature + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+					else:
+						title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
+			else:
+				title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
+
 			#get trace names
 			if x_metadata == group_by_metadata:
 				column_for_filtering = x_metadata
@@ -2016,13 +2051,6 @@ def define_callbacks(app):
 						#keep only selected x_values
 						selected_x_values = [x_value.replace("_", " ") for x_value in selected_x_values]
 						metadata_df = metadata_df[metadata_df[x_metadata].isin(selected_x_values)]
-			
-			#clean metatranscriptomic genes
-			if "genes" in expression_dataset:
-				feature_gene = feature.split("@")[0]
-				feature_beast = feature.split("@")[1]
-				feature_beast = feature_beast.replace("_", " ")
-				feature = feature_gene + " - " + feature_beast
 
 			#create figure
 			box_fig = go.Figure()
@@ -2035,14 +2063,9 @@ def define_callbacks(app):
 				if y_metadata in ["log2_expression", "log2_abundance"]:
 					y_values = filtered_metadata[log2_expression_or_abundance]
 					y_axis_title = "Log2 {}".format(expression_or_abundance)
-					if "genes" in expression_dataset:
-						title_text = feature + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
-					else:
-						title_text = feature.replace("_", " ").replace("[", "").replace("]", "").replace("€", "/") + " {} profile per ".format(expression_or_abundance) + x_metadata.replace("_", " ").capitalize()
 				else:
 					y_values = filtered_metadata[y_metadata]
 					y_axis_title = y_metadata.replace("_", " ").capitalize()
-					title_text = "{y_metadata} profile per {x_metadata}".format(y_metadata=y_metadata.replace("_", " ").capitalize(), x_metadata=x_metadata.replace("_", " ").capitalize())
 				x_values = filtered_metadata[x_metadata]
 
 				#create hovertext
@@ -2164,13 +2187,23 @@ def define_callbacks(app):
 					merged_df.loc[(merged_df[pvalue_type] <= pvalue_value), "DEG"] = "DEG"
 					merged_df.loc[(merged_df["DEG"].isnull()), "DEG"] = "no_DEG"
 					merged_df = merged_df[merged_df["DEG"] == "DEG"]
+
+					#if for the selected gene there are more geneids, can't display pvalue and show different annotation symbol
+					if len(merged_df) > 1:
+						statistics_annotation = "#"
+					else:
+						statistics_annotation = "*"
+
 					#get all significant contrasts
 					contrasts = merged_df["Comparison"].unique().tolist()
 					#create data for statistics
 					merged_df = merged_df.set_index("Comparison")
 					data_for_statistics = {}
 					for contrast in contrasts:
-						data_for_statistics[contrast] = "{:.2e}".format(merged_df.loc[contrast, pvalue_type])
+						if statistics_annotation == "*":
+							data_for_statistics[contrast] = "{:.2e}".format(merged_df.loc[contrast, pvalue_type])
+						else:
+							data_for_statistics[contrast] = ""
 				#use MW for other values
 				else:
 					mw_dict = {}
@@ -2219,7 +2252,13 @@ def define_callbacks(app):
 								break
 
 						#add *
-						box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=data_for_statistics[contrast], font_family="Calibri", font_size=32, showarrow=False, name=contrast, visible=True)
+						if statistics_annotation == "*":
+							font_size = 32
+							yshift = 5
+						else:
+							font_size = 25
+							yshift = 10
+						box_fig.add_annotation(x=left_condition, y=y, yshift=yshift, text=statistics_annotation, hovertext=data_for_statistics[contrast], font_family="Calibri", font_size=font_size, showarrow=False, name=contrast, visible=True)
 
 						#next line will be a bit upper the last one
 						y += y_increase
@@ -2387,214 +2426,186 @@ def define_callbacks(app):
 	@app.callback(
 		Output("ma_plot_graph", "figure"),
 		Output("ma_plot_graph", "config"),
-		Input("feature_dataset_dropdown", "value"),
 		Input("contrast_dropdown", "value"),
 		Input("stringency_dropdown", "value"),
 		Input("feature_dropdown", "value"),
-		State("analysis_dropdown", "value")
+		Input("ma_plot_annotation_dropdown", "value"),
+		State("feature_dataset_dropdown", "value"),
+		State("analysis_dropdown", "value"),
+		State("ma_plot_graph", "figure"),
+		State("ma_plot_graph", "config")
 	)
-	def plot_MA_plot(expression_dataset, contrast, stringency_info, feature, path):
+	def plot_MA_plot(contrast, stringency_info, feature, desired_annotations, expression_dataset, path, ma_plot_fig, config_ma_plot):
+		#define contexts
+		ctx = dash.callback_context
+		trigger_id = ctx.triggered[0]["prop_id"]
 
+		#colors for plot traces (gray, blue, red, lightgray)
+		colors_ma_plot = {"no_DEG": "#636363", "down": "#045A8D", "up": "#D7301F", "selected": "#D9D9D9"}
 		#stingency specs
 		pvalue_type = stringency_info.split("_")[0]
 		pvalue_value = stringency_info.split("_")[1]
-
-		#labels
+		if pvalue_type == "padj":
+			pvalue_type_for_labels = "FDR"
+		else:
+			pvalue_type_for_labels = "P-value"
+		#feature label
 		if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
-			if expression_dataset in ["human", "mouse"]:
-				feature = feature.replace("€", "/")
-			else:
-				feature_gene = feature.split("@")[0]
-				feature_beast = feature.split("@")[1]
-				feature_beast = feature_beast.replace("_", " ")
-				feature = feature_gene + " - " + feature_beast
 			gene_or_species = "Gene"
-			expression_or_abundance = expression_dataset.split("_")[0] + " gene expression"
-			xaxis_title = "Log2 average expression"
 		else:
-			feature = feature.replace("_", " ").replace("[", "").replace("]", "")
-			xaxis_title = "Log2 average abundance"
 			gene_or_species = expression_dataset.replace("_", " ")
-			expression_or_abundance = gene_or_species + " abundance"
-			gene_or_species = gene_or_species
 
-		#read table
-		table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
-		table = pd.read_csv(table, sep = "\t")
-		table["Gene"] = table["Gene"].fillna("NA")
-		#log2 base mean
-		table["log2_baseMean"] = np.log2(table["baseMean"])
-		#clean gene/species name
-		if "genes" in expression_dataset:
-			clean_genes = []
-			for x in table["Gene"]:
-				x_gene = x.split("@")[0]
-				x_beast = x.split("@")[1]
-				x_beast = x_beast.replace("_", " ")
-				x = x_gene + " - " + x_beast
-				clean_genes.append(x)
-			table["Gene"] = clean_genes
-		else:
-			table["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table["Gene"]]
-
-		#find DEGs and selected gene
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0) & (table["Gene"] != feature), "DEG"] = "Up"
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0) & (table["Gene"] != feature), "DEG"] = "Down"
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0) & (table["Gene"] == feature), "DEG"] = "selected_Up"
-		table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0) & (table["Gene"] == feature), "DEG"] = "selected_Down"
-		table.loc[(table["DEG"].isnull()) & (table["Gene"] != feature), "DEG"] = "no_DEG"
-		table.loc[(table["DEG"].isnull()) & (table["Gene"] == feature), "DEG"] = "selected_no_DEG"
-
-		#replace nan values with NA
-		table = table.fillna(value={pvalue_type: "NA"})
-
-		#count DEGs
-		up = table[table["DEG"] == "Up"]
-		up = len(up["Gene"])
-		up_selected = table[table["DEG"] == "selected_Up"]
-		up += len(up_selected["Gene"])
-		down = table[table["DEG"] == "Down"]
-		down = len(down["Gene"])
-		down_selected = table[table["DEG"] == "selected_Down"]
-		down += len(down_selected["Gene"])
-
-		#find out if the selected gene have more than 1 gene ID
-		filtered_table = table[table["Gene"] == feature]
-		number_of_geneids_for_gene = len(filtered_table["Gene"])
-
-		#if there are more gene ID for the same gene, a warning should appear on the ceneter of the plot
-		if number_of_geneids_for_gene > 1:
-			max_x = table["log2_baseMean"].max()
-			min_x = table["log2_baseMean"].min()
-			mid_x = (max_x + min_x)/2 
-			max_y = table["log2FoldChange"].max()
-			min_y = table["log2FoldChange"].min()
-			mid_y = (max_y + min_y)/2
-
-		#colors for plot traces (gray, red, blue, lightgray)
-		colors_ma_plot = {"no_deg": "#636363", "down": "#045A8D", "up": "#D7301F", "selected": "#D9D9D9"}
-		#rename column if not human
-		if expression_dataset not in ["human", "mouse"]:
-			table = table.rename(columns={"Gene": gene_or_species})
-
-		#plot
-		ma_plot_fig = go.Figure()
-		for deg_status in ["no_DEG", "Up", "Down", "selected_no_DEG", "selected_Up", "selected_Down"]:
-			#params for trace
-			marker_size = 5
-			marker_line = {"color": None, "width": None}
-			if "up" in deg_status.lower():
-				color = colors_ma_plot["up"]
-			elif "down" in deg_status.lower():
-				color = colors_ma_plot["down"]
+		#new plot
+		if trigger_id in ["contrast_dropdown.value", "stringency_dropdown.value", "feature_dropdown.value"]:
+			#labels
+			if expression_dataset in ["human", "mouse"] or "genes" in expression_dataset:
+				if expression_dataset in ["human", "mouse"]:
+					feature = feature.replace("€", "/")
+				else:
+					feature_gene = feature.split("@")[0]
+					feature_beast = feature.split("@")[1]
+					feature_beast = feature_beast.replace("_", " ")
+					feature = feature_gene + " - " + feature_beast
+				expression_or_abundance = expression_dataset.split("_")[0] + " gene expression"
+				xaxis_title = "Log2 average expression"
 			else:
-				color = colors_ma_plot["no_deg"]
-			filtered_table = table[table["DEG"] == deg_status]
-			#custom data and hover template
-			custom_data = filtered_table[[gene_or_species, pvalue_type, "log2_baseMean", "log2FoldChange"]]
-			custom_data = custom_data.fillna("NA")
-			if pvalue_type == "padj":
-				pvalue_type_for_labels = "FDR"
-			else:
-				pvalue_type_for_labels = "P-value"
-			hover_template = gene_or_species.capitalize() + ": %{{customdata[0]}}<br>{pvalue_type}: %{{customdata[1]:.2e}}<br>{expression_or_abundance}: %{{x:.2e}}<br>Log2 fold change: %{{y:.2e}}<extra></extra>".format(expression_or_abundance=xaxis_title, pvalue_type=pvalue_type_for_labels)
+				feature = feature.replace("_", " ").replace("[", "").replace("]", "")
+				xaxis_title = "Log2 average abundance"
+				expression_or_abundance = gene_or_species + " abundance"
+
+			#read table
+			table = functions.download_from_github(path, "data/" + expression_dataset + "/dge/" + contrast + ".diffexp.tsv")
+			table = pd.read_csv(table, sep = "\t")
+			table["Gene"] = table["Gene"].fillna("NA")
+
+			#log2 base mean
+			table["log2_baseMean"] = np.log2(table["baseMean"])
+			#clean gene/species name
+			if expression_dataset not in ["human", "mouse"]:
+				#rename column if not human
+				table = table.rename(columns={"Gene": gene_or_species})
+				#clean features
+				if "genes" in expression_dataset:
+					clean_genes = []
+					for x in table["Gene"]:
+						x_gene = x.split("@")[0]
+						x_beast = x.split("@")[1]
+						x_beast = x_beast.replace("_", " ")
+						x = x_gene + " - " + x_beast
+						clean_genes.append(x)
+					table["Gene"] = clean_genes
+				else:
+					table["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table["Gene"]]
+
+			#find out the status of the selected gene and assign the color for when the selected gene annotation is not on
+			gene_table = table[table["Gene"] == feature]
+			gene_table.loc[(gene_table[pvalue_type] <= float(pvalue_value)) & (gene_table["log2FoldChange"] > 0), "DEG"] = colors_ma_plot["up"]
+			gene_table.loc[(gene_table[pvalue_type] <= float(pvalue_value)) & (gene_table["log2FoldChange"] < 0), "DEG"] = colors_ma_plot["down"]
+			gene_table.loc[(gene_table["DEG"].isnull()), "DEG"] = colors_ma_plot["no_DEG"]
 			
-			#add trace
-			ma_plot_fig.add_trace(go.Scattergl(x=filtered_table["log2_baseMean"], y=filtered_table["log2FoldChange"], marker_opacity=1, marker_color=color, marker_symbol=2, marker_size=marker_size, marker_line=marker_line, customdata=custom_data, mode="markers", hovertemplate = hover_template))
+			#find DEGs and selected gene in the complete table
+			table = table[table["Gene"] != feature]
+			table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0), "DEG"] = "up"
+			table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0), "DEG"] = "down"
+			table.loc[(table["DEG"].isnull()), "DEG"] = "no_DEG"		
 
-		#update layout
-		title_text = "Differential {expression_or_abundance}<br>".format(expression_or_abundance=expression_or_abundance) + contrast.replace("_", " ").replace("-", " ")
-		
-		ma_plot_fig.update_layout(title={"text": title_text, "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_zeroline=True, yaxis_automargin=True, yaxis_title="Log2 fold change", yaxis_domain=[0.25, 1], font_family="Arial", height=415, margin=dict(t=50, b=5, l=5, r=5), showlegend=False)
+			#plot
+			ma_plot_fig = go.Figure()
+			for deg_status in ["no_DEG", "up", "down", "selected"]:
+				#color will depend on trace
+				if deg_status != "selected":
+					filtered_table = table[table["DEG"] == deg_status]
+					color = colors_ma_plot[deg_status]
+				else:
+					filtered_table = gene_table
+					color = filtered_table["DEG"]
 
-		#annotations
-		stringency_annotation = [dict(text = "{pvalue_type} < {stringency}".format(pvalue_type=pvalue_type_for_labels, stringency = str(float(pvalue_value))), align="right", xref="paper", yref="paper", x=0.02, y=0.25, showarrow=False, font=dict(size=14, family="Arial"))]
-		up_genes_annotation = [dict(text = str(up) + " higher in<br>" + contrast.split("-vs-")[0].replace("_", " "), align="right", xref="paper", yref="paper", x=0.98, y=0.98, showarrow=False, font=dict(size=14, color="#DE2D26", family="Arial"))]
-		down_genes_annotation = [dict(text = str(down) + " higher in<br>" + contrast.split("-vs-")[1].replace("_", " "), align="right", xref="paper", yref="paper", x=0.98, y=0.25, showarrow=False, font=dict(size=14, color="#045A8D", family="Arial"))]
-		annotaton_title = [dict(text = "Show annotations", align="center", xref="paper", yref="paper", x=0, y=0, showarrow=False, font_size=12)]
-		if number_of_geneids_for_gene == 1:
-			for i in [3, 4, 5]:
-				if len(ma_plot_fig["data"][i]["x"]) == 1:
-					feature_name = ma_plot_fig["data"][i]["customdata"][0][0]
-					feature_fdr = ma_plot_fig["data"][i]["customdata"][0][1]
-					if feature_fdr != "NA":
-						feature_fdr = "{:.1e}".format(feature_fdr)
-					feature_log2_base_mean = ma_plot_fig["data"][i]["customdata"][0][2]
-					feature_log2fc = ma_plot_fig["data"][i]["customdata"][0][3]
-					x = ma_plot_fig["data"][i]["x"][0]
-					y = ma_plot_fig["data"][i]["y"][0]
-					selected_gene_annotation = [dict(x=x, y=y, xref="x", yref="y", text=feature_name + "<br>Log2 avg expr: " +  str(round(feature_log2_base_mean, 1)) + "<br>Log2 FC: " +  str(round(feature_log2fc, 1)) + "<br>{pvalue_type}: ".format(pvalue_type=pvalue_type_for_labels) + feature_fdr, showarrow=True, font=dict(family="Arial", size=12, color="#252525"), align="center", arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor="#525252", ax=50, ay=50, bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)]
+				#custom data and hover template
+				custom_data = filtered_table[[gene_or_species, pvalue_type, "log2_baseMean", "log2FoldChange", "DEG"]]
+				custom_data = custom_data.fillna("NA")
+				hovertemplate = gene_or_species.capitalize() + ": %{{customdata[0]}}<br>{pvalue_type}: %{{customdata[1]:.2e}}<br>{expression_or_abundance}: %{{x:.2e}}<br>Log2 fold change: %{{y:.2e}}<extra></extra>".format(expression_or_abundance=xaxis_title, pvalue_type=pvalue_type_for_labels)
+				
+				#add trace
+				ma_plot_fig.add_trace(go.Scattergl(x=filtered_table["log2_baseMean"], y=filtered_table["log2FoldChange"], marker_opacity=1, marker_color=color, marker_symbol=2, marker_size=5, customdata=custom_data, mode="markers", hovertemplate=hovertemplate, name=deg_status))
+
+			#update layout
+			title_text = "Differential {expression_or_abundance}<br>".format(expression_or_abundance=expression_or_abundance) + contrast.replace("_", " ").replace("-", " ")
+			ma_plot_fig.update_layout(title={"text": title_text, "xref": "paper", "x": 0.5, "font_size": 14}, xaxis_automargin=True, xaxis_title=xaxis_title, yaxis_zeroline=True, yaxis_automargin=True, yaxis_title="Log2 fold change", font_family="Arial", height=350, margin=dict(t=50, b=5, l=5, r=5), showlegend=False)
+
+			config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)}, "edits": {"annotationPosition": True, "annotationTail": True, "annotationText": True, "titleText": True}}
+
+			ma_plot_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
+			ma_plot_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+		#use existing plot
 		else:
-			selected_gene_annotation = [dict(x=mid_x, y=mid_y, text="Multiple transcripts with the same gene name.", showarrow=False, font=dict(family="Arial", size=12, color="#252525"), align="center", bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)]
+			ma_plot_fig = go.Figure(ma_plot_fig)
 
-		#add default annotations
-		ma_plot_fig["layout"]["annotations"] = annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation
+		#annotations will vary depending on selected annotation dropdown value
+		figure_annotations = []
+		#up + down + stringency annotation
+		if desired_annotations in ["all", "differential_analtsis"]:
 
-		#buttons
-		ma_plot_fig.update_layout(updatemenus=[dict(
-			pad=dict(r=5),
-			active=1,
-			xanchor = "left",
-			direction = "up",
-			bgcolor = "#ffffff",
-			x=0,
-			y=0,
-			buttons=[
-				dict(label="All",
-					method="update",
-					args=[
-						{"marker": [{"color": colors_ma_plot["no_deg"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}},
-									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}},
-									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}}]
-						},
-						{"annotations": annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation + selected_gene_annotation}]
-				),
-				dict(label="Differential analysis",
-					method="update",
-					args=[
-						{"marker": [{"color": colors_ma_plot["no_deg"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["no_deg"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}},
-									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}},
-									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}]
-						},
-						{"annotations": annotaton_title + stringency_annotation + up_genes_annotation + down_genes_annotation}]
-				),
-				dict(label="Selected {gene_or_species}".format(gene_or_species = gene_or_species.lower()),
-					method="update",
-					args=[
-						{"marker": [{"color": colors_ma_plot["no_deg"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}},
-									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}},
-									{"color": colors_ma_plot["selected"], "size": 9, "symbol": 2, "line": {"color": "#525252", "width": 2}}]
-						},
-						{"annotations": annotaton_title + selected_gene_annotation}]
-				),
-				dict(label="None",
-					method="update",
-					args=[
-						{"marker": [{"color": colors_ma_plot["no_deg"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}, 
-									{"color": colors_ma_plot["no_deg"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}},
-									{"color": colors_ma_plot["up"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}},
-									{"color": colors_ma_plot["down"], "size": 5, "symbol": 2, "line": {"color": None, "width": None}}]
-						},
-						{"annotations": annotaton_title}]
-				)
-			])
-		])
+			#count DEGs in main table
+			up = len(ma_plot_fig["data"][1]["x"])
+			down = len(ma_plot_fig["data"][2]["x"])
 
-		config_ma_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 5}, "toImageButtonOptions": {"filename": "MA-plot_with_{contrast}_stringency_{pvalue_type}_{pvalue}".format(contrast = contrast, pvalue_type = pvalue_type.replace("padj", "FDR"), pvalue = pvalue_value)}, "edits": {"annotationPosition": True, "annotationTail": True, "annotationText": True, "titleText": True}}
+			#count degs in selected gene table
+			gene_table = pd.DataFrame(ma_plot_fig["data"][3]["customdata"], columns=[gene_or_species, pvalue_type, "log2_baseMean", "log2FoldChange", "DEG"])
+			up += len(gene_table[gene_table["DEG"] == colors_ma_plot["up"]])
+			down += len(gene_table[gene_table["DEG"] == colors_ma_plot["down"]])
 
-		ma_plot_fig["layout"]["paper_bgcolor"] = "rgba(0,0,0,0)"
-		ma_plot_fig["layout"]["plot_bgcolor"] = "rgba(0,0,0,0)"
+			#stringency annotation
+			stringency_annotation = dict(text = "{pvalue_type} < {stringency}".format(pvalue_type=pvalue_type_for_labels, stringency = str(float(pvalue_value))), align="right", xref="x domain", yref="y domain", x=0.02, y=0.02, showarrow=False, font=dict(size=14, family="Arial"))
+			
+			#up and down degs count
+			up_genes_annotation = dict(text = str(up) + " higher in<br>" + contrast.split("-vs-")[0].replace("_", " "), align="right", xref="x domain", yref="y domain", x=0.98, y=0.98, showarrow=False, font=dict(size=14, color="#DE2D26", family="Arial"))
+			down_genes_annotation = dict(text = str(down) + " higher in<br>" + contrast.split("-vs-")[1].replace("_", " "), align="right", xref="x domain", yref="y domain", x=0.98, y=0.02, showarrow=False, font=dict(size=14, color="#045A8D", family="Arial"))
+			
+			#add annotations to list
+			figure_annotations.append(stringency_annotation)
+			figure_annotations.append(up_genes_annotation)
+			figure_annotations.append(down_genes_annotation)
+
+		#selected feature
+		if desired_annotations in ["all", "selected_feature"]:
+			selected_gene_trace = ma_plot_fig["data"][-1]
+
+			#single selected gene annotation
+			if len(selected_gene_trace["x"]) == 1:
+				feature_name = selected_gene_trace["customdata"][0][0]
+				feature_fdr = selected_gene_trace["customdata"][0][1]
+				if feature_fdr != "NA":
+					feature_fdr = "{:.1e}".format(feature_fdr)
+				feature_log2_base_mean = selected_gene_trace["customdata"][0][2]
+				feature_log2fc = selected_gene_trace["customdata"][0][3]
+				x = selected_gene_trace["x"][0]
+				y = selected_gene_trace["y"][0]
+				selected_gene_annotation = dict(x=x, y=y, xref="x", yref="y", text=feature_name + "<br>Log2 avg expr: " +  str(round(feature_log2_base_mean, 1)) + "<br>Log2 FC: " +  str(round(feature_log2fc, 1)) + "<br>{pvalue_type}: ".format(pvalue_type=pvalue_type_for_labels) + feature_fdr, showarrow=True, font=dict(family="Arial", size=12, color="#252525"), align="center", arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor="#525252", ax=50, ay=50, bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)
+			#if there are more gene ID for the same gene, a warning should appear on the ceneter of the plot
+			else:
+				selected_gene_annotation = dict(x=0.5, xref="x domain", y=0.5, yref="y domain", text="Multiple transcripts<br>with the same gene name.", showarrow=False, font=dict(family="Arial", size=12, color="#252525"), align="center", bordercolor="#525252", borderwidth=2, borderpad=4, bgcolor="#D9D9D9", opacity=0.9)
+
+			#add to list
+			figure_annotations.append(selected_gene_annotation)
+
+		#add annotations to fig
+		ma_plot_fig["layout"]["annotations"] = figure_annotations
+
+		#update selected gene markers
+		if desired_annotations in ["all", "selected_feature"]:
+			selected_gene_trace["marker"] = dict(size=9, symbol=2, line_color="#525252", line_width=2, color=colors_ma_plot["selected"])
+		else:
+			ma_plot_fig.update_traces(marker_size=5, marker_line_color=None, marker_line_width=None)
+			
+			#reset the original colors
+			selected_gene_trace = ma_plot_fig["data"][-1]
+
+			#rebuild data to get colors
+			if desired_annotations == "none":
+				gene_table = pd.DataFrame(ma_plot_fig["data"][3]["customdata"], columns=[gene_or_species, pvalue_type, "log2_baseMean", "log2FoldChange", "DEG"])
+			
+			#assign colors
+			selected_gene_trace["marker"]["color"] = gene_table["DEG"]
 		
 		return ma_plot_fig, config_ma_plot
 	
@@ -2870,8 +2881,10 @@ def define_callbacks(app):
 		#omics type
 		if "lipid" in expression_dataset:
 			omics = "lipidome"
+			enrichment_legend = "LO p-value"
 		else:
 			omics = "transcriptome"
+			enrichment_legend = "GO p-value"
 
 		#open df
 		if expression_dataset in ["human", "mouse"]:
@@ -2999,7 +3012,7 @@ def define_callbacks(app):
 		#create figure
 		go_plot_fig = go.Figure()
 		#create subplots
-		go_plot_fig = make_subplots(rows=7, cols=4, specs=[[{"rowspan": 7}, None, None, None], [None, None, {"rowspan": 2}, None], [None, None, None, None], [None, None, None, None], [None, None, {"rowspan": 2}, None], [None, None, None, None], [None, None, None, None]], column_widths=[0.5, 0.1, 0.3, 0.1], subplot_titles=(None, "GO p-value", "Enrichment"))
+		go_plot_fig = make_subplots(rows=7, cols=4, specs=[[{"rowspan": 7}, None, None, None], [None, None, {"rowspan": 2}, None], [None, None, None, None], [None, None, None, None], [None, None, {"rowspan": 2}, None], [None, None, None, None], [None, None, None, None]], column_widths=[0.5, 0.1, 0.3, 0.1], subplot_titles=[None, enrichment_legend, "Enrichment"])
 
 		#function for hover text
 		def create_hover_text(df):
@@ -3132,6 +3145,41 @@ def define_callbacks(app):
 		config_go_plot = {"modeBarButtonsToRemove": ["select2d", "lasso2d", "hoverClosestCartesian", "hoverCompareCartesian", "resetScale2d", "toggleSpikelines"], "toImageButtonOptions": {"format": "png", "scale": 10, "filename": f"GO-plot_with_{contrast}"}, "responsive": True, "edits": {"titleText": True}}
 
 		return go_plot_fig, config_go_plot, {"width": "100%", "display": "inline-block", "height": computed_height}
+
+	#sankey
+	@app.callback(
+		Output("sankey_graph", "figure"),
+		Input({"type": "tabs", "id": "metadata_tabs"}, "value"),
+		State("analysis_dropdown", "value")
+	)
+	def plot_sankey(tab_value, path):
+		#open dfs
+		df = functions.download_from_github(path, "sankey.tsv")
+		df = pd.read_csv(df, sep = "\t")
+		labels = functions.download_from_github(path, "sankey_dict.tsv")
+		labels = pd.read_csv(labels, sep = "\t")
+		labels = labels.replace("_", " ", regex=True)
+		
+		#create figure
+		fig = go.Figure(data=[go.Sankey(
+			node = dict(
+				pad=15,
+				thickness=20,
+				line=dict(color="black", width=0.5),
+				label=labels["label"].unique().tolist(),
+				color=colors + colors + colors + colors + colors,
+			),
+			link=dict(
+				source=df["source"],
+				target=df["target"],
+				value=df["n"]
+			)
+		)])
+
+		#update layout
+		fig.update_layout(margin=dict(l=0, r=0, t=20, b=20))
+
+		return fig
 
 	#heatmap
 	@app.callback(
@@ -3624,7 +3672,6 @@ def define_callbacks(app):
 			metadata = functions.download_from_github(path, "metadata.tsv")
 			metadata = pd.read_csv(metadata, sep="\t")
 			metadata = metadata.replace("_", " ", regex=True)
-			metadata_with_NA = metadata.fillna("NA")
 
 			#filter metadata for selected conditions in the heatmap condition legend
 			if len(heatmap_fig["data"]) > 0:
@@ -3636,6 +3683,9 @@ def define_callbacks(app):
 							conditions_to_keep.append(trace["name"])
 				#filter
 				metadata = metadata[metadata["condition"].isin(conditions_to_keep)]
+
+			#create metadata with NA strings
+			metadata_with_NA = metadata.fillna("NA")
 
 			#setup subplots
 			legends_to_plot = len(annotations)
@@ -3669,7 +3719,7 @@ def define_callbacks(app):
 					discrete_annotations.append(annotation.capitalize())
 					categories = metadata[annotation].unique().tolist()
 					number_of_categories = len(categories)
-					#the continue annotations will be after the discrete, 
+					#the continue annotations will be after the discrete,
 					#so count the number of discrete annotations to see where will be the first continue x and y axes
 					discrete_annotation_count += 1
 				else:
@@ -3869,6 +3919,14 @@ def define_callbacks(app):
 
 			#create new plot
 			if trigger_id in ["update_multiboxplot_plot_button.n_clicks", "x_multiboxplots_dropdown.value", "group_by_multiboxplots_dropdown.value", "x_filter_multiboxplots_dropdown.value", "comparison_only_multiboxplots_switch.value", "best_conditions_multiboxplots_switch.value", "stats_multiboxplots_switch.value", "stringency_dropdown.value"] or box_fig is None:
+				
+				#get visible traces if necessary
+				trace_visibility = {}
+				if trigger_id in ["stats_multiboxplots_switch.value", "stringency_dropdown.value", "update_multiboxplot_plot_button.n_clicks"]:
+					for trace in box_fig["data"]:
+						if trace["name"] not in trace_visibility and "mode" not in trace:
+							trace_visibility[trace["name"]] = trace["visible"]
+				
 				#open metadata
 				metadata_df_full = functions.download_from_github(path, "metadata.tsv")
 				metadata_df_full = pd.read_csv(metadata_df_full, sep = "\t")
@@ -3954,13 +4012,14 @@ def define_callbacks(app):
 				#make subplots
 				subplot_titles = []
 				for feature in selected_features:
-					if "genes" in expression_dataset:
-						feature_gene = feature.split("@")[0]
-						feature_beast = feature.split("@")[1]
-						feature_beast = feature_beast.replace("_", " ")
-						feature = feature_gene + " - " + feature_beast
-					else:
-						feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
+					if expression_dataset not in ["human", "mouse"]:
+						if "genes" in expression_dataset:
+							feature_gene = feature.split("@")[0]
+							feature_beast = feature.split("@")[1]
+							feature_beast = feature_beast.replace("_", " ")
+							feature = feature_gene + " - " + feature_beast
+						else:
+							feature = feature.replace("[", "").replace("]", "").replace("_", " ").replace("€", "/")
 					subplot_titles.append(feature)
 				box_fig = make_subplots(rows=n_rows, cols=plot_per_row, specs=specs, subplot_titles=subplot_titles, shared_xaxes=True,  vertical_spacing=(0.25/(n_rows)), y_title=y_axis_title, row_heights=row_heights)
 				
@@ -3995,6 +4054,11 @@ def define_callbacks(app):
 						column_for_filtering = group_by_metadata
 						metadata_fields_ordered = metadata_df[group_by_metadata].unique().tolist()
 						metadata_fields_ordered.sort()
+					
+					#if any info about visibility has been saved, all traces are visible
+					if len(trace_visibility) == 0:
+						for metadata in metadata_fields_ordered:
+							trace_visibility[metadata] = True
 
 					#grouped or not boxplot setup
 					boxmode = "overlay"
@@ -4034,9 +4098,9 @@ def define_callbacks(app):
 						#create traces
 						marker_color = functions.get_color(color_mapping, column_for_filtering, metadata)
 						if boolean_show_as_boxplot_switch:
-							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True), row=working_row, col=working_col)
+							box_fig.add_trace(go.Box(x=x_values, y=y_values, name=metadata, marker_color=marker_color, boxpoints="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=trace_visibility[metadata]), row=working_row, col=working_col)
 						else:
-							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=True, spanmode="hard"), row=working_row, col=working_col)
+							box_fig.add_trace(go.Violin(x=x_values, y=y_values, name=metadata, marker_color=marker_color, points="all", hovertext=hovertext, hoverinfo="text", legendgroup=metadata, showlegend=showlegend, offsetgroup=metadata, marker_size=3, line_width=4, visible=trace_visibility[metadata], spanmode="hard"), row=working_row, col=working_col)
 
 					#just one legend for trece showed is enough
 					if showlegend is True:
@@ -4151,6 +4215,7 @@ def define_callbacks(app):
 					else:
 						pvalue_type = "P-value"
 					pvalue_value = stringency[1]
+					statistics_df[pvalue_type] = statistics_df[pvalue_type].replace("NA", np.nan)
 					statistics_df.loc[(statistics_df[pvalue_type] <= float(pvalue_value)), "DEG"] = "DEG"
 					statistics_df.loc[(statistics_df["DEG"].isnull()), "DEG"] = "no_DEG"
 					
@@ -4159,7 +4224,6 @@ def define_callbacks(app):
 						gene_column = "Gene"
 					else:
 						gene_column = expression_dataset.replace("_", " ").capitalize()
-					genes = statistics_df[gene_column].unique().tolist()
 					traces_for_gene = int(len(box_fig["data"])/len(genes))
 
 					#get all conditions in fig to identify later the left conditions
@@ -4182,7 +4246,6 @@ def define_callbacks(app):
 						if "DEG" in dge_status:
 							gene_df = gene_df[gene_df["DEG"] == "DEG"]
 							contrasts = gene_df["Comparison"].unique().tolist()
-							gene_df = gene_df.set_index("Comparison")
 							
 							#update max lines for row
 							if len(contrasts) > max_lines_per_row:
@@ -4200,6 +4263,21 @@ def define_callbacks(app):
 
 							#add line for contrasts
 							for contrast in contrasts:
+								gene_comparison_df = gene_df[gene_df["Comparison"] == contrast]
+								
+								#find out if there are multiple geneid per gene
+								if len(gene_comparison_df) > 1:
+									statistics_annotation = "#"
+									yshift = 10
+									font_size = 25
+									hovertext = ""
+								else:
+									statistics_annotation = "*"
+									yshift = 5
+									font_size = 32
+									gene_df = gene_df.set_index("Comparison")
+									hovertext = gene_df.loc[contrast, pvalue_type]
+
 								conditions = contrast.split(" vs ")
 								#add line
 								box_fig.add_trace(go.Scatter(x=conditions, y=[y, y], mode="lines", line_width=1, marker_color="black", hoverinfo="none", showlegend=False, name=contrast), row=row, col=col)
@@ -4211,7 +4289,7 @@ def define_callbacks(app):
 										break
 
 								#add *
-								box_fig.add_annotation(x=left_condition, y=y, yshift=5, text="*", hovertext=gene_df.loc[contrast, pvalue_type], font_family="Calibri", font_size=32, showarrow=False, name=contrast, row=row, col=col)
+								box_fig.add_annotation(x=left_condition, y=y, yshift=yshift, text=statistics_annotation, hovertext=hovertext, font_family="Calibri", font_size=font_size, showarrow=False, name=contrast, row=row, col=col)
 
 								#next line will be a bit upper the last one
 								y += y_increase

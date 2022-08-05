@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 import dash_auth
 import plotly.io as pio
 from functions import config
-from layout import main_layout, metadata_tab_layout, heatmap_tab_layout, multi_violin_tab_layout, correlation_tab_layout, diversity_tab_layout, dge_tab_layout, go_tab_layout, mofa_tab_layout, deconvolution_tab_layout
+from layout import main_layout, metadata_table_tab_layout, sankey_tab_layout, heatmap_tab_layout, multi_violin_tab_layout, correlation_tab_layout, diversity_tab_layout, dge_tab_layout, go_tab_layout, mofa_tab_layout, deconvolution_tab_layout
 
 #default template
 pio.templates.default = "simple_white"
@@ -21,7 +21,8 @@ app.layout = main_layout
 #validate layout with tabs
 app.validation_layout = html.Div([
     main_layout, 
-	metadata_tab_layout,
+	metadata_table_tab_layout,
+	sankey_tab_layout,
 	heatmap_tab_layout,
 	multi_violin_tab_layout,
 	correlation_tab_layout,
