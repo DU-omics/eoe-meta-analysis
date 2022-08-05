@@ -556,7 +556,7 @@ main_layout = html.Div([
 		html.Footer([
 			html.Hr(),
 			dcc.Markdown(config["footer"])
-		])
+		], style={"font-size": 11})
 
 	], style={"width": 1200, "font-family": "Arial"})
 ], style={"width": "100%", "justify-content":"center", "display":"flex", "textAlign": "center"})
