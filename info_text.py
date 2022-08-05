@@ -138,7 +138,9 @@ info_heatmap_clustered_samples_switch = """
 info_heatmap_plot = """
 	Heatmap showing row scaled log2 expression/abundance of the selected features.
 
-	Features are shown along the y axis in accordance with unsupervised hierarchical clustering. Samples can also be cluastered using the _Clustered samples_ switch.
+	Features are shown along the y axis in accordance with unsupervised hierarchical clustering. Samples can also be clustered using the _Clustered samples_ switch.
+
+	To filter the samples, edit the legend below and click _Update plot_ on the left.
 """
 
 #multiviolin

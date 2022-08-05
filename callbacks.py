@@ -3316,7 +3316,7 @@ def define_callbacks(app):
 					boolean_comparison_only_switch = False
 
 				#parse old figure if present to get conditions to plot
-				if old_figure is None or len(old_figure["data"]) == 0:
+				if old_figure is None or len(old_figure["data"]) == 0 or trigger_id in ["comparison_only_heatmap_switch.value", "best_conditions_heatmap_switch.value"]:
 					if boolean_comparison_only_switch:
 						contrast = contrast.replace("_", " ")
 						conditions_to_keep = contrast.split("-vs-")
@@ -3332,34 +3332,45 @@ def define_callbacks(app):
 					else:
 						conditions_to_keep = conditions
 				else:
-					#filter samples according to legend status
+					#filter samples according to legend status or swithces
 					conditions_to_keep = []
-					#only comparison conditions are visible
+
+					#find out if some conditions have to be removed
+					for trace in old_figure["data"]:
+						#only traces with a name are legend traces
+						if "name" in trace.keys():
+							if trace["visible"] is True:
+								conditions_to_keep.append(trace["name"])
+
+					#deactivate comparison switch if the elements are different
 					if boolean_comparison_only_switch:
 						contrast = contrast.replace("_", " ")
-						conditions_to_keep = contrast.split("-vs-")
-					#best conditions
+						comparison_only_conditions = contrast.split("-vs-")
+						
+						#sort and compare the lists
+						conditions_to_keep.sort()
+						comparison_only_conditions.sort()
+						if conditions_to_keep != comparison_only_conditions:
+							boolean_comparison_only_switch = False
+							comparison_only_switch = []
+
+					#deactivate best conditions switch if the elements are different
 					elif boolean_best_conditions_switch:
 						best_contrasts = config["repos"][repo]["best_comparisons"]
-						conditions_to_keep = []
+						best_conditions = []
 						for best_contrast in best_contrasts:
 							best_contrast = best_contrast.replace("_", " ")
 							best_conditions_in_best_contrast = best_contrast.split("-vs-")
 							for best_condition in best_conditions_in_best_contrast:
-								if best_condition not in conditions_to_keep:
-									conditions_to_keep.append(best_condition)
-					else:
-						#find out if some conditions have to be removed
-						for trace in old_figure["data"]:
-							#clicking on the switch to false will turn all traces to true
-							if trigger_id == "comparison_only_heatmap_switch.value":
-								conditions_to_keep = conditions
-							#get the previous legend selection
-							else:
-								#only traces with a name are legend traces
-								if "name" in trace.keys():
-									if trace["visible"] is True:
-										conditions_to_keep.append(trace["name"])
+								if best_condition not in best_conditions:
+									best_conditions.append(best_condition)
+						conditions_to_keep.sort()
+						best_conditions.sort()
+
+						#sort and compare the lists
+						if conditions_to_keep != best_conditions:
+							boolean_best_conditions_switch = False
+							best_conditions_switch = []
 
 				#filter metadata and get remaining samples
 				metadata = metadata[metadata["condition"].isin(conditions_to_keep)]

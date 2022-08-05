@@ -821,7 +821,7 @@ heatmap_tab_layout = html.Div([
 			#legend
 			html.Div(id="heatmap_legend_div", hidden=True)
 		], style = {"width": "74%", "display": "inline-block"})
-	], style = {"width": "100%", "height": 800, "display": "inline-block"})
+	], style = {"width": "100%", "display": "inline-block"})
 ])
 
 #multi violin tab
@@ -1106,8 +1106,7 @@ multi_violin_tab_layout = html.Div([
 						},
 						style_as_list_view=True,
 						filter_options={"case": "insensitive"}
-					),
-					html.Br()
+					)
 				]
 			)
 		),
