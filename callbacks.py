@@ -154,7 +154,11 @@ def define_callbacks(app):
 		#header
 		repo = functions.get_repo_name_from_path(path, repos)
 		if os.path.exists("assets/logo.png"):
-			header_children = html.Img(src="assets/logo.png", alt="logo", style={"width": "70%", "height": "70%"}, title=repo)
+			if config["logo_title"] == "NA":
+				title = repo
+			else:
+				title = config["logo_title"]
+			header_children = html.Img(src="assets/logo.png", alt="logo", style={"width": "70%", "height": "70%"}, title=title)
 		else:
 			header_children = html.Div(repo, style={"width": "100%", "font-size": 50, "text-align": "center"})
 
