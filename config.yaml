@@ -37,7 +37,7 @@ external_resources:
     link_root: https://ibd.broadinstitute.org/gene/
     column_to_use: "Gene ID"
 
-logo_title: "<i>Tamma</i> means <i>talking drum</i> in West Africa, where it’s also known as <i>dundun</i>. It is a small drum, played with a curved stick and having a membrane stretched over one end or both ends of a narrow-waisted wooden frame by cords whose tension can be manually altered to vary the drum's tonality as it is played"
+logo_title: "Tamma means talking drum in West Africa, where it’s also known as dundun. It is a small drum, played with a curved stick and having a membrane stretched over one end or both ends of a narrow-waisted wooden frame by cords whose tension can be manually altered to vary the drum's tonality as it is played"
 
 #footer
 footer: "
