@@ -2491,24 +2491,24 @@ def define_callbacks(app):
 				#clean features
 				if "genes" in expression_dataset:
 					clean_genes = []
-					for x in table["Gene"]:
+					for x in table[gene_or_species]:
 						x_gene = x.split("@")[0]
 						x_beast = x.split("@")[1]
 						x_beast = x_beast.replace("_", " ")
 						x = x_gene + " - " + x_beast
 						clean_genes.append(x)
-					table["Gene"] = clean_genes
+					table[gene_or_species] = clean_genes
 				else:
-					table["Gene"] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table["Gene"]]
+					table[gene_or_species] = [x.replace("_", " ").replace("[", "").replace("]", "") for x in table[gene_or_species]]
 
 			#find out the status of the selected gene and assign the color for when the selected gene annotation is not on
-			gene_table = table[table["Gene"] == feature]
+			gene_table = table[table[gene_or_species] == feature]
 			gene_table.loc[(gene_table[pvalue_type] <= float(pvalue_value)) & (gene_table["log2FoldChange"] > 0), "DEG"] = colors_ma_plot["up"]
 			gene_table.loc[(gene_table[pvalue_type] <= float(pvalue_value)) & (gene_table["log2FoldChange"] < 0), "DEG"] = colors_ma_plot["down"]
 			gene_table.loc[(gene_table["DEG"].isnull()), "DEG"] = colors_ma_plot["no_DEG"]
 			
 			#find DEGs and selected gene in the complete table
-			table = table[table["Gene"] != feature]
+			table = table[table[gene_or_species] != feature]
 			table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] > 0), "DEG"] = "up"
 			table.loc[(table[pvalue_type] <= float(pvalue_value)) & (table["log2FoldChange"] < 0), "DEG"] = "down"
 			table.loc[(table["DEG"].isnull()), "DEG"] = "no_DEG"		
