@@ -1934,7 +1934,7 @@ def define_callbacks(app):
 		boolean_stats_switch = functions.boolean_switch(stats_switch)
 
 		#conditions for which is not necessary to update the plot
-		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None or trigger_id == "stringency_dropdown.value" and boolean_stats_switch is False or trigger_id == "stringency_dropdown.value" and y_metadata != "log2_expression" and boolean_stats_switch is True or trigger_id == "boxplots_graph.restyleData" and boolean_stats_switch is False:
+		if trigger_id == "contrast_dropdown.value" and boolean_comparison_only_switch is False and box_fig is not None or trigger_id == "stringency_dropdown.value" and boolean_stats_switch is False or trigger_id == "stringency_dropdown.value" and y_metadata not in ["log2_expression", "log2_abundance"] and boolean_stats_switch is True or trigger_id == "boxplots_graph.restyleData" and boolean_stats_switch is False:
 			raise PreventUpdate
 
 		#new plot
@@ -2123,7 +2123,8 @@ def define_callbacks(app):
 					box_fig["layout"]["annotations"] = None
 
 				#use dge for expression/abundance
-				if y_metadata == "log2_expression":
+				if y_metadata in ["log2_expression", "log2_abundance"]:
+
 					#get contrasts which have both conditions in the selected conditions in the plot
 					contrasts_df_list = []
 					dge_folder = "data/" + expression_dataset + "/dge"
